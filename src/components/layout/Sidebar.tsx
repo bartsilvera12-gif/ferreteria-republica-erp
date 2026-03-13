@@ -25,7 +25,6 @@ import { supabase } from "@/lib/supabase";
 import { getMisModulos, getTodosModulos } from "@/lib/empresas/actions";
 import type { ModuloEmpresa } from "@/lib/empresas/actions";
 import { getFavoritos, toggleFavorito } from "@/lib/favorites";
-import { useTheme } from "@/components/ThemeProvider";
 
 type MenuItem = {
   slug: string;
@@ -164,7 +163,6 @@ function NavItem({
 
 export default function Sidebar() {
   const pathname = usePathname();
-  const { theme } = useTheme();
   const [modulos, setModulos] = useState<ModuloEmpresa[]>([]);
   const [favoritos, setFavoritos] = useState<string[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -226,15 +224,14 @@ export default function Sidebar() {
 
   const slugToId = (slug: string) => modulos.find((m) => m.slug === slug)?.id ?? slug;
 
-  const sidebarBg = theme === "dark" ? "#09090b" : "#18181b";
-
   return (
     <motion.aside
+      id="neura-sidebar"
       initial={false}
       animate={{ width: collapsed ? 80 : 260 }}
       transition={{ duration: 0.2 }}
       className="flex shrink-0 flex-col border-r border-white/5"
-      style={{ backgroundColor: sidebarBg }}
+      style={{ backgroundColor: "#1a1a1a" }}
     >
       {/* Logo mucho más grande y visible */}
       <div className="flex h-24 items-center justify-between gap-3 border-b border-white/10 px-4 py-4">
