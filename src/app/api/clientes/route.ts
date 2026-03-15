@@ -83,6 +83,24 @@ export async function POST(request: NextRequest) {
     console.log("[API] About to emit event");
     await emitEvent(EVENT_TYPES.cliente_creado, { cliente_id: data.id, empresa: data.empresa });
 
+    // Prueba manual de webhook (temporal)
+    if (process.env.WEBHOOK_URL) {
+      await fetch(process.env.WEBHOOK_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          event: "cliente_creado_test",
+          payload: {
+            test: true,
+            cliente_id: data.id,
+          },
+          source: "neura_erp",
+        }),
+      });
+    }
+
     return NextResponse.json(successResponse(data));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
