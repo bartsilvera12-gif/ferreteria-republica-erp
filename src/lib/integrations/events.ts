@@ -20,9 +20,11 @@ export type EventType = (typeof EVENT_TYPES)[keyof typeof EVENT_TYPES];
 export async function emitEvent(eventName: EventType, payload: Record<string, unknown>) {
   console.log(`[ERP Event] ${eventName}`, payload);
 
-  console.log("[ERP Event] sending webhook...");
+  const result = await sendWebhook(eventName, payload);
 
-  await sendWebhook(eventName, payload);
-
-  console.log("[ERP Event] webhook sent");
+  if (result.sent) {
+    console.log("[ERP Event] Webhook enviado OK");
+  } else {
+    console.warn("[ERP Event] Webhook no enviado:", result.error);
+  }
 }

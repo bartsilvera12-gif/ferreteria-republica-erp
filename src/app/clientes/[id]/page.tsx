@@ -11,13 +11,11 @@ import {
   toggleEstado,
   updateCliente,
 } from "@/lib/clientes/storage";
-import {
-  crearFacturaContado,
-  getFacturas,
-  getSuscripciones,
-  savePago,
-  saveSuscripcion,
-} from "@/lib/facturacion/storage";
+import { getFacturas, getSuscripciones } from "@/lib/facturacion/storage";
+import { apiCreateFactura, apiCreatePago, apiCreateSuscripcion } from "@/lib/api/client";
+import { getConfig, saveConfig } from "@/lib/config/storage";
+import { getCurrentUser } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import MontoInput from "@/components/ui/MontoInput";
 import { getPlanes } from "@/lib/planes/storage";
 import type { Cliente, NotaCliente } from "@/lib/clientes/types";
@@ -273,12 +271,34 @@ export default function ClienteDetailPage() {
     if (form.condicion_pago === "CONTADO" && formContadoEdit.emitir_factura) {
       const monto = parseFloat(formContadoEdit.monto) || 0;
       if (monto > 0) {
-        await crearFacturaContado(
-          id,
+        const config = getConfig();
+        const hoy = new Date().toISOString().slice(0, 10);
+        const numeroFactura = `${config.prefijo_factura}${String(config.numeracion_inicial).padStart(6, "0")}`;
+        const factura = await apiCreateFactura({
+          cliente_id: id,
+          numero_factura: numeroFactura,
+          fecha: hoy,
+          fecha_vencimiento: hoy,
           monto,
-          formContadoEdit.descripcion.trim() || "Venta al contado",
-          form.moneda_preferida
-        );
+          tipo: "contado",
+          moneda: form.moneda_preferida,
+        });
+        if (factura) {
+          const usuario = await getCurrentUser();
+          if (usuario?.empresa_id) {
+            await supabase.from("factura_items").insert({
+              factura_id: factura.id,
+              empresa_id: usuario.empresa_id,
+              descripcion: formContadoEdit.descripcion.trim() || "Venta al contado",
+              cantidad: 1,
+              precio_unitario: monto,
+              subtotal: monto,
+              iva: 0,
+              total: monto,
+            });
+          }
+          saveConfig({ ...config, numeracion_inicial: config.numeracion_inicial + 1 });
+        }
         getFacturas(id).then(setFacturas);
       }
     }
@@ -286,20 +306,17 @@ export default function ClienteDetailPage() {
     // Crear suscripción si condicion_pago = MENSUAL y no existe
     if (form.condicion_pago === "MENSUAL" && suscripciones.length === 0) {
       const plan = planes.find((p) => p.id === formSuscEdit.plan_id);
-      await saveSuscripcion(
-        {
-          cliente_id: id,
-          plan_id: formSuscEdit.plan_id || null,
-          precio: parseFloat(formSuscEdit.precio) || (plan?.precio ?? 0),
-          moneda: form.moneda_preferida,
-          fecha_inicio: new Date().toISOString().slice(0, 10),
-          duracion_meses: parseInt(formSuscEdit.duracion_meses, 10) || 12,
-          dia_facturacion: parseInt(formSuscEdit.dia_facturacion, 10) || 1,
-          dia_vencimiento: parseInt(formSuscEdit.dia_vencimiento, 10) || 10,
-          generar_factura_este_mes: formSuscEdit.generar_factura,
-        },
-        plan?.nombre
-      );
+      await apiCreateSuscripcion({
+        cliente_id: id,
+        plan_id: formSuscEdit.plan_id || null,
+        precio: parseFloat(formSuscEdit.precio) || (plan?.precio ?? 0),
+        moneda: form.moneda_preferida,
+        fecha_inicio: new Date().toISOString().slice(0, 10),
+        duracion_meses: parseInt(formSuscEdit.duracion_meses, 10) || 12,
+        dia_facturacion: parseInt(formSuscEdit.dia_facturacion, 10) || 1,
+        dia_vencimiento: parseInt(formSuscEdit.dia_vencimiento, 10) || 10,
+        generar_factura_este_mes: formSuscEdit.generar_factura,
+      });
     }
 
     router.push("/clientes");
@@ -988,7 +1005,7 @@ export default function ClienteDetailPage() {
               e.preventDefault();
               setGuardandoSusc(true);
               const plan = planes.find((p) => p.id === formSusc.plan_id);
-              await saveSuscripcion({
+              await apiCreateSuscripcion({
                 cliente_id: id,
                 plan_id: formSusc.plan_id || null,
                 precio: parseFloat(formSusc.precio) || (plan?.precio ?? 0),
@@ -998,7 +1015,7 @@ export default function ClienteDetailPage() {
                 dia_facturacion: parseInt(formSusc.dia_facturacion, 10) || 1,
                 dia_vencimiento: parseInt(formSusc.dia_vencimiento, 10) || 10,
                 generar_factura_este_mes: formSusc.generar_factura_este_mes,
-              }, plan?.nombre);
+              });
               setModalSuscripcion(false);
               getSuscripciones(id).then(setSuscripciones);
               getFacturas(id).then(setFacturas);
@@ -1070,7 +1087,7 @@ export default function ClienteDetailPage() {
               const fid = facturaPago?.id ?? formPago.factura_id;
               if (!fid) return;
               setGuardandoPago(true);
-              await savePago({
+              await apiCreatePago({
                 factura_id: fid,
                 monto: parseFloat(formPago.monto) || 0,
                 fecha_pago: formPago.fecha_pago,

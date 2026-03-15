@@ -2,9 +2,11 @@
 
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { saveCliente } from "@/lib/clientes/storage";
+import { apiCreateCliente, apiCreateFactura, apiCreateSuscripcion } from "@/lib/api/client";
 import { getProspecto, updateProspecto } from "@/lib/crm/storage";
-import { crearFacturaContado, saveSuscripcion } from "@/lib/facturacion/storage";
+import { getConfig, saveConfig } from "@/lib/config/storage";
+import { getCurrentUser } from "@/lib/auth";
+import { supabase } from "@/lib/supabase";
 import MontoInput from "@/components/ui/MontoInput";
 import { getPlanes } from "@/lib/planes/storage";
 import type { TipoCliente, OrigenCliente } from "@/lib/clientes/types";
@@ -147,68 +149,75 @@ function NuevoClienteForm() {
 
     setGuardando(true);
 
-    const nuevo = await saveCliente({
-      tipo_cliente:        form.tipo_cliente,
-      empresa:             form.tipo_cliente === "empresa" ? form.empresa.trim().toUpperCase() : undefined,
-      nombre_contacto:     form.nombre_contacto.trim().toUpperCase(),
-      ruc:                 form.ruc.trim()                 || undefined,
-      documento:           form.documento.trim()           || undefined,
-      telefono:            form.telefono.trim()            || undefined,
-      telefono_secundario: form.telefono_secundario.trim() || undefined,
-      email:               form.email.trim()               || undefined,
-      email_secundario:    form.email_secundario.trim()    || undefined,
-      direccion:           form.direccion.trim()           || undefined,
-      ciudad:              form.ciudad.trim().toUpperCase()  || undefined,
-      pais:                form.pais.trim().toUpperCase()    || undefined,
-      sitio_web:           form.sitio_web.trim()           || undefined,
-      instagram:           form.instagram.trim()           || undefined,
-      linkedin:            form.linkedin.trim()            || undefined,
-      categoria_cliente:   form.categoria_cliente.trim().toUpperCase() || undefined,
-      industria:           form.industria.trim().toUpperCase()         || undefined,
-      valor_cliente:       parseFloat(form.valor_cliente) || undefined,
-      condicion_pago:      form.condicion_pago.trim().toUpperCase()    || undefined,
-      moneda_preferida:    form.moneda_preferida,
-      vendedor_asignado:   form.vendedor_asignado.trim().toUpperCase() || undefined,
-      origen:              form.origen,
-      // prospecto_id en clientes es integer; CRM usa uuid — no pasamos el link por ahora
-      prospecto_id:        undefined,
-      estado:              form.estado,
+    const nuevo = await apiCreateCliente({
+      tipo_cliente: form.tipo_cliente,
+      empresa: form.tipo_cliente === "empresa" ? form.empresa.trim().toUpperCase() : undefined,
+      nombre_contacto: form.nombre_contacto.trim().toUpperCase(),
+      ruc: form.ruc.trim() || undefined,
+      documento: form.documento.trim() || undefined,
+      telefono: form.telefono.trim() || undefined,
+      email: form.email.trim() || undefined,
+      direccion: form.direccion.trim() || undefined,
+      ciudad: form.ciudad.trim().toUpperCase() || undefined,
+      pais: form.pais.trim().toUpperCase() || undefined,
+      condicion_pago: form.condicion_pago.trim().toUpperCase() || undefined,
+      moneda_preferida: form.moneda_preferida,
+      estado: form.estado,
     });
 
     if (!nuevo) {
       setGuardando(false);
-      return setError("Error al guardar en Supabase. Revisa la consola.");
+      return setError("Error al guardar. Revisa la consola.");
     }
 
     // Crear suscripción automática si condicion_pago = MENSUAL
     if (form.condicion_pago === "MENSUAL") {
       const plan = planes.find((p) => p.id === formSusc.plan_id);
-      await saveSuscripcion(
-        {
-          cliente_id: nuevo.id,
-          plan_id: formSusc.plan_id || null,
-          precio: parseFloat(formSusc.precio) || (plan?.precio ?? 0),
-          moneda: form.moneda_preferida,
-          fecha_inicio: new Date().toISOString().slice(0, 10),
-          duracion_meses: parseInt(formSusc.duracion_meses, 10) || 12,
-          dia_facturacion: parseInt(formSusc.dia_facturacion, 10) || 1,
-          dia_vencimiento: parseInt(formSusc.dia_vencimiento, 10) || 10,
-          generar_factura_este_mes: formSusc.generar_factura,
-        },
-        plan?.nombre
-      );
+      await apiCreateSuscripcion({
+        cliente_id: nuevo.id,
+        plan_id: formSusc.plan_id || null,
+        precio: parseFloat(formSusc.precio) || (plan?.precio ?? 0),
+        moneda: form.moneda_preferida,
+        fecha_inicio: new Date().toISOString().slice(0, 10),
+        duracion_meses: parseInt(formSusc.duracion_meses, 10) || 12,
+        dia_facturacion: parseInt(formSusc.dia_facturacion, 10) || 1,
+        dia_vencimiento: parseInt(formSusc.dia_vencimiento, 10) || 10,
+        generar_factura_este_mes: formSusc.generar_factura,
+      });
     }
 
     // Crear factura inicial si condicion_pago = CONTADO y Emitir factura
     if (form.condicion_pago === "CONTADO" && formContado.emitir_factura) {
       const monto = parseFloat(formContado.monto) || 0;
       if (monto > 0) {
-        await crearFacturaContado(
-          nuevo.id,
+        const config = getConfig();
+        const hoy = new Date().toISOString().slice(0, 10);
+        const numeroFactura = `${config.prefijo_factura}${String(config.numeracion_inicial).padStart(6, "0")}`;
+        const factura = await apiCreateFactura({
+          cliente_id: nuevo.id,
+          numero_factura: numeroFactura,
+          fecha: hoy,
+          fecha_vencimiento: hoy,
           monto,
-          formContado.descripcion.trim() || "Venta al contado",
-          form.moneda_preferida
-        );
+          tipo: "contado",
+          moneda: form.moneda_preferida,
+        });
+        if (factura) {
+          const usuario = await getCurrentUser();
+          if (usuario?.empresa_id) {
+            await supabase.from("factura_items").insert({
+              factura_id: factura.id,
+              empresa_id: usuario.empresa_id,
+              descripcion: formContado.descripcion.trim() || "Venta al contado",
+              cantidad: 1,
+              precio_unitario: monto,
+              subtotal: monto,
+              iva: 0,
+              total: monto,
+            });
+          }
+          saveConfig({ ...config, numeracion_inicial: config.numeracion_inicial + 1 });
+        }
       }
     }
 

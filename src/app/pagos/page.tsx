@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import { getFacturas } from "@/lib/gestion-clientes/storage";
 import MontoInput from "@/components/ui/MontoInput";
 import { getClientes } from "@/lib/clientes/storage";
-import { savePago } from "@/lib/facturacion/storage";
+import { apiCreatePago } from "@/lib/api/client";
 import type { Factura } from "@/lib/gestion-clientes/types";
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white text-sm";
@@ -38,7 +38,7 @@ export default function PagosPage() {
     const f = facturaSeleccionada;
     if (!f) return;
     setGuardando(true);
-    await savePago({
+    await apiCreatePago({
       factura_id: f.id,
       monto: parseFloat(formPago.monto) || 0,
       fecha_pago: formPago.fecha_pago,
