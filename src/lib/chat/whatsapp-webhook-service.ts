@@ -2,6 +2,7 @@ import {
   provisionChannelFromWebhookEnv,
   type WebhookProvisionEnv,
 } from "@/lib/chat/channel-provision";
+import { createFlowEngine } from "@/lib/chat/flow-engine-service";
 import type {
   MetaInboundMessage,
   MetaWebhookValue,
@@ -51,9 +52,34 @@ export function extractMessageBody(msg: MetaInboundMessage): { message_type: str
       };
     case "sticker":
       return { message_type: "sticker", content: "[sticker]" };
+    case "interactive": {
+      const button = msg.interactive?.button_reply;
+      if (button?.id) {
+        return {
+          message_type: "interactive",
+          content: button.title?.trim() || `[button:${button.id}]`,
+        };
+      }
+      const list = msg.interactive?.list_reply;
+      if (list?.id) {
+        return {
+          message_type: "interactive",
+          content: list.title?.trim() || `[list:${list.id}]`,
+        };
+      }
+      return { message_type: "interactive", content: "[interactive]" };
+    }
     default:
       return { message_type: t, content: `[${t}]` };
   }
+}
+
+function extractMetaButtonId(msg: MetaInboundMessage): string | null {
+  const buttonId = msg.interactive?.button_reply?.id?.trim();
+  if (buttonId) return buttonId;
+  const listId = msg.interactive?.list_reply?.id?.trim();
+  if (listId) return listId;
+  return null;
 }
 
 async function messageExists(
@@ -191,7 +217,7 @@ export async function processInboundWebhookValue(
 
       let { data: existingConv } = await supabase
         .from("chat_conversations")
-        .select("id, status, unread_count")
+        .select("id, status, unread_count, flow_code, flow_current_node, flow_status, human_taken_over")
         .eq("contact_id", contactId)
         .eq("channel_id", channelId)
         .maybeSingle();
@@ -210,11 +236,15 @@ export async function processInboundWebhookValue(
             channel_id: channelId,
             contact_id: contactId,
             status: "nuevo",
+            flow_code: "sorteo_default",
+            flow_current_node: "inicio",
+            flow_status: "bot",
+            human_taken_over: false,
             last_message_at: null,
             last_message_preview: null,
             unread_count: 0,
           })
-          .select("id, status, unread_count")
+          .select("id, status, unread_count, flow_code, flow_current_node, flow_status, human_taken_over")
           .single();
 
         if (conv) {
@@ -222,7 +252,7 @@ export async function processInboundWebhookValue(
         } else if (convErr?.code === "23505") {
           const { data: again } = await supabase
             .from("chat_conversations")
-            .select("id, status, unread_count")
+            .select("id, status, unread_count, flow_code, flow_current_node, flow_status, human_taken_over")
             .eq("contact_id", contactId)
             .eq("channel_id", channelId)
             .maybeSingle();
@@ -239,6 +269,7 @@ export async function processInboundWebhookValue(
       }
 
       const conversationId = existingConv.id as string;
+      const flowEngine = createFlowEngine({ supabase });
 
       const { error: insErr } = await supabase.from("chat_messages").insert({
         empresa_id: empresaId,
@@ -266,6 +297,14 @@ export async function processInboundWebhookValue(
       await supabase
         .from("chat_conversations")
         .update({
+          flow_code:
+            (existingConv as { flow_code?: string | null }).flow_code ?? "sorteo_default",
+          flow_current_node:
+            (existingConv as { flow_current_node?: string | null }).flow_current_node ?? "inicio",
+          flow_status:
+            (existingConv as { flow_status?: string | null }).flow_status ?? "bot",
+          human_taken_over:
+            (existingConv as { human_taken_over?: boolean | null }).human_taken_over ?? false,
           last_message_at: ts,
           last_message_preview: preview,
           unread_count: (existingConv.unread_count as number) + 1,
@@ -273,6 +312,21 @@ export async function processInboundWebhookValue(
           updated_at: new Date().toISOString(),
         })
         .eq("id", conversationId);
+
+      const metaButtonId = extractMetaButtonId(msg);
+      if (metaButtonId) {
+        const interactiveResult = await flowEngine.processInteractiveReply({
+          conversationId,
+          empresaId,
+          metaButtonId,
+          rawPayload: msg as unknown as Record<string, unknown>,
+        });
+        if (!interactiveResult.ok) {
+          errors.push(
+            `Flow interactive: ${interactiveResult.error ?? interactiveResult.status}`
+          );
+        }
+      }
 
       processed += 1;
     } catch (e) {

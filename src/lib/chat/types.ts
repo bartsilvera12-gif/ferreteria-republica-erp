@@ -24,6 +24,10 @@ export type ChatConversationRow = {
   channel_id: string;
   contact_id: string;
   status: "nuevo" | "interesado" | "pendiente" | "cerrado";
+  flow_code: string | null;
+  flow_current_node: string | null;
+  flow_status: "bot" | "human";
+  human_taken_over: boolean;
   last_message_at: string | null;
   last_message_preview: string | null;
   unread_count: number;
@@ -42,6 +46,41 @@ export type ChatMessageRow = {
   message_type: string;
   content: string | null;
   raw_payload: Record<string, unknown>;
+  created_at: string;
+};
+
+export type ChatFlowNodeRow = {
+  id: string;
+  empresa_id: string;
+  flow_code: string;
+  node_code: string;
+  message_text: string | null;
+  node_type: "buttons" | "list" | "text" | "image_input" | "human" | "end";
+  is_active: boolean;
+  created_at: string;
+};
+
+export type ChatFlowOptionRow = {
+  id: string;
+  node_id: string;
+  label: string;
+  option_value: string;
+  meta_button_id: string;
+  next_node_code: string | null;
+  sort_order: number;
+  created_at: string;
+};
+
+export type ChatFlowEventRow = {
+  id: string;
+  empresa_id: string;
+  conversation_id: string;
+  flow_code: string | null;
+  node_code: string | null;
+  event_type: string;
+  selected_option_id: string | null;
+  meta_button_id: string | null;
+  payload: Record<string, unknown>;
   created_at: string;
 };
 
@@ -78,7 +117,11 @@ export type MetaInboundMessage = {
   audio?: { id?: string };
   video?: { caption?: string };
   sticker?: { id?: string };
-  interactive?: unknown;
+  interactive?: {
+    type?: string;
+    button_reply?: { id?: string; title?: string };
+    list_reply?: { id?: string; title?: string; description?: string };
+  };
   [key: string]: unknown;
 };
 
