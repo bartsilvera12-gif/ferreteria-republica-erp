@@ -255,6 +255,12 @@ export default function ConversacionesPage() {
         >
           Configurar canal WhatsApp
         </Link>
+        <Link
+          href="/dashboard/conversaciones/flujos"
+          className="shrink-0 text-sm font-medium text-[#0EA5E9] hover:underline px-3 py-2 rounded-lg border border-sky-200 bg-sky-50"
+        >
+          Gestionar flujos
+        </Link>
       </div>
 
       {hasActiveChannel === false && (
