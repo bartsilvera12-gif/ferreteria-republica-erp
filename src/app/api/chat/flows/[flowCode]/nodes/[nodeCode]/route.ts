@@ -78,11 +78,13 @@ export async function PATCH(
         .eq("empresa_id", auth.empresa_id)
         .eq("node_id", currentNode.id)
         .eq("block_type", "image")
-        .order("sort_order", { ascending: true })
-        .limit(1);
+        .order("sort_order", { ascending: true });
       if (blockErr) return NextResponse.json({ ok: false, error: blockErr.message }, { status: 400 });
-      const mediaUrl = (mediaBlocks?.[0]?.media_url as string | null | undefined)?.trim() ?? "";
-      if (!mediaUrl || !isValidHttpUrl(mediaUrl)) {
+      const hasAnyValidMediaUrl = (mediaBlocks ?? []).some((block) => {
+        const mediaUrl = (block.media_url as string | null | undefined)?.trim() ?? "";
+        return Boolean(mediaUrl) && isValidHttpUrl(mediaUrl);
+      });
+      if (!hasAnyValidMediaUrl) {
         return NextResponse.json(
           { ok: false, error: "Nodo media requiere un bloque de imagen con URL válida (http/https)." },
           { status: 400 }
