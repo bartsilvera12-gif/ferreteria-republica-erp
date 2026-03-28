@@ -14,6 +14,43 @@ function norm(s: string | undefined): string {
   return (s ?? "").trim();
 }
 
+const FLOW_SORTEO_LOG = "[flow-sorteo]" as const;
+
+/**
+ * Motivo legible cuando `parseSorteoParticipantFromFlowData` devuelve null (diagnóstico en logs).
+ */
+export function explainParseSorteoParticipantFailure(data: Record<string, string>): string {
+  const qtyKeys = ["cantidad_boletos", "cantidad", "boletos", "qty"] as const;
+  let foundKey: string | undefined;
+  let rawVal: string | undefined;
+  let qtyValid = false;
+  for (const k of qtyKeys) {
+    const v = norm(data[k]);
+    if (!v) continue;
+    foundKey = k;
+    rawVal = v;
+    const n = Number(v);
+    if (Number.isFinite(n) && n >= 1) {
+      qtyValid = true;
+      break;
+    }
+  }
+  if (!qtyValid) {
+    if (!foundKey) {
+      return "cantidad: ninguna clave con valor (cantidad_boletos | cantidad | boletos | qty)";
+    }
+    return `cantidad: clave "${foundKey}"="${rawVal}" no es número entero >= 1`;
+  }
+  const nombreCompleto =
+    norm(data["nombre_completo"]) ||
+    norm(data["nombre_y_apellido"]) ||
+    [norm(data["nombre"]), norm(data["apellido"])].filter(Boolean).join(" ").trim();
+  if (!nombreCompleto) {
+    return "nombre: falta nombre_completo | nombre_y_apellido | (nombre y apellido)";
+  }
+  return "desconocido";
+}
+
 /**
  * Lee campos típicos guardados vía save_as_field en el flujo (nombres flexibles).
  */
@@ -98,22 +135,55 @@ export async function ensureSorteoOrderFromChat(
   supabase: SupabaseClient,
   input: EnsureSorteoOrderFromChatInput
 ): Promise<EnsureSorteoOrderFromChatResult> {
+  console.info(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_invoke", {
+    conversationId: input.conversationId,
+    flowCode: input.flowCode,
+    empresaId: input.empresaId,
+    mediaId: input.mediaId,
+    flowDataKeys: Object.keys(input.flowData),
+    chat_flow_data: input.flowData,
+  });
+
   const tiene = await empresaTieneModuloSorteos(supabase, input.empresaId);
   if (!tiene) {
+    console.warn(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+      path: "skipped",
+      reason: "modulo_sorteos_inactivo",
+      conversationId: input.conversationId,
+      flowCode: input.flowCode,
+      archivo: "src/lib/sorteos/sorteo-order-from-chat.ts",
+      condicion: "empresaTieneModuloSorteos === false",
+    });
     return { ok: true, skipped: true, reason: "modulo_sorteos_inactivo" };
   }
 
   const sorteoId = await getSorteoIdForChatFlow(supabase, input.empresaId, input.flowCode);
   if (!sorteoId) {
+    console.warn(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+      path: "skipped",
+      reason: "flow_sin_sorteo_id",
+      sorteo_id: null,
+      conversationId: input.conversationId,
+      flowCode: input.flowCode,
+      archivo: "src/lib/sorteos/sorteo-order-from-chat.ts",
+      condicion: "getSorteoIdForChatFlow devolvió null (chat_flows.sorteo_id vacío o sin fila)",
+    });
     return { ok: true, skipped: true, reason: "flow_sin_sorteo_id" };
   }
 
   const participant = parseSorteoParticipantFromFlowData(input.flowData);
   if (!participant) {
-    console.warn("[sorteo-order-from-chat] Datos de flujo incompletos para orden", {
+    const parseDetail = explainParseSorteoParticipantFailure(input.flowData);
+    console.warn(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+      path: "skipped",
+      reason: "datos_flujo_incompletos",
+      parseDetail,
       conversationId: input.conversationId,
       flowCode: input.flowCode,
-      keys: Object.keys(input.flowData),
+      sorteo_id: sorteoId,
+      chat_flow_data: input.flowData,
+      archivo: "src/lib/sorteos/sorteo-order-from-chat.ts",
+      condicion: "parseSorteoParticipantFromFlowData === null",
     });
     return { ok: true, skipped: true, reason: "datos_flujo_incompletos" };
   }
@@ -142,17 +212,56 @@ export async function ensureSorteoOrderFromChat(
   });
 
   if (error) {
+    console.error(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+      path: "failed",
+      reason: "rpc_error",
+      error: error.message,
+      conversationId: input.conversationId,
+      flowCode: input.flowCode,
+      sorteo_id: sorteoId,
+      archivo: "src/lib/sorteos/sorteo-order-from-chat.ts",
+      condicion: "supabase.rpc sorteos_ensure_order_from_chat devolvió error",
+      rpcError: error.message,
+      rpcCode: error.code,
+      rpcDetails: error.details,
+    });
     return { ok: false, message: error.message || "RPC sorteos_ensure_order_from_chat falló" };
   }
 
   const row = data as Record<string, unknown> | null;
   if (!row || typeof row.ok !== "boolean") {
-    return { ok: false, message: "Respuesta inválida del servidor (sorteo)" };
+    const invalidMsg = "Respuesta inválida del servidor (sorteo)";
+    console.error(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+      path: "failed",
+      reason: "invalid_rpc_payload",
+      error: invalidMsg,
+      conversationId: input.conversationId,
+      flowCode: input.flowCode,
+      sorteo_id: sorteoId,
+      archivo: "src/lib/sorteos/sorteo-order-from-chat.ts",
+      condicion: "!row || typeof row.ok !== boolean",
+      rawData: data,
+    });
+    return { ok: false, message: invalidMsg };
   }
   if (!row.ok) {
+    const msg =
+      typeof row.message === "string" ? row.message : "Error al crear orden de sorteo";
+    console.error(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+      path: "failed",
+      reason: "rpc_row_not_ok",
+      error: msg,
+      conversationId: input.conversationId,
+      flowCode: input.flowCode,
+      sorteo_id: sorteoId,
+      archivo: "src/lib/sorteos/sorteo-order-from-chat.ts",
+      condicion: "row.ok === false (RPC negocio)",
+      rpcRowMessage: msg,
+      rawRow: row,
+    });
     return {
       ok: false,
-      message: typeof row.message === "string" ? row.message : "Error al crear orden de sorteo",
+      message: msg,
     };
   }
 
@@ -174,8 +283,33 @@ export async function ensureSorteoOrderFromChat(
     : [];
 
   if (!entradaId || !Number.isFinite(numeroOrden)) {
-    return { ok: false, message: "Respuesta de orden incompleta" };
+    const incompleteMsg = "Respuesta de orden incompleta";
+    console.error(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+      path: "failed",
+      reason: "entrada_incompleta",
+      error: incompleteMsg,
+      conversationId: input.conversationId,
+      flowCode: input.flowCode,
+      sorteo_id: sorteoId,
+      archivo: "src/lib/sorteos/sorteo-order-from-chat.ts",
+      condicion: "!entradaId || !Number.isFinite(numeroOrden)",
+      entradaId,
+      numeroOrden,
+      rawRow: row,
+    });
+    return { ok: false, message: incompleteMsg };
   }
+
+  console.info(FLOW_SORTEO_LOG, "ensureSorteoOrderFromChat_outcome", {
+    path: "success",
+    conversationId: input.conversationId,
+    flowCode: input.flowCode,
+    sorteo_id: sorteoId,
+    idempotent: row.idempotent === true,
+    entradaId,
+    numeroOrden,
+    cuponesCount: cupones.length,
+  });
 
   return {
     ok: true,

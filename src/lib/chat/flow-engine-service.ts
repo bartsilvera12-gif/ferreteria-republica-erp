@@ -115,6 +115,97 @@ function extensionFromMime(mimeType: string | null | undefined): string {
   return "jpg";
 }
 
+const FLOW_SORTEO_LOG = "[flow-sorteo]" as const;
+
+function dedupeChatFlowFieldEntries(entries: [string, string][]): [string, string][] {
+  const m = new Map<string, string>();
+  for (const [k, v] of entries) {
+    const key = k.trim();
+    if (!key) continue;
+    m.set(key, v);
+  }
+  return [...m.entries()];
+}
+
+/**
+ * Tras elegir botón/lista: si no hay clave de cantidad en `chat_flow_data`, inferir desde
+ * option_payload, option_value o texto del label (p. ej. "3 boletos", "1 boleta").
+ */
+function augmentCantidadFromInteractiveOption(
+  entries: [string, string][],
+  selected: FlowOption
+): [string, string][] {
+  const lowerKeys = new Set(entries.map(([k]) => k.trim().toLowerCase()));
+  const qtyNames = ["cantidad", "cantidad_boletos", "boletos", "qty"];
+  if (qtyNames.some((k) => lowerKeys.has(k))) {
+    return entries;
+  }
+
+  const tryQty = (raw: unknown): number | null => {
+    if (raw == null) return null;
+    const n = Number(String(raw).trim().replace(",", "."));
+    if (!Number.isFinite(n) || n < 1) return null;
+    return Math.trunc(n);
+  };
+
+  const payload =
+    selected.option_payload && typeof selected.option_payload === "object"
+      ? (selected.option_payload as Record<string, unknown>)
+      : null;
+
+  if (payload) {
+    for (const k of qtyNames) {
+      const n = tryQty(payload[k]);
+      if (n != null) {
+        const rest = entries.filter((e) => e[0].trim().toLowerCase() !== "cantidad");
+        return [...rest, ["cantidad", String(n)]];
+      }
+    }
+  }
+
+  const ov = selected.option_value?.trim() ?? "";
+  if (ov) {
+    const direct = tryQty(ov);
+    if (direct != null) {
+      return [...entries, ["cantidad", String(direct)]];
+    }
+    const lead = ov.match(/^(\d+)/);
+    if (lead) {
+      const n = tryQty(lead[1]);
+      if (n != null) {
+        return [...entries, ["cantidad", String(n)]];
+      }
+    }
+  }
+
+  const label = selected.label?.trim() ?? "";
+  const labelPatterns = [
+    /^(\d+)\s*bolet/i,
+    /^(\d+)\s*boleta/i,
+    /^(\d+)\s*entrada/i,
+    /^(\d+)\s*ticket/i,
+    /(\d+)\s*bolet/i,
+    /^(\d+)\b/,
+  ];
+  for (const re of labelPatterns) {
+    const m = label.match(re);
+    if (m) {
+      const n = tryQty(m[1]);
+      if (n != null) {
+        return [...entries, ["cantidad", String(n)]];
+      }
+    }
+  }
+
+  console.warn(FLOW_SORTEO_LOG, "interactive_cantidad_no_inferida", {
+    optionId: selected.id,
+    label: selected.label,
+    option_value: selected.option_value,
+    meta_button_id: selected.meta_button_id,
+  });
+  return entries;
+}
+
 export function createFlowEngine(ctx: FlowEngineContext) {
   const supabase = ctx.supabase;
 
@@ -917,10 +1008,19 @@ export function createFlowEngine(ctx: FlowEngineContext) {
       selected.option_payload && typeof selected.option_payload === "object"
         ? selected.option_payload
         : {};
-    const payloadEntries = Object.entries(optionPayload).filter(([key]) => key.trim().length > 0);
+    let payloadEntries: [string, string][] = Object.entries(optionPayload)
+      .filter(([key]) => key.trim().length > 0)
+      .map(([k, v]) => [
+        k,
+        typeof v === "string" || typeof v === "number" || typeof v === "boolean"
+          ? String(v)
+          : JSON.stringify(v ?? ""),
+      ]);
     if (!payloadEntries.some(([k]) => k === "opcion_label")) {
       payloadEntries.push(["opcion_label", selected.label]);
     }
+    payloadEntries = augmentCantidadFromInteractiveOption(payloadEntries, selected);
+    payloadEntries = dedupeChatFlowFieldEntries(payloadEntries);
     if (payloadEntries.length > 0 && state.flow_code) {
       const upserts = payloadEntries.map(([fieldName, fieldValue]) => ({
         empresa_id: state.empresa_id,
@@ -1140,14 +1240,47 @@ export function createFlowEngine(ctx: FlowEngineContext) {
   async function processImageReply(
     params: ProcessImageReplyParams
   ): Promise<{ ok: boolean; status: string; nextNodeCode?: string; error?: string }> {
+    console.info(FLOW_SORTEO_LOG, "processImageReply_enter", {
+      conversationId: params.conversationId,
+      empresaId: params.empresaId,
+      mediaId: params.mediaId,
+    });
     const state = await getConversationFlowState(params.conversationId);
     if (!state || state.empresa_id !== params.empresaId) {
+      console.warn(FLOW_SORTEO_LOG, "processImageReply_early_exit", {
+        status: "conversation_not_found",
+        archivo: "src/lib/chat/flow-engine-service.ts",
+        lineApprox: 1154,
+        condicion: "!state || state.empresa_id !== params.empresaId",
+        conversationId: params.conversationId,
+        ensureSorteoOrderFromChat: "no_llamado",
+      });
       return { ok: false, status: "conversation_not_found", error: "Conversación no encontrada" };
     }
     if (state.flow_status !== "bot" || state.human_taken_over) {
+      console.info(FLOW_SORTEO_LOG, "processImageReply_early_exit", {
+        status: "ignored_not_bot_mode",
+        archivo: "src/lib/chat/flow-engine-service.ts",
+        lineApprox: 1167,
+        condicion: "flow_status !== 'bot' || human_taken_over",
+        conversationId: state.id,
+        flow_status: state.flow_status,
+        human_taken_over: state.human_taken_over,
+        ensureSorteoOrderFromChat: "no_llamado",
+      });
       return { ok: true, status: "ignored_not_bot_mode" };
     }
     if (!state.flow_code || !state.flow_current_node) {
+      console.info(FLOW_SORTEO_LOG, "processImageReply_early_exit", {
+        status: "missing_flow_state",
+        archivo: "src/lib/chat/flow-engine-service.ts",
+        lineApprox: 1180,
+        condicion: "!flow_code || !flow_current_node",
+        conversationId: state.id,
+        flow_code: state.flow_code,
+        flow_current_node: state.flow_current_node,
+        ensureSorteoOrderFromChat: "no_llamado",
+      });
       return { ok: true, status: "missing_flow_state" };
     }
 
@@ -1157,6 +1290,17 @@ export function createFlowEngine(ctx: FlowEngineContext) {
       state.flow_current_node
     );
     if (!currentNode || currentNode.node_type !== "image_input") {
+      console.info(FLOW_SORTEO_LOG, "processImageReply_early_exit", {
+        status: "ignored_not_image_node",
+        archivo: "src/lib/chat/flow-engine-service.ts",
+        lineApprox: 1200,
+        condicion: "!currentNode || currentNode.node_type !== 'image_input'",
+        conversationId: state.id,
+        flowCode: state.flow_code,
+        flow_current_node: state.flow_current_node,
+        node_type: currentNode?.node_type ?? null,
+        ensureSorteoOrderFromChat: "no_llamado",
+      });
       return { ok: true, status: "ignored_not_image_node" };
     }
 
@@ -1202,6 +1346,16 @@ export function createFlowEngine(ctx: FlowEngineContext) {
           raw: params.rawPayload,
         },
       });
+      console.info(FLOW_SORTEO_LOG, "processImageReply_early_exit", {
+        status: "ignored_non_image_mime",
+        archivo: "src/lib/chat/flow-engine-service.ts",
+        lineApprox: 1255,
+        condicion: "!mimeNorm.startsWith('image/')",
+        conversationId: state.id,
+        flowCode: state.flow_code,
+        mimeNorm,
+        ensureSorteoOrderFromChat: "no_llamado",
+      });
       return { ok: true, status: "ignored_non_image_mime" };
     }
 
@@ -1214,6 +1368,16 @@ export function createFlowEngine(ctx: FlowEngineContext) {
       upsert: true,
     });
     if (upload.error) {
+      console.error(FLOW_SORTEO_LOG, "processImageReply_early_exit", {
+        status: "upload_failed",
+        archivo: "src/lib/chat/flow-engine-service.ts",
+        lineApprox: 1277,
+        condicion: "storage.upload.error",
+        conversationId: state.id,
+        flowCode: state.flow_code,
+        error: upload.error.message,
+        ensureSorteoOrderFromChat: "no_llamado",
+      });
       return { ok: false, status: "upload_failed", error: upload.error.message };
     }
     const publicUrl = supabase.storage.from(CHAT_MEDIA_BUCKET).getPublicUrl(path).data.publicUrl;
@@ -1231,7 +1395,20 @@ export function createFlowEngine(ctx: FlowEngineContext) {
           },
           { onConflict: "conversation_id,field_name" }
         );
-      if (upErr) return { ok: false, status: "save_image_failed", error: upErr.message };
+      if (upErr) {
+        console.error(FLOW_SORTEO_LOG, "processImageReply_early_exit", {
+          status: "save_image_failed",
+          archivo: "src/lib/chat/flow-engine-service.ts",
+          lineApprox: 1306,
+          condicion: "chat_flow_data upsert error",
+          conversationId: state.id,
+          flowCode: state.flow_code,
+          save_as_field: currentNode.save_as_field,
+          error: upErr.message,
+          ensureSorteoOrderFromChat: "no_llamado",
+        });
+        return { ok: false, status: "save_image_failed", error: upErr.message };
+      }
     }
 
     await insertFlowEvent({
