@@ -16,6 +16,8 @@ function getSupabase() {
 export type FacturaSifenResumenData = {
   sifen_config_exists: boolean;
   sifen_config_activa: boolean;
+  /** `test` | `prod` si hay fila de config; null si no. */
+  sifen_ambiente: string | null;
   factura_electronica: FacturaElectronicaDTO | null;
 };
 
@@ -56,16 +58,26 @@ export async function GET(
     }
 
     const [{ data: cfg }, { data: fe }] = await Promise.all([
-      supabase.from("empresa_sifen_config").select("activo").eq("empresa_id", auth.empresa_id).maybeSingle(),
+      supabase
+        .from("empresa_sifen_config")
+        .select("activo, ambiente")
+        .eq("empresa_id", auth.empresa_id)
+        .maybeSingle(),
       supabase.from("factura_electronica").select("*").eq("factura_id", fid).eq("empresa_id", auth.empresa_id).maybeSingle(),
     ]);
 
     const sifen_config_exists = cfg != null;
     const sifen_config_activa = Boolean(cfg && (cfg as { activo?: boolean }).activo);
+    const ambienteRaw =
+      cfg != null && (cfg as { ambiente?: string | null }).ambiente != null
+        ? String((cfg as { ambiente?: string | null }).ambiente).trim()
+        : "";
+    const sifen_ambiente = ambienteRaw.length > 0 ? ambienteRaw : null;
 
     const payload: FacturaSifenResumenData = {
       sifen_config_exists,
       sifen_config_activa,
+      sifen_ambiente,
       factura_electronica: fe ? toFacturaElectronicaDto(fe as Record<string, unknown>) : null,
     };
 

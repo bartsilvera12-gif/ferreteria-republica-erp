@@ -1,4 +1,4 @@
-import type { EstadoSifen, FacturaElectronicaDTO } from "./types";
+import type { EstadoSifen, FacturaElectronicaDTO, SifenConsultaLoteUltimaPersistida } from "./types";
 
 /** Mapea fila BD → DTO público (mismas columnas que expone la API SIFEN). */
 export function toFacturaElectronicaDto(row: Record<string, unknown>): FacturaElectronicaDTO {
@@ -19,6 +19,11 @@ export function toFacturaElectronicaDto(row: Record<string, unknown>): FacturaEl
       row.sifen_ultima_respuesta_recibe_lote == null || typeof row.sifen_ultima_respuesta_recibe_lote !== "object"
         ? null
         : (row.sifen_ultima_respuesta_recibe_lote as Record<string, unknown>),
+    sifen_ultima_respuesta_consulta_lote:
+      row.sifen_ultima_respuesta_consulta_lote == null ||
+      typeof row.sifen_ultima_respuesta_consulta_lote !== "object"
+        ? null
+        : (row.sifen_ultima_respuesta_consulta_lote as SifenConsultaLoteUltimaPersistida),
     created_at: String(row.created_at ?? ""),
     updated_at: String(row.updated_at ?? ""),
   };

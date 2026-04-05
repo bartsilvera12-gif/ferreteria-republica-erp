@@ -23,6 +23,7 @@ type FacturaApiRow = {
 type SifenResumen = {
   sifen_config_exists: boolean;
   sifen_config_activa: boolean;
+  sifen_ambiente: string | null;
   factura_electronica: FacturaElectronicaDTO | null;
 };
 

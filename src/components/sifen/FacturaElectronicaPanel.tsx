@@ -7,6 +7,7 @@ import { SifenEstadoBadge, labelSifenEstado } from "./SifenEstadoBadge";
 type Resumen = {
   sifen_config_exists: boolean;
   sifen_config_activa: boolean;
+  sifen_ambiente: string | null;
   factura_electronica: FacturaElectronicaDTO | null;
 };
 
@@ -218,7 +219,9 @@ export function FacturaElectronicaPanel({
   loadingResumen: boolean;
   onResumenLoaded: (r: Resumen) => void;
 }) {
-  const [action, setAction] = useState<"borrador" | "xml" | "firmar" | "enviar-test" | null>(null);
+  const [action, setAction] = useState<
+    "borrador" | "xml" | "firmar" | "enviar-test" | "consulta-lote-test" | null
+  >(null);
   const [flash, setFlash] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
   const refresh = useCallback(async () => {
@@ -277,6 +280,45 @@ export function FacturaElectronicaPanel({
     }
   };
 
+  const runConsultaLoteTest = async () => {
+    setFlash(null);
+    setAction("consulta-lote-test");
+    try {
+      const res = await fetch(`/api/facturas/${facturaId}/sifen/consulta-lote-test`, {
+        method: "POST",
+      });
+      const j = (await res.json()) as {
+        success?: boolean;
+        data?: {
+          consulta_lote?: {
+            dCodResLot?: string | null;
+            dMsgResLot?: string | null;
+            resumenInferido?: string | null;
+            estadoActualizado?: boolean;
+          };
+        };
+        error?: string;
+      };
+      if (!res.ok || !j.success) {
+        setFlash({ kind: "err", text: j.error ?? `Error ${res.status}` });
+        return;
+      }
+      const c = j.data?.consulta_lote;
+      const msg =
+        c?.resumenInferido?.trim() ||
+        (c?.dCodResLot != null
+          ? `${c.dCodResLot}${c.dMsgResLot != null ? ` — ${c.dMsgResLot}` : ""}`
+          : null) ||
+        "Consulta lote completada.";
+      setFlash({ kind: "ok", text: msg });
+      await refresh();
+    } catch (e) {
+      setFlash({ kind: "err", text: e instanceof Error ? e.message : "Error de red" });
+    } finally {
+      setAction(null);
+    }
+  };
+
   const fe = resumen?.factura_electronica ?? null;
   const estado = fe?.estado_sifen ?? null;
   const estadoLabel = fe ? labelSifenEstado(estado) : "Sin SIFEN";
@@ -290,6 +332,13 @@ export function FacturaElectronicaPanel({
     Boolean(fe.xml_path?.trim()) &&
     !FIRMAR_BLOQUEADOS.has(String(estado)) &&
     estado !== "firmado";
+
+  const puedeConsultarLoteTest =
+    Boolean(resumen?.sifen_config_activa) &&
+    resumen?.sifen_ambiente === "test" &&
+    Boolean(fe?.sifen_d_prot_cons_lote?.trim());
+
+  const ultimaConsulta = fe?.sifen_ultima_respuesta_consulta_lote ?? null;
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-sm p-5 space-y-4">
@@ -332,6 +381,62 @@ export function FacturaElectronicaPanel({
                   <p className="text-slate-600 break-all">
                     <span className="text-slate-400">CDC:</span> <code className="text-xs">{fe.cdc}</code>
                   </p>
+                )}
+                {fe.sifen_d_prot_cons_lote?.trim() && (
+                  <p className="text-slate-600 break-all">
+                    <span className="text-slate-400">dProtConsLote (SET):</span>{" "}
+                    <code className="text-xs">{fe.sifen_d_prot_cons_lote}</code>
+                  </p>
+                )}
+                {ultimaConsulta && (
+                  <div className="rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2 text-xs space-y-1.5">
+                    <p className="font-semibold text-sky-900">Última consulta lote (TEST)</p>
+                    <p className="text-slate-700">
+                      <span className="text-slate-500">dCodResLot:</span>{" "}
+                      <code className="bg-white/80 px-1 rounded">
+                        {ultimaConsulta.dCodResLot ?? "—"}
+                      </code>
+                    </p>
+                    <p className="text-slate-700 break-words">
+                      <span className="text-slate-500">dMsgResLot:</span>{" "}
+                      {ultimaConsulta.dMsgResLot ?? "—"}
+                    </p>
+                    {ultimaConsulta.detallePorCdc.length > 0 && (
+                      <ul className="list-disc pl-4 space-y-2 text-slate-800">
+                        {ultimaConsulta.detallePorCdc.map((d) => (
+                          <li key={d.cdc}>
+                            <span className="text-slate-500">CDC:</span>{" "}
+                            <code className="bg-white/80 px-1 rounded break-all">{d.cdc}</code>
+                            <br />
+                            <span className="text-slate-500">dEstRes:</span> {d.dEstRes}
+                            {d.dProtAut != null && d.dProtAut !== "" && (
+                              <>
+                                <br />
+                                <span className="text-slate-500">dProtAut:</span> {d.dProtAut}
+                              </>
+                            )}
+                            {d.grupoRes.length > 0 && (
+                              <ul className="list-circle pl-4 mt-1 space-y-0.5">
+                                {d.grupoRes.map((g, i) => (
+                                  <li key={`${d.cdc}-${g.dCodRes}-${i}`}>
+                                    <code>{g.dCodRes}</code> — {g.dMsgRes}
+                                  </li>
+                                ))}
+                              </ul>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {ultimaConsulta.loteSinDetalleCdc && !ultimaConsulta.soapFault && (
+                      <p className="text-amber-800">
+                        Sin detalle por CDC en esta respuesta (lote posiblemente aún en cola).
+                      </p>
+                    )}
+                    {ultimaConsulta.soapFault && ultimaConsulta.faultString && (
+                      <p className="text-red-700">Fault: {ultimaConsulta.faultString}</p>
+                    )}
+                  </div>
                 )}
                 {fe.error && (
                   <div className="rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm px-3 py-2 whitespace-pre-wrap">
@@ -385,6 +490,27 @@ export function FacturaElectronicaPanel({
               {action === "firmar" ? "Firmando…" : "Firmar XML"}
             </button>
           </div>
+
+          {fe && puedeConsultarLoteTest && (
+            <div className="rounded-lg border border-sky-200 bg-sky-50/40 px-4 py-3 space-y-2">
+              <p className="text-[10px] font-bold text-sky-900/70 uppercase tracking-wide">
+                Consulta asíncrona (TEST)
+              </p>
+              <div className="flex flex-col sm:flex-row sm:items-center sm:flex-wrap gap-2">
+                <button
+                  type="button"
+                  disabled={action !== null}
+                  onClick={() => void runConsultaLoteTest()}
+                  className="w-fit px-3 py-2 text-xs font-semibold rounded-lg bg-sky-600 text-white shadow-sm disabled:opacity-50 disabled:cursor-not-allowed hover:bg-sky-700"
+                >
+                  {action === "consulta-lote-test" ? "Consultando…" : "Consultar lote TEST"}
+                </button>
+                <p className="text-xs text-slate-600">
+                  Usa el protocolo guardado tras enviar el lote. Requiere ambiente SIFEN test.
+                </p>
+              </div>
+            </div>
+          )}
 
           {fe && estado === "firmado" && (
             <div className="rounded-lg border border-dashed border-violet-200 bg-violet-50/50 px-4 py-3 space-y-2">

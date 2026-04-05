@@ -80,6 +80,28 @@ export type EstadoSifen =
   | "rechazado"
   | "error_envio";
 
+/** Fila persistida en `sifen_ultima_respuesta_consulta_lote` (jsonb). */
+export interface SifenConsultaLoteDetallePersistido {
+  cdc: string;
+  dEstRes: string;
+  dProtAut: string | null;
+  grupoRes: { dCodRes: string; dMsgRes: string }[];
+}
+
+export interface SifenConsultaLoteUltimaPersistida {
+  consultadoEn: string;
+  dProtConsLote: string;
+  dFecProc: string | null;
+  dCodResLot: string | null;
+  dMsgResLot: string | null;
+  httpStatus: number;
+  soapFault: boolean;
+  faultString: string | null;
+  /** true si la respuesta no es fault pero no vino ningún `gResProcLote` (suele indicar lote aún en cola). */
+  loteSinDetalleCdc: boolean;
+  detallePorCdc: SifenConsultaLoteDetallePersistido[];
+}
+
 /** Fila de public.factura_electronica (respuesta API). */
 export interface FacturaElectronicaDTO {
   id: string;
@@ -96,6 +118,8 @@ export interface FacturaElectronicaDTO {
   sifen_d_prot_cons_lote: string | null;
   /** Última respuesta recibe-lote (parseada + cuerpo SOAP). */
   sifen_ultima_respuesta_recibe_lote: Record<string, unknown> | null;
+  /** Última respuesta consulta-lote TEST (dCodResLot, detalle por CDC). */
+  sifen_ultima_respuesta_consulta_lote: SifenConsultaLoteUltimaPersistida | null;
   created_at: string;
   updated_at: string;
 }
@@ -307,6 +331,41 @@ export interface SifenEnviarTestResponseData {
     httpStatus: number;
     loteRecibido: boolean;
     loteNoEncolado: boolean;
+  };
+  /** Solo con ?debug=1 */
+  cuerpo_soap?: string;
+}
+
+/** Detalle del evento POST consulta-lote-test. */
+export interface SifenApiConsultaLoteTestDetalle {
+  origen: "api_consulta_lote_test";
+  factura_id: string;
+  dProtConsLote: string;
+  dCodResLot: string | null;
+  dMsgResLot: string | null;
+  httpStatus: number;
+  soapFault: boolean;
+  estado_sifen_anterior: string;
+  estado_sifen_nuevo: string;
+}
+
+/** Respuesta de POST /api/facturas/[id]/sifen/consulta-lote-test */
+export interface SifenConsultaLoteTestResponseData {
+  factura_electronica: FacturaElectronicaDTO;
+  consulta_lote: {
+    dFecProc: string | null;
+    dCodResLot: string | null;
+    dMsgResLot: string | null;
+    httpStatus: number;
+    soapFault: boolean;
+    faultString: string | null;
+    detallePorCdc: SifenConsultaLoteDetallePersistido[];
+    loteSinDetalleCdc: boolean;
+    /** true si sigue en cola / sin resultado por DE (típico mientras `enviado`). */
+    loteEnProcesamiento: boolean;
+    /** Si se actualizó `estado_sifen` desde `enviado` a aprobado/rechazado. */
+    estadoActualizado: boolean;
+    resumenInferido: string | null;
   };
   /** Solo con ?debug=1 */
   cuerpo_soap?: string;
