@@ -19,6 +19,7 @@ import {
   normalizarNumeroDocumentoSifen,
   normalizarNumeroTimbrado,
   normalizarCodigoTres,
+  formatoCuerpoRucTipoTruc,
   padDigits,
   splitRucParaXml,
 } from "./sifen-cdc";
@@ -428,7 +429,7 @@ export function buildOfficialRdeFacturaElectronicaXml(
     recParts.push(textEl("cPaisRec", "PRY"));
     recParts.push(textEl("dDesPaisRe", "Paraguay"));
     recParts.push(textEl("iTiContRec", iTiContRec));
-    recParts.push(textEl("dRucRec", padDigits(dRucRec, 8)));
+    recParts.push(textEl("dRucRec", formatoCuerpoRucTipoTruc(dRucRec)));
     recParts.push(textEl("dDVRec", dDVRec));
     recParts.push(textEl("dNomRec", receptor.nombre.trim()));
     if (receptor.direccion?.trim()) recParts.push(textEl("dDirRec", receptor.direccion.trim()));

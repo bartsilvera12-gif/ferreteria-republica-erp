@@ -61,6 +61,33 @@ export function splitRucParaXml(rucRaw: string): { cuerpo: string; dDV: string }
 }
 
 /**
+ * Valor para nodos XSD `tRuc` (p. ej. `dRucRec`): `DE_Types_v150` exige pattern `[1-9][0-9]*…`,
+ * longitud 3–8, **sin ceros a la izquierda**. Rellenar el cuerpo a 8 dígitos con `padDigits` produce
+ * valores como `00635623`, que **no** cumplen el patrón y SET devuelve 0160 (“dRucRec es invalido”).
+ * @see muestra oficial pysifen: `<dRucRec>4192083</dRucRec>`
+ */
+export function formatoCuerpoRucTipoTruc(cuerpo: string): string {
+  const d = String(cuerpo).replace(/\D/g, "");
+  let sig = d.replace(/^0+/, "") || "0";
+  if (sig === "0") {
+    throw new Error("RUC receptor: el cuerpo no tiene dígitos significativos (ingrese RUC sin el DV o revise el número).");
+  }
+  if (sig.length > 8) {
+    sig = sig.slice(-8);
+    sig = sig.replace(/^0+/, "") || "0";
+  }
+  if (sig === "0" || sig.length < 3) {
+    throw new Error(
+      `RUC receptor: el cuerpo no cumple tRuc SIFEN (3–8 dígitos, sin cero inicial). Valor normalizado: "${sig}"`
+    );
+  }
+  if (!/^[1-9]/.test(sig)) {
+    throw new Error(`RUC receptor: valor tRuc inválido tras normalizar: "${sig}"`);
+  }
+  return sig;
+}
+
+/**
  * DV del CDC (módulo 11, igual `jsonDteAlgoritmos.calcularDigitoVerificador` TIPS, baseMax 11).
  */
 export function digitoVerificadorModulo11CdcSet(base43: string): string {
