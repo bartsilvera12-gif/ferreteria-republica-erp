@@ -1,11 +1,10 @@
-import { createServerClient } from "@supabase/ssr";
 import { createClient } from "@supabase/supabase-js";
-import { supabaseDbSchemaOption, supabaseServiceRoleClientOptions } from "@/lib/supabase/schema";
+import { supabaseServiceRoleClientOptions } from "@/lib/supabase/schema";
+import { getAuthUserForApiRoute } from "@/lib/auth/get-auth-user-for-api-route";
 import { resolveUsuarioErpFromAuthUser } from "@/lib/auth/resolve-usuario-erp";
-import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -14,24 +13,7 @@ export async function GET() {
       return NextResponse.json({ error: "Config no disponible" }, { status: 500 });
     }
 
-    const cookieStore = await cookies();
-    const supabaseAuth = createServerClient(url, anonKey, {
-      ...supabaseDbSchemaOption,
-      cookies: {
-        getAll() {
-          return cookieStore.getAll().map((c) => ({ name: c.name, value: c.value }));
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        },
-      },
-    });
-
-    const {
-      data: { user },
-    } = await supabaseAuth.auth.getUser();
+    const user = await getAuthUserForApiRoute(request);
     if (!user?.id) {
       return NextResponse.json({ error: "No autenticado" }, { status: 401 });
     }

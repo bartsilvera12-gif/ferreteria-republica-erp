@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getSession } from "@/lib/auth";
 import { pathRequiresModuleSlug } from "@/lib/modulos/route-slug-map";
 
@@ -39,9 +40,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
         return;
       }
 
-      const res = await fetch("/api/empresas/module-access", {
+      const res = await fetchWithSupabaseSession("/api/empresas/module-access", {
         cache: "no-store",
-        credentials: "include",
       });
       if (cancelled) return;
       if (!res.ok) {

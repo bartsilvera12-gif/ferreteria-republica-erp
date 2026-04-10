@@ -28,6 +28,7 @@ import {
   History,
   Headphones,
 } from "lucide-react";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { supabase } from "@/lib/supabase";
 import type { ModuloEmpresa } from "@/lib/empresas/actions";
 import { getFavoritos, toggleFavorito } from "@/lib/favorites";
@@ -240,8 +241,7 @@ export default function Sidebar() {
           }
           return;
         }
-        const res = await fetch("/api/empresas/module-access", {
-          credentials: "include",
+        const res = await fetchWithSupabaseSession("/api/empresas/module-access", {
           cache: "no-store",
         });
         if (cancelled) return;
