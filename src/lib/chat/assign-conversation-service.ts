@@ -37,15 +37,7 @@ export async function assignConversation(
 
   const { data: conv, error: convErr } = await supabase
     .from("chat_conversations")
-    .select(
-      `
-      id,
-      empresa_id,
-      channel_id,
-      assigned_agent_id,
-      chat_channels ( type )
-    `
-    )
+    .select("id, empresa_id, channel_id, assigned_agent_id")
     .eq("id", cid)
     .maybeSingle();
 
@@ -57,8 +49,18 @@ export async function assignConversation(
   }
 
   const empresaId = conv.empresa_id as string;
-  const ch = conv.chat_channels as { type?: string } | null | undefined;
-  const channelType = (ch?.type as string) ?? "whatsapp";
+  const channelId = (conv.channel_id as string | null | undefined)?.trim() ?? "";
+  let channelType = "whatsapp";
+  if (channelId) {
+    const { data: chRow, error: chErr } = await supabase
+      .from("chat_channels")
+      .select("type")
+      .eq("id", channelId)
+      .eq("empresa_id", empresaId)
+      .maybeSingle();
+    if (chErr) return { ok: false, error: chErr.message };
+    channelType = ((chRow as { type?: string | null } | null)?.type as string) ?? "whatsapp";
+  }
 
   const { data: queues, error: qErr } = await supabase
     .from("chat_queues")
