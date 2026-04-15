@@ -1,4 +1,4 @@
-import type { YCloudInboundIdentifiers } from "@/lib/chat/webhooks/ycloud-resolve-channel";
+import type { YCloudInboundIdentifiers } from "@/lib/chat/webhooks/ycloud-match";
 
 export type YCloudWebhookEnvelope = {
   id?: string;

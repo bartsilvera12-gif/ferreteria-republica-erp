@@ -1,54 +1,113 @@
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import { createServiceRoleClientForEmpresa } from "@/lib/supabase/empresa-data-schema";
-import { normalizeWaPhone } from "@/lib/chat/wa-phone";
+import { resolveEmpresaDataSchema } from "@/lib/supabase/schema";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { isLikelyUnexposedTenantChatSchema } from "@/lib/supabase/chat-data-schema";
 import type { SupabaseAdmin } from "@/lib/chat/types";
 import { verifyYCloudWebhookSignature } from "@/lib/chat/webhooks/ycloud-signature";
+import { explainYCloudChannelMatch, type YCloudInboundIdentifiers } from "@/lib/chat/webhooks/ycloud-match";
 
-export type YCloudInboundIdentifiers = {
-  wabaId: string;
-  to: string;
-  from: string;
-};
+export type { YCloudInboundIdentifiers } from "@/lib/chat/webhooks/ycloud-match";
 
-function normPhone(s: string): string {
-  return normalizeWaPhone(s || "");
-}
+const LOG = "[webhooks/ycloud]";
+const LOG_IN = "[ycloud-incoming]";
 
 function cfgStr(cfg: Record<string, unknown>, key: string): string {
   const v = cfg[key];
   return typeof v === "string" ? v.trim() : "";
 }
 
-/** Coincidencia heurística canal ERP ↔ payload YCloud (sin validar firma aún). */
-export function channelMatchesYCloudInbound(
-  row: {
-    provider_channel_id: string | null;
-    config: unknown;
-  },
-  ids: YCloudInboundIdentifiers
-): boolean {
-  const cfg =
-    row.config && typeof row.config === "object" && !Array.isArray(row.config)
-      ? (row.config as Record<string, unknown>)
-      : {};
+function isInvalidPostgrestSchemaError(msg: string): boolean {
+  const m = msg.toLowerCase();
+  return m.includes("invalid schema") || m.includes("pgrst106") || m.includes("schema must be one of");
+}
 
-  const waba = ids.wabaId.trim();
-  const ycCh = cfgStr(cfg, "ycloud_channel_id");
-  const ycSend = cfgStr(cfg, "ycloud_sender_id");
-  const prov = (row.provider_channel_id ?? "").trim();
-  const toN = normPhone(ids.to);
+function summarizeSigHeader(h: string | null): { present: boolean; has_t: boolean; has_s: boolean; preview: string } {
+  const t = (h ?? "").trim();
+  if (!t) return { present: false, has_t: false, has_s: false, preview: "" };
+  const has_t = /(?:^|,)\s*t=/.test(t);
+  const has_s = /(?:^|,)\s*s=/.test(t);
+  const preview = t.length > 48 ? `${t.slice(0, 48)}…` : t;
+  return { present: true, has_t, has_s, preview };
+}
 
-  if (waba && ycCh && waba === ycCh) return true;
-  if (waba && prov && waba === prov) return true;
-  if (toN && ycSend && normPhone(ycSend) === toN) return true;
-  if (toN && prov && normPhone(prov) === toN) return true;
-  return false;
+function secretHint(secret: string): { configured: boolean; length: number } {
+  const s = secret.trim();
+  return { configured: s.length > 0, length: s.length };
+}
+
+type ChannelRow = {
+  id: string;
+  empresa_id: string;
+  provider: string;
+  type: string;
+  config: unknown;
+  provider_channel_id: string | null;
+};
+
+async function loadYcloudChannelRows(
+  empresaId: string,
+  dataSchema: string
+): Promise<{ rows: ChannelRow[]; source: "pg" | "postgrest"; skipReason?: string }> {
+  const pool = getChatPostgresPool();
+  const tenant = isLikelyUnexposedTenantChatSchema(dataSchema);
+
+  if (pool && (tenant || process.env.YCLOUD_WEBHOOK_CHAT_PG_ALWAYS === "1")) {
+    const q = `
+      SELECT id, empresa_id, provider, type, config, provider_channel_id, activo
+      FROM ${quoteSchemaTable(dataSchema, "chat_channels")}
+      WHERE empresa_id = $1::uuid
+        AND type = 'whatsapp'
+        AND provider = 'ycloud'
+        AND activo = true
+    `;
+    const r = await pool.query(q, [empresaId]);
+    return {
+      rows: (r.rows ?? []) as ChannelRow[],
+      source: "pg",
+    };
+  }
+
+  let supabase: SupabaseAdmin;
+  try {
+    supabase = (await createServiceRoleClientForEmpresa(empresaId)) as SupabaseAdmin;
+  } catch (e) {
+    return {
+      rows: [],
+      source: "postgrest",
+      skipReason: e instanceof Error ? e.message : "cliente_supabase",
+    };
+  }
+
+  const { data: rows, error: chErr } = await supabase
+    .from("chat_channels")
+    .select("id, empresa_id, provider, type, config, provider_channel_id, activo")
+    .eq("empresa_id", empresaId)
+    .eq("type", "whatsapp")
+    .eq("provider", "ycloud")
+    .eq("activo", true);
+
+  if (chErr) {
+    if (tenant && isInvalidPostgrestSchemaError(chErr.message)) {
+      return {
+        rows: [],
+        source: "postgrest",
+        skipReason:
+          "PostgREST no expone el schema tenant; definí SUPABASE_DB_URL (pooler Postgres) en el entorno del webhook o agregá el schema en Supabase → API → Exposed schemas.",
+      };
+    }
+    return { rows: [], source: "postgrest", skipReason: chErr.message };
+  }
+
+  return { rows: (rows ?? []) as ChannelRow[], source: "postgrest" };
 }
 
 export type ResolvedYCloudChannel = {
   empresa_id: string;
   channel_id: string;
   webhook_secret: string;
+  /** Schema real de las tablas chat_* (para persistencia vía PG si hace falta). */
+  data_schema: string;
 };
 
 /**
@@ -62,74 +121,152 @@ export async function resolveYCloudChannelForWebhook(
   const catalog = createServiceRoleClient();
   const single = process.env.YCLOUD_WEBHOOK_EMPRESA_ID?.trim();
 
-  let empresaIds: string[] = [];
+  let empresaRows: { id: string; data_schema: string | null }[] = [];
   if (single) {
-    empresaIds = [single];
-  } else {
-    const { data: emps, error } = await catalog.from("empresas").select("id");
+    const { data: one, error } = await catalog
+      .from("empresas")
+      .select("id, data_schema")
+      .eq("id", single)
+      .maybeSingle();
     if (error) {
-      console.warn("[webhooks/ycloud] list empresas", error.message);
+      console.warn(LOG, LOG_IN, "empresa_lookup", { error: error.message, YCLOUD_WEBHOOK_EMPRESA_ID: single });
       return null;
     }
-    empresaIds = (emps ?? []).map((r) => (r as { id: string }).id).filter(Boolean);
+    if (one) empresaRows = [one as { id: string; data_schema: string | null }];
+  } else {
+    const { data: emps, error } = await catalog.from("empresas").select("id, data_schema");
+    if (error) {
+      console.warn(LOG, LOG_IN, "list_empresas", error.message);
+      return null;
+    }
+    empresaRows = (emps ?? []) as { id: string; data_schema: string | null }[];
   }
 
-  const candidates: ResolvedYCloudChannel[] = [];
+  const sigMeta = summarizeSigHeader(signatureHeader);
+  console.info(LOG, LOG_IN, "resolver_inicio", {
+    empresas_a_evaluar: empresaRows.length,
+    wabaId: ids.wabaId,
+    to: ids.to,
+    from: ids.from,
+    header_ycloud_signature: sigMeta,
+  });
 
-  for (const empresaId of empresaIds) {
-    let supabase: SupabaseAdmin;
-    try {
-      supabase = (await createServiceRoleClientForEmpresa(empresaId)) as SupabaseAdmin;
-    } catch {
+  type Candidate = {
+    empresa_id: string;
+    data_schema: string;
+    channel_id: string;
+    secret: string;
+    match_strategy: string;
+  };
+
+  const candidatesMatch: Candidate[] = [];
+
+  for (const emp of empresaRows) {
+    const empresaId = (emp.id ?? "").trim();
+    if (!empresaId) continue;
+
+    const dataSchema = resolveEmpresaDataSchema(emp.data_schema);
+    const { rows, source, skipReason } = await loadYcloudChannelRows(empresaId, dataSchema);
+
+    if (skipReason && rows.length === 0) {
+      console.info(LOG, LOG_IN, "skip_empresa_schema", {
+        empresa_id: empresaId,
+        data_schema: dataSchema,
+        source,
+        motivo: skipReason,
+      });
       continue;
     }
 
-    const { data: rows, error: chErr } = await supabase
-      .from("chat_channels")
-      .select("id, empresa_id, provider, type, config, provider_channel_id, activo")
-      .eq("empresa_id", empresaId)
-      .eq("type", "whatsapp")
-      .eq("provider", "ycloud")
-      .eq("activo", true);
+    console.info(LOG, LOG_IN, "canales_ycloud_cargados", {
+      empresa_id: empresaId,
+      data_schema: dataSchema,
+      source,
+      count: rows.length,
+    });
 
-    if (chErr) {
-      console.warn("[webhooks/ycloud] chat_channels", empresaId, chErr.message);
-      continue;
-    }
-
-    for (const row of rows ?? []) {
-      const r = row as {
-        id: string;
-        empresa_id: string;
-        provider: string;
-        config: unknown;
-        provider_channel_id: string | null;
-      };
-      if (!channelMatchesYCloudInbound(r, ids)) continue;
+    for (const row of rows) {
+      const r = row as ChannelRow;
+      const ex = explainYCloudChannelMatch(r, ids);
+      if (!ex.matched) continue;
 
       const cfg =
         r.config && typeof r.config === "object" && !Array.isArray(r.config)
           ? (r.config as Record<string, unknown>)
           : {};
       const secret = cfgStr(cfg, "ycloud_webhook_secret");
-      if (!secret) continue;
+      const sh = secretHint(secret);
 
-      if (!verifyYCloudWebhookSignature(rawBody, signatureHeader, secret)) continue;
-
-      candidates.push({
+      console.info(LOG, LOG_IN, "candidato_payload", {
         empresa_id: r.empresa_id,
+        data_schema: dataSchema,
         channel_id: r.id,
-        webhook_secret: secret,
+        match_strategy: ex.strategy,
+        webhook_secret: sh,
+      });
+
+      if (!secret) {
+        console.info(LOG, LOG_IN, "candidato_descartado", {
+          channel_id: r.id,
+          motivo: "sin_ycloud_webhook_secret_en_config",
+        });
+        continue;
+      }
+
+      candidatesMatch.push({
+        empresa_id: r.empresa_id,
+        data_schema: dataSchema,
+        channel_id: r.id,
+        secret,
+        match_strategy: ex.strategy ?? "unknown",
       });
     }
   }
 
-  if (candidates.length === 0) return null;
-  if (candidates.length > 1) {
-    console.warn("[webhooks/ycloud] múltiples canales coinciden; se usa el primero", {
-      count: candidates.length,
-      channel_ids: candidates.map((c) => c.channel_id),
+  if (candidatesMatch.length === 0) {
+    console.warn(LOG, LOG_IN, "401", {
+      canal_resuelto: false,
+      motivo: "ningún_canal_coincide_con_payload_o_sin_secret",
+      firma_evaluada: false,
+      wabaId: ids.wabaId,
+      to: ids.to,
     });
+    return null;
   }
-  return candidates[0] ?? null;
+
+  let firmaAlgunaIntentada = false;
+  for (const c of candidatesMatch) {
+    firmaAlgunaIntentada = true;
+    const firmaOk = verifyYCloudWebhookSignature(rawBody, signatureHeader, c.secret);
+    console.info(LOG, LOG_IN, "firma_hmac", {
+      canal_resuelto: true,
+      empresa_id: c.empresa_id,
+      data_schema: c.data_schema,
+      channel_id: c.channel_id,
+      match_strategy: c.match_strategy,
+      firma_valida: firmaOk,
+      header_ycloud_signature: sigMeta,
+      webhook_secret: secretHint(c.secret),
+    });
+    if (firmaOk) {
+      return {
+        empresa_id: c.empresa_id,
+        channel_id: c.channel_id,
+        webhook_secret: c.secret,
+        data_schema: c.data_schema,
+      };
+    }
+  }
+
+  console.warn(LOG, LOG_IN, "401", {
+    canal_resuelto: true,
+    candidatos_con_payload_y_secret: candidatesMatch.length,
+    motivo: "firma_hmac_invalida_o_header_incompleto",
+    firma_evaluada: firmaAlgunaIntentada,
+    firma_valida: false,
+    header_ycloud_signature: sigMeta,
+    wabaId: ids.wabaId,
+    to: ids.to,
+  });
+  return null;
 }
