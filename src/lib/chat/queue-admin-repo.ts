@@ -566,12 +566,13 @@ export async function repoLoadQueueEditorBootstrap(ctx: QueueAdminTenantContext,
   const closure_taxonomy = settled[4].status === "fulfilled" ? settled[4].value : [];
 
   const bootstrapWarnings: string[] = [];
-  if (settled.some((r) => r.status === "rejected")) {
+  const coreAuxFailed = [0, 1, 2, 3].some((i) => settled[i]?.status === "rejected");
+  if (coreAuxFailed) {
     bootstrapWarnings.push(
       "No se cargó toda la información auxiliar (canales, vínculos o agentes). Reintentá la página; si continúa, contactá soporte."
     );
   }
-  if (settled[4].status === "rejected") {
+  if (settled[4]?.status === "rejected") {
     bootstrapWarnings.push(
       "No se pudieron cargar los estados de cierre de la cola (¿migración pendiente?). Podés seguir usando la cola con la taxonomía por defecto al finalizar."
     );

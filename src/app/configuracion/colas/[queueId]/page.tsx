@@ -140,7 +140,7 @@ export default function EditarColaPage() {
         routing_config: serializeQueueRoutingConfig(routing),
       });
       await apiSetQueueChannelLinks(queueId, linked);
-      await load();
+      router.push("/configuracion/colas?cola_guardada=1");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al guardar");
     } finally {
@@ -252,8 +252,12 @@ export default function EditarColaPage() {
       )}
 
       {bootstrapWarnings.length > 0 && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-          <p className="font-medium">{bootstrapWarnings[0]}</p>
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950 space-y-2">
+          {bootstrapWarnings.map((w, i) => (
+            <p key={i} className={i === 0 ? "font-medium" : ""}>
+              {w}
+            </p>
+          ))}
         </div>
       )}
 

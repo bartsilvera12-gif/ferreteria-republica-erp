@@ -1,9 +1,16 @@
-import { usuarioEmailLookupVariants } from "@/lib/auth/usuario-email-variants";
+import { resolveUsuarioErpFromAuthUser } from "@/lib/auth/resolve-usuario-erp";
+import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
+
+function trimJoinNombre(nombre: string | null | undefined): string {
+  const t = (nombre ?? "").trim().replace(/\s+/g, " ");
+  return t;
+}
 
 /**
  * Nombre a mostrar en UI para el usuario autenticado (Server Components).
- * Orden: `usuarios.nombre` (auth_user_id o email) → metadata full_name → parte local del email.
+ * Prioriza `zentra_erp.usuarios.nombre` leído con service role (misma resolución de fila que el resto del ERP),
+ * luego metadata de Auth, luego email completo; evita usar solo la parte local del email como fallback principal.
  */
 export async function getCurrentUserDisplayNameServer(): Promise<string> {
   const supabase = await createSupabaseServerClient();
@@ -12,18 +19,25 @@ export async function getCurrentUserDisplayNameServer(): Promise<string> {
   } = await supabase.auth.getUser();
   if (!user) return "Usuario";
 
-  const { data: byAuth } = await supabase
-    .from("usuarios")
-    .select("nombre")
-    .eq("auth_user_id", user.id)
-    .limit(1);
-  const nAuth = (byAuth?.[0] as { nombre?: string | null } | undefined)?.nombre?.trim();
-  if (nAuth) return nAuth;
-
-  for (const em of usuarioEmailLookupVariants(user.email ?? "")) {
-    const { data: rows } = await supabase.from("usuarios").select("nombre").ilike("email", em).limit(1);
-    const nEmail = (rows?.[0] as { nombre?: string | null } | undefined)?.nombre?.trim();
-    if (nEmail) return nEmail;
+  try {
+    const sr = createServiceRoleClient();
+    const usuario = await resolveUsuarioErpFromAuthUser(sr, user);
+    if (usuario?.id) {
+      const { data: row, error } = await sr
+        .from("usuarios")
+        .select("nombre, email")
+        .eq("id", usuario.id)
+        .maybeSingle();
+      if (!error && row) {
+        const r = row as { nombre?: string | null; email?: string | null };
+        const fromNombre = trimJoinNombre(r.nombre ?? undefined);
+        if (fromNombre.length > 0) return fromNombre;
+        const mail = (r.email ?? user.email ?? "").trim();
+        if (mail.length > 0) return mail;
+      }
+    }
+  } catch (e) {
+    console.warn("[getCurrentUserDisplayNameServer] catálogo usuarios:", e);
   }
 
   const meta = user.user_metadata as Record<string, unknown> | undefined;
@@ -31,9 +45,7 @@ export async function getCurrentUserDisplayNameServer(): Promise<string> {
   if (fullName) return fullName;
 
   const email = user.email?.trim();
-  if (email) {
-    const local = email.split("@")[0]?.trim();
-    if (local) return local;
-  }
+  if (email) return email;
+
   return "Usuario";
 }

@@ -56,6 +56,25 @@ export async function fetchChatConversations(
   filters?: ChatInboxFilters
 ): Promise<InboxConversation[]> {
   const { supabase, catalogSr, empresa_id, usuario_id } = await requireEmpresaTenantServiceRole();
+
+  const { data: activeFlowRows, error: activeFlowsErr } = await supabase
+    .from("chat_flows")
+    .select("flow_code")
+    .eq("empresa_id", empresa_id)
+    .eq("activo", true);
+  if (activeFlowsErr) {
+    console.warn("[fetchChatConversations] chat_flows activos:", activeFlowsErr.message);
+  }
+  const activeFlowCodeSet = new Set(
+    (activeFlowRows ?? [])
+      .map((r) => String((r as { flow_code?: string | null }).flow_code ?? "").trim())
+      .filter((c) => c.length > 0)
+  );
+
+  if (vista === "bot" && activeFlowCodeSet.size === 0) {
+    return [];
+  }
+
   /**
    * Sin embeds desde `chat_conversations`: en esquemas tenant PostgREST suele no tener en caché
    * las FKs hacia `chat_channels` / `chat_queues` / `chat_agents` y falla el select anidado.
@@ -74,6 +93,7 @@ export async function fetchChatConversations(
       unread_count,
       contact_id,
       channel_id,
+      flow_code,
       flow_status,
       human_taken_over
     `
@@ -138,13 +158,22 @@ export async function fetchChatConversations(
 
   if (error) throw new Error(error.message);
   let list = convs ?? [];
+
+  function rowFlowCode(row: Record<string, unknown>): string {
+    return String((row as { flow_code?: string | null }).flow_code ?? "").trim();
+  }
+
+  function isRealAutomatedBotRow(row: Record<string, unknown>): boolean {
+    const fs = String((row as { flow_status?: string | null }).flow_status ?? "");
+    const humanTaken = Boolean((row as { human_taken_over?: boolean }).human_taken_over);
+    const fc = rowFlowCode(row);
+    return fs === "bot" && !humanTaken && fc.length > 0 && activeFlowCodeSet.has(fc);
+  }
+
   if (vista === "inbox") {
-    list = list.filter((row) => {
-      const fs = String((row as { flow_status?: string | null }).flow_status ?? "");
-      const humanTaken = Boolean((row as { human_taken_over?: boolean }).human_taken_over);
-      if (fs === "bot" && !humanTaken) return false;
-      return true;
-    });
+    list = list.filter((row) => !isRealAutomatedBotRow(row as Record<string, unknown>));
+  } else if (vista === "bot") {
+    list = list.filter((row) => isRealAutomatedBotRow(row as Record<string, unknown>));
   }
   if (list.length === 0) return [];
 
@@ -325,7 +354,7 @@ export async function fetchChatConversations(
       last_message_at: row.last_message_at as string | null,
       last_message_preview: row.last_message_preview as string | null,
       unread_count: (row.unread_count as number) ?? 0,
-      flow_status: String(row.flow_status ?? "bot"),
+      flow_status: String((row as { flow_status?: string | null }).flow_status ?? ""),
       human_taken_over: Boolean(row.human_taken_over),
       channel: {
         id: channelId,

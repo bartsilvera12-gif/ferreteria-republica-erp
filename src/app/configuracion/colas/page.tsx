@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { ChatQueueAdminRow } from "@/lib/chat/queue-admin-repo";
@@ -24,6 +24,8 @@ const STRAT_LABEL: Record<string, string> = {
 
 export default function ConfiguracionColasPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const colaGuardadaOk = searchParams?.get("cola_guardada") === "1";
   const [allowed, setAllowed] = useState<boolean | null>(null);
   const [rows, setRows] = useState<ChatQueueAdminRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,6 +59,14 @@ export default function ConfiguracionColasPage() {
   useEffect(() => {
     if (allowed) void load();
   }, [allowed, load]);
+
+  useEffect(() => {
+    if (!colaGuardadaOk) return;
+    const id = window.setTimeout(() => {
+      router.replace("/configuracion/colas");
+    }, 10_000);
+    return () => window.clearTimeout(id);
+  }, [colaGuardadaOk, router]);
 
   async function handleNew() {
     setError(null);
@@ -108,6 +118,14 @@ export default function ConfiguracionColasPage() {
           Nueva cola
         </button>
       </div>
+      {colaGuardadaOk ? (
+        <div
+          className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900"
+          role="status"
+        >
+          Cola guardada correctamente.
+        </div>
+      ) : null}
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
       )}
