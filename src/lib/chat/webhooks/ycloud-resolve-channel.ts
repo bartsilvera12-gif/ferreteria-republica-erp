@@ -4,7 +4,7 @@ import { resolveEmpresaDataSchema } from "@/lib/supabase/schema";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { isLikelyUnexposedTenantChatSchema } from "@/lib/supabase/chat-data-schema";
 import type { SupabaseAdmin } from "@/lib/chat/types";
-import { verifyYCloudWebhookSignature } from "@/lib/chat/webhooks/ycloud-signature";
+import { verifyYCloudWebhookSignatureWithDebug } from "@/lib/chat/webhooks/ycloud-signature";
 import { explainYCloudChannelMatch, type YCloudInboundIdentifiers } from "@/lib/chat/webhooks/ycloud-match";
 
 export type { YCloudInboundIdentifiers } from "@/lib/chat/webhooks/ycloud-match";
@@ -237,7 +237,8 @@ export async function resolveYCloudChannelForWebhook(
   let firmaAlgunaIntentada = false;
   for (const c of candidatesMatch) {
     firmaAlgunaIntentada = true;
-    const firmaOk = verifyYCloudWebhookSignature(rawBody, signatureHeader, c.secret);
+    const sig = verifyYCloudWebhookSignatureWithDebug(rawBody, signatureHeader, c.secret);
+    const firmaOk = sig.ok;
     console.info(LOG, LOG_IN, "firma_hmac", {
       canal_resuelto: true,
       empresa_id: c.empresa_id,
@@ -245,8 +246,29 @@ export async function resolveYCloudChannelForWebhook(
       channel_id: c.channel_id,
       match_strategy: c.match_strategy,
       firma_valida: firmaOk,
+      matched_variant: sig.matched_variant,
       header_ycloud_signature: sigMeta,
       webhook_secret: secretHint(c.secret),
+      sig_debug: firmaOk
+        ? {
+            raw_body_len: sig.raw_body_len,
+            raw_body_sha256_16: sig.raw_body_sha256_16,
+            signed_payload_len: sig.signed_payload_len,
+            signed_payload_sha256_16: sig.signed_payload_sha256_16,
+          }
+        : {
+            secret_len: sig.secret_len,
+            raw_body_len: sig.raw_body_len,
+            raw_body_sha256_16: sig.raw_body_sha256_16,
+            signed_payload_len: sig.signed_payload_len,
+            signed_payload_sha256_16: sig.signed_payload_sha256_16,
+            t_len: sig.t_len,
+            s_len: sig.s_len,
+            s_preview: sig.s_preview,
+            expected_hex_preview: sig.expected_hex_preview,
+            nota:
+              "Comparación oficial: HMAC-SHA256(hex) de `${t}.${rawBody}` (sin punto final). Se prueba también variante con punto final por compatibilidad.",
+          },
     });
     if (firmaOk) {
       return {
