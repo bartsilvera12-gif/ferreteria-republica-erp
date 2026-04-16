@@ -10,6 +10,7 @@ import {
 } from "@/lib/chat/omnicanal-scope";
 import { insertChatRoutingEvent, updateContactLastRouted } from "@/lib/chat/routing-audit";
 import { isMissingColumnError } from "@/lib/chat/postgres-column-error";
+import type { OmnicanalOperatorRole } from "@/lib/chat/omnicanal-supervision-read";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 
 /** Fila imposible para forzar 0 resultados en consultas `in`/count cuando el alcance no admite filas. */
@@ -1040,6 +1041,21 @@ export async function getMyAgentOperationalPresence(): Promise<MyAgentOperationa
   const status_changed_at =
     changedAts.length > 0 ? earliest(changedAts) : updatedAts.length > 0 ? earliest(updatedAts) : null;
   return { in_queues: true, status, status_changed_at };
+}
+
+/** Datos de cabecera inbox (presencia + rol omnicanal) en una sola ida al servidor. */
+export type ConversacionesInboxBootstrap = {
+  presence: MyAgentOperationalPresenceResult;
+  omnicanal_role: OmnicanalOperatorRole | null;
+};
+
+export async function getConversacionesInboxBootstrap(): Promise<ConversacionesInboxBootstrap> {
+  const { supabase, empresa_id, usuario_id } = await requireEmpresaTenantServiceRole();
+  const [presence, scope] = await Promise.all([
+    getMyAgentOperationalPresence(),
+    getOmnicanalScope(supabase, empresa_id, usuario_id),
+  ]);
+  return { presence, omnicanal_role: scope.role };
 }
 
 export type SetMyAgentOperationalPresenceResult = { applied: boolean; reason?: string };

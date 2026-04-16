@@ -53,6 +53,11 @@ export type InboxConversation = {
    * null si no aplica o si el RPC no está desplegado.
    */
   awaiting_agent_reply_since: string | null;
+  /**
+   * Último mensaje del hilo es saliente (empresa) y no aplica `awaiting_agent_reply_since` (turno del contacto).
+   * Requiere migración con columna `client_turn_since` en el mismo RPC.
+   */
+  awaiting_client_reply_since: string | null;
   channel: {
     id: string;
     type: string;
@@ -334,6 +339,7 @@ async function fetchChatConversationsUnsafe(
 
   const convIdList = list.map((row) => String((row as { id?: unknown }).id ?? "").trim()).filter(Boolean);
   const awaitingById: Record<string, string | null> = {};
+  const clientTurnById: Record<string, string | null> = {};
   if (convIdList.length > 0) {
     try {
       const { data: rpcRows, error: rpcErr } = await catalogSr.rpc("neura_inbox_awaiting_reply_since_batch", {
@@ -344,10 +350,15 @@ async function fetchChatConversationsUnsafe(
       if (rpcErr) {
         console.warn("[fetchChatConversations] awaiting_reply RPC:", rpcErr.message);
       } else if (Array.isArray(rpcRows)) {
-        for (const r of rpcRows as { conversation_id?: string; awaiting_since?: string | null }[]) {
+        for (const r of rpcRows as {
+          conversation_id?: string;
+          awaiting_since?: string | null;
+          client_turn_since?: string | null;
+        }[]) {
           const id = String(r.conversation_id ?? "").trim();
           if (!id) continue;
           awaitingById[id] = r.awaiting_since ?? null;
+          clientTurnById[id] = (r as { client_turn_since?: string | null }).client_turn_since ?? null;
         }
       }
     } catch (e) {
@@ -552,6 +563,7 @@ async function fetchChatConversationsUnsafe(
         crm_prospecto_id: c?.crm_prospecto_id ?? null,
       },
       awaiting_agent_reply_since: awaitingById[row.id as string] ?? null,
+      awaiting_client_reply_since: clientTurnById[row.id as string] ?? null,
     };
   });
 }

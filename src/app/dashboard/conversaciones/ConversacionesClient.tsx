@@ -32,7 +32,8 @@ import {
   type ChatQueueListRow,
 } from "@/lib/chat/chat-ops-actions";
 import { formatWaitHuman } from "@/lib/chat/format-wait-human";
-import { Flame } from "lucide-react";
+import type { OmnicanalOperatorRole } from "@/lib/chat/omnicanal-supervision-read";
+import { Flame, UserRound } from "lucide-react";
 import {
   finalizeConversationWithClosure,
   loadFinalizeOptionsForConversation,
@@ -139,17 +140,20 @@ function tabClass(active: boolean) {
   }`;
 }
 
-/** Segmento seleccionado = claro y con anillo; el otro queda apagado (gris) para leer el estado de un vistazo. */
-function opPresenceToggleClass(active: boolean, variant: "ready" | "offline") {
+/**
+ * Control segmentado: el modo activo = pastilla blanca con borde de color (no “todo verde”);
+ * el inactivo = gris plano (se entiende qué está elegido).
+ */
+function opPresenceToggleClass(isSelected: boolean, variant: "ready" | "offline") {
   const base =
-    "px-3 py-1.5 text-xs font-semibold rounded-md transition-all disabled:opacity-50 min-w-[6.75rem] text-center border";
-  if (!active) {
-    return `${base} border-transparent bg-slate-200/70 text-slate-500 hover:bg-slate-200 hover:text-slate-600`;
+    "px-3 py-1.5 text-xs font-semibold rounded-md transition-all disabled:opacity-50 min-w-[6.75rem] text-center border-2";
+  if (!isSelected) {
+    return `${base} border-transparent bg-slate-200/60 text-slate-500 hover:bg-slate-200 hover:text-slate-600`;
   }
   if (variant === "ready") {
-    return `${base} border-emerald-600 bg-emerald-500 text-white shadow-sm ring-2 ring-emerald-300/80 z-[1]`;
+    return `${base} border-emerald-500 bg-white text-emerald-700 shadow-sm ring-1 ring-emerald-200/90 z-[1]`;
   }
-  return `${base} border-slate-600 bg-slate-700 text-white shadow-sm ring-2 ring-slate-400/50 z-[1]`;
+  return `${base} border-slate-600 bg-white text-slate-800 shadow-sm ring-1 ring-slate-200/90 z-[1]`;
 }
 
 function LiveElapsedLabel({ sinceIso }: { sinceIso: string | null }) {
@@ -162,9 +166,38 @@ function LiveElapsedLabel({ sinceIso }: { sinceIso: string | null }) {
   return <span className="tabular-nums font-medium">{formatWaitHuman(sinceIso)}</span>;
 }
 
-/** Misma lógica que el RPC: último mensaje del contacto sin respuesta humana posterior. */
-function inboxAwaitingHumanBadge(c: InboxConversation): boolean {
-  return Boolean(c.awaiting_agent_reply_since);
+function inboxClientWaitingSince(c: InboxConversation): string | null {
+  if (c.awaiting_agent_reply_since) return null;
+  return c.awaiting_client_reply_since ?? null;
+}
+
+function InboxReplyTurnBadges({ c, dense }: { c: InboxConversation; dense?: boolean }) {
+  const agentSince = c.awaiting_agent_reply_since;
+  const clientSince = inboxClientWaitingSince(c);
+  if (!agentSince && !clientSince) return null;
+  const pad = dense ? "px-1.5 py-0.5 text-[9px]" : "px-1.5 py-0.5 text-[10px]";
+  return (
+    <>
+      {agentSince ? (
+        <span
+          className={`inline-flex items-center gap-0.5 font-semibold text-orange-950 bg-orange-50 border border-orange-200 rounded ${pad} shrink-0`}
+          title="Cliente escribió; falta respuesta humana del asesor"
+        >
+          <Flame className={`shrink-0 text-orange-600 ${dense ? "w-3 h-3" : "w-3.5 h-3.5"}`} aria-hidden />
+          <LiveElapsedLabel sinceIso={agentSince} />
+        </span>
+      ) : null}
+      {clientSince ? (
+        <span
+          className={`inline-flex items-center gap-0.5 font-semibold text-sky-950 bg-sky-50 border border-sky-200 rounded ${pad} shrink-0`}
+          title="Último mensaje saliente; turno del contacto"
+        >
+          <UserRound className={`shrink-0 text-sky-600 ${dense ? "w-3 h-3" : "w-3.5 h-3.5"}`} aria-hidden />
+          <LiveElapsedLabel sinceIso={clientSince} />
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 function parseInboxFilters(sp: URLSearchParams): ChatInboxFilters | undefined {
@@ -218,6 +251,7 @@ export function ConversacionesClient({
   chatDataSchema,
   agentDisplayName,
   initialOperationalPresence,
+  initialOmnicanalRole = null,
 }: {
   mode: ConversacionesClientMode;
   /** Esquema Postgres de tablas chat_* (zentra_erp o `er_…`). */
@@ -226,6 +260,8 @@ export function ConversacionesClient({
   agentDisplayName: string;
   /** Si viene del RSC, el toggle de presencia puede mostrarse sin esperar la primera server action. */
   initialOperationalPresence?: ConversacionesInitialOperationalPresence;
+  /** Rol declarado en omnicanal (p. ej. admin sin fila en `chat_agents`). */
+  initialOmnicanalRole?: OmnicanalOperatorRole | null;
 }) {
   const supabaseChat = useMemo(
     () => createBrowserClientForSchema(chatDataSchema),
@@ -288,6 +324,8 @@ export function ConversacionesClient({
       ? initialOperationalPresence.status_changed_at ?? null
       : null
   );
+  /** Ancla de sesión en esta pestaña inbox (tiempo de uso del módulo). */
+  const [sessionSinceIso, setSessionSinceIso] = useState<string | null>(null);
   const [finalizeSaving, setFinalizeSaving] = useState(false);
   const [finalizeOptions, setFinalizeOptions] = useState<FinalizeOptionsResult | null>(null);
   const [finalizeStateId, setFinalizeStateId] = useState("");
@@ -554,6 +592,11 @@ export function ConversacionesClient({
       cancelled = true;
     };
   }, [mode, initialOperationalPresence]);
+
+  useEffect(() => {
+    if (mode !== "inbox") return;
+    setSessionSinceIso((prev) => prev ?? new Date().toISOString());
+  }, [mode]);
 
   useEffect(() => {
     if (mode !== "inbox" || !opInQueues) return;
@@ -1155,13 +1198,39 @@ export function ConversacionesClient({
           </p>
         </div>
         {mode === "inbox" && opPresenceLoaded && !opInQueues ? (
-          <div className="text-[10px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 max-w-[18rem] text-right leading-snug shrink-0">
-            No figurás como agente en ninguna cola: no se muestra el turno Disponible/Pausa. Pedí asignación en{" "}
-            <Link href="/configuracion/colas" className="font-semibold text-amber-950 underline-offset-2 hover:underline">
-              Configuración → Colas
-            </Link>
-            .
-          </div>
+          initialOmnicanalRole === "admin" ? (
+            <div className="flex flex-col items-end gap-1 shrink-0 max-w-[20rem] text-right">
+              <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                Administrador
+              </span>
+              <span className="text-[10px] text-slate-600 leading-snug">
+                Sin puesto en colas ·{" "}
+                <Link href="/configuracion/colas" className="font-semibold text-[#0EA5E9] hover:underline">
+                  Colas
+                </Link>
+              </span>
+            </div>
+          ) : initialOmnicanalRole === "supervisor" ? (
+            <div className="flex flex-col items-end gap-1 shrink-0 max-w-[20rem] text-right">
+              <span className="inline-flex items-center rounded-full bg-indigo-800 px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                Supervisor
+              </span>
+              <span className="text-[10px] text-slate-600 leading-snug">
+                Sin fila de agente en colas ·{" "}
+                <Link href="/configuracion/colas" className="font-semibold text-[#0EA5E9] hover:underline">
+                  Colas
+                </Link>
+              </span>
+            </div>
+          ) : (
+            <div className="text-[10px] text-amber-900 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1.5 max-w-[18rem] text-right leading-snug shrink-0">
+              No figurás como agente en ninguna cola: no se muestra el turno Disponible/Pausa. Pedí asignación en{" "}
+              <Link href="/configuracion/colas" className="font-semibold text-amber-950 underline-offset-2 hover:underline">
+                Configuración → Colas
+              </Link>
+              .
+            </div>
+          )
         ) : null}
         {mode === "inbox" && opPresenceLoaded && opInQueues && opStatus !== null ? (
           <div
@@ -1218,9 +1287,22 @@ export function ConversacionesClient({
                 <span className="text-slate-400 italic">sin marca de tiempo en DB</span>
               )}
             </div>
+            {sessionSinceIso ? (
+              <div className="text-[10px] text-slate-600 text-right leading-tight w-full border-t border-slate-200/80 pt-1 mt-0.5">
+                <span className="text-slate-500">Sesión en inbox:</span>{" "}
+                <LiveElapsedLabel sinceIso={sessionSinceIso} />
+              </div>
+            ) : null}
           </div>
         ) : null}
       </div>
+      {mode === "inbox" && sessionSinceIso && !opInQueues ? (
+        <div className="flex justify-end w-full shrink-0 -mt-1">
+          <p className="text-[10px] text-slate-500 tabular-nums">
+            Sesión en inbox: <LiveElapsedLabel sinceIso={sessionSinceIso} />
+          </p>
+        </div>
+      ) : null}
       {mode === "inbox" && opPresenceErr ? (
         <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-lg px-2 py-1.5 shrink-0">
           {opPresenceErr}
@@ -1354,15 +1436,7 @@ export function ConversacionesClient({
                         Cola · {c.queue_name}
                       </span>
                     ) : null}
-                    {vista !== "bot" && inboxAwaitingHumanBadge(c) ? (
-                      <span
-                        className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-orange-950 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded shrink-0"
-                        title="Cliente esperando respuesta humana"
-                      >
-                        <Flame className="w-3 h-3 shrink-0 text-orange-600" aria-hidden />
-                        <LiveElapsedLabel sinceIso={c.awaiting_agent_reply_since} />
-                      </span>
-                    ) : null}
+                    {vista !== "bot" ? <InboxReplyTurnBadges c={c} dense /> : null}
                     {c.assigned_agent_name ? (
                       <span
                         className="text-[9px] font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded truncate max-w-full"
@@ -1436,15 +1510,6 @@ export function ConversacionesClient({
                         >
                           {labelEstado(selected.status)}
                         </span>
-                        {vista !== "bot" && inboxAwaitingHumanBadge(selected) ? (
-                          <span
-                            className="inline-flex items-center gap-0.5 text-[9px] font-semibold text-orange-950 bg-orange-50 border border-orange-200 px-1.5 py-0.5 rounded shrink-0"
-                            title="Cliente esperando respuesta humana"
-                          >
-                            <Flame className="w-3 h-3 shrink-0 text-orange-600" aria-hidden />
-                            <LiveElapsedLabel sinceIso={selected.awaiting_agent_reply_since} />
-                          </span>
-                        ) : null}
                         {listColumnHidden ? (
                           <button
                             type="button"
@@ -1472,15 +1537,7 @@ export function ConversacionesClient({
                             Sin cola
                           </span>
                         ) : null}
-                        {inboxAwaitingHumanBadge(selected) ? (
-                          <span
-                            className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-orange-950 bg-orange-50 border border-orange-200 rounded px-1.5 py-0.5 shrink-0"
-                            title="Cliente esperando respuesta humana"
-                          >
-                            <Flame className="w-3.5 h-3.5 shrink-0 text-orange-600" aria-hidden />
-                            <LiveElapsedLabel sinceIso={selected.awaiting_agent_reply_since} />
-                          </span>
-                        ) : null}
+                        <InboxReplyTurnBadges c={selected} />
                         {selected.assigned_agent_name ? (
                           <span
                             className="text-[10px] font-semibold text-emerald-900 bg-emerald-50 border border-emerald-200 rounded px-1.5 py-0.5 truncate max-w-full"

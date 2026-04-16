@@ -14,6 +14,17 @@ import { formatWaitHuman } from "@/lib/chat/format-wait-human";
 import { assignmentWaitBadge, assignmentWaitBadgeClass } from "@/lib/chat/inbox-assignment-labels";
 import { Flame } from "lucide-react";
 
+/** `formatWaitHuman` depende de `Date.now()`; sin re-render el monitoreo mostraba tiempos “congelados”. */
+function TickingSinceLabel({ iso }: { iso: string | null | undefined }) {
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setTick((x) => x + 1), 15_000);
+    return () => window.clearInterval(id);
+  }, []);
+  if (!iso) return <>—</>;
+  return <span className="tabular-nums">{formatWaitHuman(iso)}</span>;
+}
+
 export default function MonitoreoPage() {
   const [dash, setDash] = useState<MonitoringDashboard | null>(null);
   const [agents, setAgents] = useState<SupervisorAgentLoadRow[]>([]);
@@ -123,7 +134,9 @@ export default function MonitoreoPage() {
                   const w = assignmentWaitBadge(r.assignment_wait_code, Boolean(r.queue_id));
                   return (
                   <tr key={r.id} className="border-b border-slate-50">
-                    <td className="py-2 pr-3 text-slate-700 tabular-nums">{formatWaitHuman(r.waiting_since)}</td>
+                    <td className="py-2 pr-3 text-slate-700 tabular-nums">
+                      <TickingSinceLabel iso={r.waiting_since} />
+                    </td>
                     <td className="py-2 pr-3">
                       <span className="font-medium text-slate-800">{r.contact_name ?? "—"}</span>
                       <span className="block text-xs text-slate-400 font-mono truncate max-w-[160px]">
@@ -223,7 +236,7 @@ export default function MonitoreoPage() {
                           </div>
                           <div className="text-right shrink-0">
                             <span className="text-orange-900 font-semibold tabular-nums">
-                              {formatWaitHuman(it.waiting_since)}
+                              <TickingSinceLabel iso={it.waiting_since} />
                             </span>
                             {it.last_preview ? (
                               <span className="block text-slate-400 truncate max-w-[14rem] mt-0.5">{it.last_preview}</span>
@@ -288,12 +301,10 @@ export default function MonitoreoPage() {
                       )}
                     </td>
                     <td className="py-2 pr-3 text-slate-700 tabular-nums text-xs">
-                      {a.operational_status_changed_at
-                        ? formatWaitHuman(a.operational_status_changed_at)
-                        : "—"}
+                      <TickingSinceLabel iso={a.operational_status_changed_at} />
                     </td>
                     <td className="py-2 pr-3 text-slate-700 tabular-nums text-xs">
-                      {a.last_heartbeat_at ? formatWaitHuman(a.last_heartbeat_at) : "—"}
+                      <TickingSinceLabel iso={a.last_heartbeat_at} />
                     </td>
                     <td className="py-2 pr-3">{a.max_conversations}</td>
                     <td className="py-2 pr-3">
