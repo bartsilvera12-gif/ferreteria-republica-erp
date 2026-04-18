@@ -240,8 +240,9 @@ export default function FinalizedClosuresClient({ filterOptions }: { filterOptio
         <div>
           <h1 className="text-2xl font-bold text-slate-900 tracking-tight">Conversaciones finalizadas</h1>
           <p className="text-sm text-slate-500 mt-1 max-w-2xl">
-            Bandeja global de cierres: todas las colas, agentes y canales. Filtrá, revisá el detalle sin salir de la
-            pantalla y exportá el resultado filtrado para Excel.
+            {filterOptions.ux_scope === "team"
+              ? "Vista acotada a tu alcance omnicanal: los combos solo listan colas, agentes y canales relevantes para tu equipo. Exportá el resultado filtrado."
+              : "Bandeja global de cierres: todas las colas, agentes y canales. Filtrá, revisá el detalle sin salir de la pantalla y exportá el resultado filtrado para Excel."}
           </p>
         </div>
         <button

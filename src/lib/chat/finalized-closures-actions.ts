@@ -1,12 +1,16 @@
 "use server";
 
 import { requireEmpresaTenantServiceRole } from "@/lib/chat/empresa-tenant-service-role";
+import type { OmnicanalScope } from "@/lib/chat/omnicanal-scope";
 import {
   appendOmnicanalConversationScopeToQuery,
   getOmnicanalScope,
   isOmnicanalAdminScope,
+  resolveChatAgentIdsForUsuarios,
+  resolveQueueIdsForUsuarios,
   shouldBypassOmnicanalConversationScope,
 } from "@/lib/chat/omnicanal-scope";
+import type { AppSupabaseClient } from "@/lib/supabase/schema";
 
 export type FinalizedClosureListRow = {
   closure_id: string;
@@ -48,6 +52,8 @@ export type FinalizedClosuresListResult = {
   page_size: number;
 };
 
+export type FinalizedFilterUxScope = "full" | "team";
+
 export type FinalizedFilterOptions = {
   queues: { id: string; nombre: string }[];
   channels: { id: string; nombre: string | null; type: string }[];
@@ -57,6 +63,8 @@ export type FinalizedFilterOptions = {
   closed_by_users: { id: string; nombre: string }[];
   state_labels: string[];
   substate_labels: string[];
+  /** `team` = combos acotados al alcance omnicanal (p. ej. supervisor). */
+  ux_scope: FinalizedFilterUxScope;
 };
 
 function endOfDayIso(dateYmd: string): string {
@@ -78,8 +86,11 @@ function intersectIds(a: string[] | null, b: string[]): string[] {
   return a.filter((id) => s.has(id));
 }
 
-export async function loadFinalizedFilterOptions(): Promise<FinalizedFilterOptions> {
-  const { supabase, catalogSr, empresa_id } = await requireEmpresaTenantServiceRole();
+async function loadFinalizedFilterOptionsAllEmpresa(
+  supabase: AppSupabaseClient,
+  catalogSr: AppSupabaseClient,
+  empresa_id: string
+): Promise<FinalizedFilterOptions> {
   const empty: FinalizedFilterOptions = {
     queues: [],
     channels: [],
@@ -87,6 +98,7 @@ export async function loadFinalizedFilterOptions(): Promise<FinalizedFilterOptio
     closed_by_users: [],
     state_labels: [],
     substate_labels: [],
+    ux_scope: "full",
   };
 
   const [{ data: queues, error: qe }, { data: channels, error: che }, { data: chatAgentRows, error: gae }] =
@@ -179,7 +191,161 @@ export async function loadFinalizedFilterOptions(): Promise<FinalizedFilterOptio
     closed_by_users,
     state_labels: [...states].sort((a, b) => a.localeCompare(b, "es")),
     substate_labels: [...subs].sort((a, b) => a.localeCompare(b, "es")),
+    ux_scope: "full",
   };
+}
+
+async function loadFinalizedFilterOptionsScopedTeam(
+  supabase: AppSupabaseClient,
+  catalogSr: AppSupabaseClient,
+  empresa_id: string,
+  scope: OmnicanalScope
+): Promise<FinalizedFilterOptions> {
+  const emptyTeam: FinalizedFilterOptions = {
+    queues: [],
+    channels: [],
+    agents: [],
+    closed_by_users: [],
+    state_labels: [],
+    substate_labels: [],
+    ux_scope: "team",
+  };
+
+  const queueIds = await resolveQueueIdsForUsuarios(supabase, empresa_id, scope.agentUsuarioIds);
+  let queues: { id: string; nombre: string }[] = [];
+  if (queueIds.length > 0) {
+    const { data: qrows, error: qe } = await supabase
+      .from("chat_queues")
+      .select("id, nombre")
+      .eq("empresa_id", empresa_id)
+      .in("id", queueIds)
+      .order("nombre", { ascending: true });
+    if (!qe && qrows) queues = mapQueues(qrows);
+  }
+
+  const agentUsuarioPick = [...new Set(scope.agentUsuarioIds.map((x) => String(x ?? "").trim()).filter(Boolean))];
+  let agents: { id: string; nombre: string }[] = [];
+  if (agentUsuarioPick.length > 0) {
+    const { data: urows, error: ue } = await catalogSr
+      .from("usuarios")
+      .select("id, nombre, email")
+      .in("id", agentUsuarioPick.slice(0, 500));
+    if (!ue && urows) {
+      agents = (urows as { id: string; nombre?: string | null; email?: string | null }[]).map((u) => ({
+        id: u.id,
+        nombre: (u.nombre?.trim() || u.email?.trim() || u.id) as string,
+      }));
+      agents.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    }
+  }
+
+  const agentFkIds = await resolveChatAgentIdsForUsuarios(supabase, empresa_id, scope.agentUsuarioIds);
+  let channels: { id: string; nombre: string | null; type: string }[] = [];
+  if (agentFkIds.length > 0) {
+    const { data: convCh, error: cErr } = await supabase
+      .from("chat_conversations")
+      .select("channel_id")
+      .eq("empresa_id", empresa_id)
+      .not("channel_id", "is", null)
+      .in("assigned_agent_id", agentFkIds)
+      .limit(8000);
+    if (!cErr && convCh) {
+      const chIds = [
+        ...new Set(
+          (convCh ?? [])
+            .map((r) => String((r as { channel_id?: string | null }).channel_id ?? "").trim())
+            .filter(Boolean)
+        ),
+      ];
+      if (chIds.length > 0) {
+        const { data: chRows, error: chErr } = await supabase
+          .from("chat_channels")
+          .select("id, nombre, type")
+          .eq("empresa_id", empresa_id)
+          .in("id", chIds)
+          .order("nombre", { ascending: true });
+        if (!chErr && chRows) channels = mapChannels(chRows);
+      }
+    }
+  }
+
+  let convIds: string[] = [];
+  let cq = supabase.from("chat_conversations").select("id").eq("empresa_id", empresa_id);
+  cq = (await appendOmnicanalConversationScopeToQuery(supabase, empresa_id, scope, cq)).builder;
+  const { data: scopedConv, error: convErr } = await cq.limit(8000);
+  if (convErr) {
+    console.warn("[loadFinalizedFilterOptions] scoped conv ids:", convErr.message);
+    return { ...emptyTeam, queues, agents, channels };
+  }
+  convIds = (scopedConv ?? [])
+    .map((r: { id?: string }) => String(r.id ?? "").trim())
+    .filter(Boolean);
+
+  if (convIds.length === 0) {
+    return { ...emptyTeam, queues, agents, channels };
+  }
+
+  const states = new Set<string>();
+  const subs = new Set<string>();
+  const closerIdSet = new Set<string>();
+  const chunk = 120;
+  for (let i = 0; i < convIds.length; i += chunk) {
+    const slice = convIds.slice(i, i + chunk);
+    const { data: closureSample, error: ce } = await supabase
+      .from("chat_conversation_closures")
+      .select("closed_by_usuario_id, closure_state_label, closure_substate_label")
+      .eq("empresa_id", empresa_id)
+      .in("conversation_id", slice)
+      .limit(4000);
+    if (ce) {
+      if (!isMissingClosureTable(ce)) console.warn("[loadFinalizedFilterOptions] closures scoped:", ce.message);
+      continue;
+    }
+    for (const r of closureSample ?? []) {
+      const cl = String((r as { closed_by_usuario_id?: string | null }).closed_by_usuario_id ?? "").trim();
+      if (cl) closerIdSet.add(cl);
+      const st = String((r as { closure_state_label?: string }).closure_state_label ?? "").trim();
+      const su = String((r as { closure_substate_label?: string }).closure_substate_label ?? "").trim();
+      if (st) states.add(st);
+      if (su) subs.add(su);
+    }
+  }
+
+  let closed_by_users: { id: string; nombre: string }[] = [];
+  const closerIds = [...closerIdSet];
+  if (closerIds.length > 0) {
+    const { data: uc, error: uce } = await catalogSr
+      .from("usuarios")
+      .select("id, nombre, email")
+      .in("id", closerIds.slice(0, 500));
+    if (!uce && uc) {
+      closed_by_users = (uc as { id: string; nombre?: string | null; email?: string | null }[]).map((u) => ({
+        id: u.id,
+        nombre: (u.nombre?.trim() || u.email?.trim() || u.id) as string,
+      }));
+      closed_by_users.sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+    }
+  }
+
+  return {
+    queues,
+    channels,
+    agents,
+    closed_by_users,
+    state_labels: [...states].sort((a, b) => a.localeCompare(b, "es")),
+    substate_labels: [...subs].sort((a, b) => a.localeCompare(b, "es")),
+    ux_scope: "team",
+  };
+}
+
+export async function loadFinalizedFilterOptions(): Promise<FinalizedFilterOptions> {
+  const { supabase, catalogSr, empresa_id, usuario_id } = await requireEmpresaTenantServiceRole();
+  const scope = await getOmnicanalScope(supabase, empresa_id, usuario_id);
+  const bypass = await shouldBypassOmnicanalConversationScope(catalogSr, usuario_id, scope);
+  if (bypass || isOmnicanalAdminScope(scope)) {
+    return loadFinalizedFilterOptionsAllEmpresa(supabase, catalogSr, empresa_id);
+  }
+  return loadFinalizedFilterOptionsScopedTeam(supabase, catalogSr, empresa_id, scope);
 }
 
 function mapQueues(rows: unknown): { id: string; nombre: string }[] {
@@ -212,6 +378,42 @@ export async function listFinalizedClosures(
 
   const scope = await getOmnicanalScope(supabase, empresa_id, usuario_id);
   const bypass = await shouldBypassOmnicanalConversationScope(catalogSr, usuario_id, scope);
+
+  if (!bypass && !isOmnicanalAdminScope(scope)) {
+    const fq = filters.queue_id?.trim();
+    if (fq) {
+      const allowedQ = await resolveQueueIdsForUsuarios(supabase, empresa_id, scope.agentUsuarioIds);
+      if (!allowedQ.includes(fq)) {
+        return { rows: [], total: 0, page: p, page_size: ps };
+      }
+    }
+    const fa = filters.assigned_usuario_id?.trim();
+    if (fa) {
+      const allowedAgents = new Set(scope.agentUsuarioIds.map((x) => String(x ?? "").trim()).filter(Boolean));
+      if (scope.role === "supervisor") {
+        if (!allowedAgents.has(fa)) return { rows: [], total: 0, page: p, page_size: ps };
+      } else if (scope.role === "agente") {
+        if (fa !== usuario_id) return { rows: [], total: 0, page: p, page_size: ps };
+      } else if (allowedAgents.size > 0 && !allowedAgents.has(fa)) {
+        return { rows: [], total: 0, page: p, page_size: ps };
+      }
+    }
+    const fc = filters.channel_id?.trim();
+    if (fc) {
+      const fks = await resolveChatAgentIdsForUsuarios(supabase, empresa_id, scope.agentUsuarioIds);
+      if (fks.length === 0) return { rows: [], total: 0, page: p, page_size: ps };
+      const { data: chHit } = await supabase
+        .from("chat_conversations")
+        .select("id")
+        .eq("empresa_id", empresa_id)
+        .eq("channel_id", fc)
+        .in("assigned_agent_id", fks)
+        .limit(1)
+        .maybeSingle();
+      if (!chHit) return { rows: [], total: 0, page: p, page_size: ps };
+    }
+  }
+
   let omnicanalConvIds: string[] | null = null;
   if (!bypass && !isOmnicanalAdminScope(scope)) {
     let cq = supabase.from("chat_conversations").select("id").eq("empresa_id", empresa_id);

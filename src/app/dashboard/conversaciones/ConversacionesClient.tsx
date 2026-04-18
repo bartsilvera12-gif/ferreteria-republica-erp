@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import {
   approveComprobanteValidacion,
@@ -49,6 +49,7 @@ import {
   isImageMimeHint,
 } from "@/lib/chat/message-erp-display";
 import { assignmentWaitBadge, assignmentWaitBadgeClass } from "@/lib/chat/inbox-assignment-labels";
+import type { OmnicanalOperatorRole } from "@/lib/chat/omnicanal-supervision-read";
 import { playInboxNotificationBeep, readInboxNotificationSoundEnabled } from "@/lib/chat/inbox-notification-preference";
 import { createBrowserClientForSchema } from "@/lib/supabase";
 import { ChannelBadge } from "@/components/chat/ChannelBadge";
@@ -268,6 +269,7 @@ export function ConversacionesClient({
   agentDisplayName,
   initialOperationalPresence,
   initialCabeceraInsignia = null,
+  initialOmnicanalRole = null,
 }: {
   mode: ConversacionesClientMode;
   /** Esquema Postgres de tablas chat_* (zentra_erp o `er_…`). */
@@ -278,6 +280,8 @@ export function ConversacionesClient({
   initialOperationalPresence?: ConversacionesInitialOperationalPresence;
   /** Admin/supervisor sin cola (incluye admin ERP por `usuarios.rol`). */
   initialCabeceraInsignia?: InboxCabeceraInsignia;
+  /** Rol operativo omnicanal (precargado para mensajes UX de alcance). */
+  initialOmnicanalRole?: OmnicanalOperatorRole | null;
 }) {
   const supabaseChat = useMemo(
     () => createBrowserClientForSchema(chatDataSchema),
@@ -285,6 +289,7 @@ export function ConversacionesClient({
   );
   const searchParams = useSearchParams();
   const router = useRouter();
+  const pathname = usePathname();
   const vistaParam = searchParams?.get("vista") ?? "";
   const vista: ConversacionesVista =
     mode === "historial" ? "historial" : vistaParam === "bot" ? "bot" : "inbox";
@@ -542,6 +547,29 @@ export function ConversacionesClient({
       .then(setOpsAgentLoads)
       .catch(() => setOpsAgentLoads([]));
   }, []);
+
+  const patchInboxQuery = useCallback(
+    (patch: Record<string, string | null | undefined>) => {
+      const next = new URLSearchParams(searchParams?.toString() ?? "");
+      for (const [k, v] of Object.entries(patch)) {
+        if (v === null || v === undefined || v === "") next.delete(k);
+        else next.set(k, v);
+      }
+      const qs = next.toString();
+      const basePath =
+        pathname ??
+        (mode === "historial" ? "/dashboard/historial-omnicanal" : "/dashboard/conversaciones");
+      router.replace(qs ? `${basePath}?${qs}` : basePath);
+    },
+    [searchParams, router, pathname, mode]
+  );
+
+  useEffect(() => {
+    const cola = searchParams?.get("cola")?.trim() ?? "";
+    if (!cola || opsQueues.length === 0) return;
+    const ok = opsQueues.some((q) => q.id === cola);
+    if (!ok) patchInboxQuery({ cola: null });
+  }, [opsQueues, searchParams, patchInboxQuery]);
 
   useEffect(() => {
     if (!transferModalOpen) return;
@@ -1357,7 +1385,7 @@ export function ConversacionesClient({
                     onChange={(e) => setTransferQueueTarget(e.target.value)}
                     aria-label="Cola destino y filtro de agentes"
                   >
-                    <option value="">Todas las colas</option>
+                    <option value="">Todas las colas (tu alcance)</option>
                     {opsQueues
                       .filter((q) => q.is_active)
                       .map((q) => (
@@ -1621,6 +1649,72 @@ export function ConversacionesClient({
             className="flex-1 min-w-[12rem] border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 bg-white placeholder:text-slate-400 outline-none focus:ring-1 focus:ring-sky-400/40 focus:border-sky-300"
             aria-label="Buscar por nombre o número"
           />
+        </div>
+      ) : null}
+
+      {mode === "historial" ? (
+        <div className="flex flex-wrap items-stretch gap-2 shrink-0 min-w-0">
+          <input
+            type="search"
+            value={listSearch}
+            onChange={(e) => setListSearch(e.target.value)}
+            placeholder="Buscar por nombre o número"
+            className="flex-1 min-w-[12rem] border border-slate-200 rounded-lg px-3 py-2 text-xs text-slate-800 bg-white placeholder:text-slate-400 outline-none focus:ring-1 focus:ring-sky-400/40 focus:border-sky-300"
+            aria-label="Buscar en historial"
+          />
+        </div>
+      ) : null}
+
+      {(mode === "historial" || vista === "inbox") ? (
+        <div className="flex flex-wrap items-end gap-3 shrink-0 rounded-xl border border-slate-200 bg-white px-3 py-2.5">
+          <label className="flex flex-col gap-1 min-w-[11rem]">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Cola</span>
+            <select
+              className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white min-w-[11rem]"
+              value={searchParams?.get("cola") ?? ""}
+              onChange={(e) => {
+                const v = e.target.value.trim();
+                patchInboxQuery({ cola: v.length > 0 ? v : null });
+              }}
+              aria-label="Filtrar por cola"
+            >
+              <option value="">Todas (según tu alcance)</option>
+              {opsQueues
+                .filter((q) => q.is_active)
+                .map((q) => (
+                  <option key={q.id} value={q.id}>
+                    {q.nombre}
+                  </option>
+                ))}
+            </select>
+          </label>
+          <label className="flex flex-col gap-1 min-w-[11rem]">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Asignación</span>
+            <select
+              className="border border-slate-200 rounded-lg px-2 py-1.5 text-xs bg-white min-w-[11rem]"
+              value={
+                searchParams?.get("asignacion") === "mios"
+                  ? "mios"
+                  : searchParams?.get("asignacion") === "sin_asignar"
+                    ? "sin_asignar"
+                    : ""
+              }
+              onChange={(e) => {
+                const v = e.target.value;
+                patchInboxQuery({ asignacion: v === "" ? null : v });
+              }}
+              aria-label="Filtrar por asignación"
+            >
+              <option value="">Todas</option>
+              {opInQueues ? <option value="mios">Asignadas a mí</option> : null}
+              <option value="sin_asignar">Sin asignar</option>
+            </select>
+          </label>
+          {initialOmnicanalRole === "supervisor" ? (
+            <p className="text-[11px] text-slate-500 max-w-[18rem] leading-snug pb-0.5">
+              Colas y vistas acotadas a tu equipo supervisado (mismo criterio que inbox y monitoreo).
+            </p>
+          ) : null}
         </div>
       ) : null}
 

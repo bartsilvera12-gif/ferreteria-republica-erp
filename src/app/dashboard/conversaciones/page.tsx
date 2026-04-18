@@ -41,6 +41,7 @@ export default async function ConversacionesInboxPage() {
         agentDisplayName={agentDisplayName}
         initialOperationalPresence={initialOperationalPresence}
         initialCabeceraInsignia={initialCabeceraInsignia}
+        initialOmnicanalRole={bootstrap?.omnicanal_role ?? null}
       />
     </Suspense>
   );

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import {
   fetchMonitoringDashboard,
+  fetchOmnicanalUxSummary,
   fetchSupervisorAgentLoads,
   type MonitoringDashboard,
   type MonitoringPendingReplyAgentGroup,
@@ -31,14 +32,22 @@ export default function MonitoreoPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [expandedPendingAgentId, setExpandedPendingAgentId] = useState<string | null>(null);
+  const [uxRole, setUxRole] = useState<string | null>(null);
+  const [uxTeamCount, setUxTeamCount] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const [d, a] = await Promise.all([fetchMonitoringDashboard(), fetchSupervisorAgentLoads()]);
+      const [d, a, ux] = await Promise.all([
+        fetchMonitoringDashboard(),
+        fetchSupervisorAgentLoads(),
+        fetchOmnicanalUxSummary(),
+      ]);
       setDash(d);
       setAgents(a);
+      setUxRole(ux.omnicanal_role);
+      setUxTeamCount(ux.team_agent_usuario_count);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error al cargar");
     } finally {
@@ -78,6 +87,20 @@ export default function MonitoreoPage() {
       {error && (
         <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">{error}</div>
       )}
+
+      {uxRole === "supervisor" && !loading ? (
+        <div className="rounded-xl border border-indigo-200 bg-indigo-50 px-4 py-3 text-sm text-indigo-950">
+          <span className="font-semibold">Vista de supervisor.</span> Métricas y tablas muestran solo el equipo a tu
+          cargo
+          {uxTeamCount !== null ? (
+            <span className="tabular-nums">
+              {" "}
+              ({uxTeamCount} agente{uxTeamCount === 1 ? "" : "s"} en el equipo)
+            </span>
+          ) : null}
+          . Las colas en pantalla son las de esos agentes, no la empresa completa.
+        </div>
+      ) : null}
 
       <section className="rounded-2xl border border-slate-200 bg-gradient-to-br from-slate-50 to-white p-6 shadow-sm">
         <h2 className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Resumen general</h2>
@@ -259,8 +282,31 @@ export default function MonitoreoPage() {
           <p className="text-sm text-slate-400">Cargando…</p>
         ) : agents.length === 0 ? (
           <p className="text-sm text-slate-500">
-            No hay filas en <code className="text-xs bg-slate-100 px-1 rounded">chat_agents</code>. Asigná usuarios
-            desde <Link href="/configuracion/colas" className="text-[#0EA5E9] font-semibold hover:underline">Colas</Link>.
+            {uxRole === "supervisor" ? (
+              <>
+                No tenés agentes asignados en{" "}
+                <Link
+                  href="/configuracion/omnicanal-equipos"
+                  className="text-[#0EA5E9] font-semibold hover:underline"
+                >
+                  Equipos y supervisión
+                </Link>
+                , o aún no tienen perfil en{" "}
+                <Link href="/configuracion/colas" className="text-[#0EA5E9] font-semibold hover:underline">
+                  Colas
+                </Link>
+                .
+              </>
+            ) : (
+              <>
+                No hay filas en <code className="text-xs bg-slate-100 px-1 rounded">chat_agents</code>. Asigná usuarios
+                desde{" "}
+                <Link href="/configuracion/colas" className="text-[#0EA5E9] font-semibold hover:underline">
+                  Colas
+                </Link>
+                .
+              </>
+            )}
           </p>
         ) : (
           <div className="overflow-x-auto">

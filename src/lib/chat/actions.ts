@@ -15,6 +15,9 @@ import { isMissingColumnError } from "@/lib/chat/postgres-column-error";
 import {
   appendOmnicanalConversationScopeToQuery,
   getOmnicanalScope,
+  isOmnicanalAdminScope,
+  OMNICANAL_IMPOSSIBLE_CONVERSATION_ID,
+  resolveQueueIdsForUsuarios,
   shouldBypassOmnicanalConversationScope,
 } from "@/lib/chat/omnicanal-scope";
 import {
@@ -224,9 +227,9 @@ async function fetchChatConversationsUnsafe(
       qb = qb.eq("status", "closed");
     }
 
+    const scope = await getOmnicanalScope(supabase, empresa_id, usuario_id);
+    const bypass = await shouldBypassOmnicanalConversationScope(catalogSr, usuario_id, scope);
     try {
-      const scope = await getOmnicanalScope(supabase, empresa_id, usuario_id);
-      const bypass = await shouldBypassOmnicanalConversationScope(catalogSr, usuario_id, scope);
       if (!bypass) {
         const { builder } = await appendOmnicanalConversationScopeToQuery(supabase, empresa_id, scope, qb);
         qb = builder;
@@ -274,7 +277,14 @@ async function fetchChatConversationsUnsafe(
     }
 
     const fq = filters?.queue_id?.trim();
-    if (fq) qb = qb.eq("queue_id", fq);
+    if (fq) {
+      let queueOk = true;
+      if (!bypass && !isOmnicanalAdminScope(scope)) {
+        const allowedQueues = await resolveQueueIdsForUsuarios(supabase, empresa_id, scope.agentUsuarioIds);
+        queueOk = allowedQueues.includes(fq);
+      }
+      qb = queueOk ? qb.eq("queue_id", fq) : qb.eq("id", OMNICANAL_IMPOSSIBLE_CONVERSATION_ID);
+    }
 
     const fs = filters?.status?.trim().toLowerCase();
     if (fs && ["open", "pending", "closed"].includes(fs)) {

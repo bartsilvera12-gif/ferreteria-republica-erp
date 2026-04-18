@@ -209,7 +209,10 @@ export async function resolveQueueIdsForUsuarios(
   return [...new Set((data ?? []).map((r) => String((r as { queue_id?: string }).queue_id ?? "").trim()).filter(Boolean))];
 }
 
-const NO_CONVERSATION_MATCH = "00000000-0000-0000-0000-000000000001";
+/** UUID imposible para forzar 0 filas (filtro inválido o alcance vacío). */
+export const OMNICANAL_IMPOSSIBLE_CONVERSATION_ID = "00000000-0000-0000-0000-000000000001";
+
+const NO_CONVERSATION_MATCH = OMNICANAL_IMPOSSIBLE_CONVERSATION_ID;
 
 /**
  * El builder de PostgREST es “thenable”: devolverlo desde una función `async` sin envoltorio

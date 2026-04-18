@@ -1093,6 +1093,22 @@ export type ConversacionesInboxBootstrap = {
 
 const USUARIO_ROL_ADMIN_ERP = new Set(["admin", "administrador", "super_admin", "owner"]);
 
+/** Resumen para banners UX (alcance omnicanal sin datos sensibles). */
+export async function fetchOmnicanalUxSummary(): Promise<{
+  omnicanal_role: OmnicanalOperatorRole | null;
+  bypass_catalog_rol: boolean;
+  team_agent_usuario_count: number;
+}> {
+  const { supabase, catalogSr, empresa_id, usuario_id } = await requireEmpresaTenantServiceRole();
+  const scope = await getOmnicanalScope(supabase, empresa_id, usuario_id);
+  const bypass = await shouldBypassOmnicanalConversationScope(catalogSr, usuario_id, scope);
+  return {
+    omnicanal_role: scope.role,
+    bypass_catalog_rol: bypass,
+    team_agent_usuario_count: scope.agentUsuarioIds.length,
+  };
+}
+
 export async function getConversacionesInboxBootstrap(): Promise<ConversacionesInboxBootstrap> {
   const { supabase, catalogSr, empresa_id, usuario_id } = await requireEmpresaTenantServiceRole();
   const [presence, scope] = await Promise.all([
