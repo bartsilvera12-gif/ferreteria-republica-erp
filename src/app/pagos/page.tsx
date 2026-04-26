@@ -6,8 +6,11 @@ import { enRangoCalendario, hoyYmdLocal, rangoDesdeHastaInputs, toCalendarDateSt
 import { getFacturas } from "@/lib/gestion-clientes/storage";
 import MontoInput from "@/components/ui/MontoInput";
 import { getClientes } from "@/lib/clientes/storage";
+import { etiquetaVisibleTipoServicio } from "@/lib/clientes/tipo-servicio-catalogo";
+import { useMapNombreTipoServicioCatalogo } from "@/lib/clientes/use-map-nombre-tipo-servicio";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { apiCreatePago } from "@/lib/api/client";
+import type { Cliente } from "@/lib/clientes/types";
 import type { Factura } from "@/lib/gestion-clientes/types";
 
 const inputClass = "w-full border border-slate-200 rounded-lg px-3 py-2 outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white text-sm";
@@ -25,6 +28,8 @@ interface PagoCobrado {
   id: string;
   factura_numero: string;
   cliente_nombre: string;
+  /** Nombre visible desde `cliente_tipos_servicio_catalogo` (resuelto en GET /api/pagos). */
+  cliente_tipo_nombre: string;
   monto: number;
   fecha_pago: string;
   metodo_pago: string;
@@ -35,7 +40,7 @@ interface PagoCobrado {
 export default function PagosPage() {
   const [tab, setTab] = useState<TabPagos>("pendientes");
   const [facturas, setFacturas] = useState<Factura[]>([]);
-  const [clientes, setClientes] = useState<{ id: string; nombre: string; estado: string }[]>([]);
+  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [cobrados, setCobrados] = useState<PagoCobrado[]>([]);
   const [cargandoCobrados, setCargandoCobrados] = useState(false);
   const [modalPago, setModalPago] = useState(false);
@@ -62,16 +67,10 @@ export default function PagosPage() {
 
   useEffect(() => {
     getFacturas().then(setFacturas);
-    getClientes().then((c) =>
-      setClientes(
-        c.map((x) => ({
-          id: x.id,
-          nombre: (x.empresa ?? x.nombre_contacto) || "—",
-          estado: x.estado ?? "activo",
-        }))
-      )
-    );
+    getClientes().then(setClientes);
   }, []);
+
+  const mapNombreTipoServicio = useMapNombreTipoServicioCatalogo(clientes);
 
   async function fetchCobrados() {
     setCargandoCobrados(true);
@@ -84,6 +83,7 @@ export default function PagosPage() {
             id: p.id as string,
             factura_numero: (p.factura_numero as string) ?? "—",
             cliente_nombre: (p.cliente_nombre as string) ?? "—",
+            cliente_tipo_nombre: String(p.cliente_tipo_nombre ?? "—").trim() || "—",
             monto: Number(p.monto) || 0,
             fecha_pago: toCalendarDateStr((p.fecha_pago as string) ?? "") || String(p.fecha_pago ?? "").slice(0, 10),
             metodo_pago: (p.metodo_pago as string) ?? "efectivo",
@@ -146,7 +146,20 @@ export default function PagosPage() {
     [cobradosFiltrados]
   );
 
-  const clienteMap = Object.fromEntries(clientes.map((c) => [c.id, c.nombre]));
+  const clienteMapNombre = useMemo(
+    () => Object.fromEntries(clientes.map((c) => [c.id, (c.empresa ?? c.nombre_contacto) || "—"])),
+    [clientes]
+  );
+  const labelTipoClienteFila = useCallback(
+    (clienteId: string) => {
+      const c = clientes.find((x) => String(x.id) === String(clienteId));
+      if (!c) return "—";
+      const t = (c.tipo_servicio_cliente ?? "").trim();
+      if (!t) return "Sin clasificar";
+      return etiquetaVisibleTipoServicio(t, mapNombreTipoServicio);
+    },
+    [clientes, mapNombreTipoServicio]
+  );
 
   async function handleRegistrarPago(e: React.FormEvent) {
     e.preventDefault();
@@ -270,7 +283,7 @@ export default function PagosPage() {
             <table className="w-full text-sm">
               <thead className="bg-slate-50">
                 <tr>
-                  {["Número", "Cliente", "Fecha", "Vencimiento", "Total", "Saldo", "Estado", "Acción"].map((h) => (
+                  {["Número", "Cliente", "Tipo de cliente", "Fecha", "Vencimiento", "Total", "Saldo", "Estado", "Acción"].map((h) => (
                     <th key={h} className="text-left text-xs font-semibold text-slate-600 px-4 py-3">{h}</th>
                   ))}
                 </tr>
@@ -281,8 +294,16 @@ export default function PagosPage() {
                     <td className="px-4 py-3 font-mono text-slate-800">{f.numero_factura}</td>
                     <td className="px-4 py-3">
                       <Link href={`/clientes/${f.cliente_id}`} className="text-[#0EA5E9] hover:underline truncate max-w-[140px] block">
-                        {clienteMap[f.cliente_id] ?? `Cliente #${f.cliente_id.slice(0, 8)}`}
+                        {clienteMapNombre[String(f.cliente_id)] ?? `Cliente #${String(f.cliente_id).slice(0, 8)}`}
                       </Link>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">
+                      <span
+                        className="inline-block max-w-[11rem] truncate text-xs text-slate-600"
+                        title={labelTipoClienteFila(String(f.cliente_id))}
+                      >
+                        {labelTipoClienteFila(String(f.cliente_id))}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-slate-600">{formatFecha(f.fecha)}</td>
                     <td className="px-4 py-3 text-slate-600">{formatFecha(f.fecha_vencimiento)}</td>
@@ -309,7 +330,7 @@ export default function PagosPage() {
               </tbody>
               <tfoot>
                 <tr className="bg-slate-50/90 border-t-2 border-slate-200">
-                  <td colSpan={5} className="px-4 py-3 text-xs font-semibold text-slate-700">
+                  <td colSpan={6} className="px-4 py-3 text-xs font-semibold text-slate-700">
                     Total pendiente {rangoFechas ? "en el rango" : "en esta vista"}
                   </td>
                   <td className="px-4 py-3 text-sm font-bold text-[#0EA5E9] tabular-nums">
@@ -367,7 +388,7 @@ export default function PagosPage() {
               <table className="w-full text-sm">
                 <thead className="bg-slate-50">
                   <tr>
-                    {["Factura", "Cliente", "Monto pagado", "Fecha", "Método", "Usuario", "Referencia"].map((h) => (
+                    {["Factura", "Cliente", "Tipo de cliente", "Monto pagado", "Fecha", "Método", "Usuario", "Referencia"].map((h) => (
                       <th key={h} className="text-left text-xs font-semibold text-slate-600 px-4 py-3">{h}</th>
                     ))}
                   </tr>
@@ -377,6 +398,14 @@ export default function PagosPage() {
                     <tr key={p.id} className="hover:bg-slate-50">
                       <td className="px-4 py-3 font-mono text-slate-800">{p.factura_numero}</td>
                       <td className="px-4 py-3 text-slate-700 truncate max-w-[140px]">{p.cliente_nombre}</td>
+                      <td className="px-4 py-3 text-slate-600">
+                        <span
+                          className="inline-block max-w-[11rem] truncate text-xs"
+                          title={p.cliente_tipo_nombre}
+                        >
+                          {p.cliente_tipo_nombre}
+                        </span>
+                      </td>
                       <td className="px-4 py-3 font-semibold text-slate-800">Gs. {p.monto.toLocaleString("es-PY")}</td>
                       <td className="px-4 py-3 text-slate-600">{formatFecha(p.fecha_pago)}</td>
                       <td className="px-4 py-3 text-slate-600">{METODO_LABELS[p.metodo_pago] ?? p.metodo_pago}</td>
@@ -387,7 +416,7 @@ export default function PagosPage() {
                 </tbody>
                 <tfoot>
                   <tr className="bg-slate-50/90 border-t-2 border-slate-200">
-                    <td colSpan={2} className="px-4 py-3 text-xs font-semibold text-slate-700">
+                    <td colSpan={3} className="px-4 py-3 text-xs font-semibold text-slate-700">
                       Total cobrado {rangoFechas ? "en el rango" : "en esta vista"}
                     </td>
                     <td className="px-4 py-3 text-sm font-bold text-[#0EA5E9] tabular-nums">

@@ -32,11 +32,8 @@ import {
   toCalendarDateStr,
 } from "@/lib/fechas/calendario";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import {
-  etiquetaVisibleTipoServicio,
-  type ClienteTipoServicioRow,
-} from "@/lib/clientes/tipo-servicio-catalogo";
-import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
+import { etiquetaVisibleTipoServicio } from "@/lib/clientes/tipo-servicio-catalogo";
+import { useMapNombreTipoServicioCatalogo } from "@/lib/clientes/use-map-nombre-tipo-servicio";
 import { getEtapas, getEtapaClasses, normalizeEtapaCodigo, type EtapaCrm } from "@/lib/crm/etapas";
 import {
   isDashboardTabSlug,
@@ -1861,51 +1858,6 @@ function getInitialTab(): TabDash {
   return t && isDashboardTabSlug(t) ? t : "comercial";
 }
 
-/**
- * Nombres visibles `slug → nombre` desde `cliente_tipos_servicio_catalogo` (GET form + include por slug
- * faltante). Misma ruta que formularios CRM; el dashboard no relabeliza por slug a mano.
- */
-function useMapNombreTipoServicioClientes(clientes: ClienteRaw[]) {
-  const [filas, setFilas] = useState<ClienteTipoServicioRow[]>(filasTiposDesdeSistemaEstatico);
-  const slugsKey = useMemo(() => {
-    const s = new Set<string>();
-    for (const c of clientes) {
-      const t = (c.tipo_servicio_cliente ?? "").trim().toLowerCase();
-      if (t) s.add(t);
-    }
-    return [...s].sort().join(",");
-  }, [clientes]);
-
-  useEffect(() => {
-    let cancel = false;
-    const need = slugsKey ? slugsKey.split(",") : [];
-    (async () => {
-      const bySlug = new Map<string, ClienteTipoServicioRow>();
-      const base = await fetchTiposFormCliente();
-      if (cancel) return;
-      for (const r of base) bySlug.set(r.slug, r);
-      for (const slug of need) {
-        if (bySlug.has(slug)) continue;
-        const withInc = await fetchTiposFormCliente(slug);
-        if (cancel) return;
-        for (const r of withInc) {
-          if (!bySlug.has(r.slug)) bySlug.set(r.slug, r);
-        }
-      }
-      setFilas([...bySlug.values()].sort((a, b) => a.orden - b.orden));
-    })();
-    return () => {
-      cancel = true;
-    };
-  }, [slugsKey]);
-
-  return useMemo(() => {
-    const m: Record<string, string> = {};
-    for (const t of filas) m[t.slug] = t.nombre;
-    return m;
-  }, [filas]);
-}
-
 export default function DashboardPage() {
   const [dashScope, setDashScope] = useState<DashScope>({ kind: "pending" });
   const [tab,      setTab]      = useState<TabDash>(getInitialTab);
@@ -2028,7 +1980,7 @@ export default function DashboardPage() {
   }
 
   const usuarioActivo = usuarios.find(u => u.id === usuarioId) ?? null;
-  const mapNombreTipoServicio = useMapNombreTipoServicioClientes(clientes);
+  const mapNombreTipoServicio = useMapNombreTipoServicioCatalogo(clientes);
   const nivel = usuarioActivo?.nivel ?? "administrador";
 
   const effectiveTabs: TabDash[] = dashScope.kind === "scoped" ? dashScope.tabs : TAB_VALID;

@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { emitEvent, EVENT_TYPES } from "@/lib/integrations/events";
 import { toCalendarDateStr } from "@/lib/fechas/calendario";
+import { etiquetaVisibleTipoServicio } from "@/lib/clientes/tipo-servicio-catalogo";
 
 
 export async function GET(request: NextRequest) {
@@ -39,10 +40,31 @@ export async function GET(request: NextRequest) {
       return f?.cliente_id;
     }).filter(Boolean))] as string[];
 
-    let clienteMap: Record<string, { empresa?: string; nombre_contacto?: string }> = {};
+    type RowClientePago = {
+      id: string;
+      empresa?: string;
+      nombre_contacto?: string;
+      tipo_servicio_cliente?: string | null;
+    };
+    let clienteMap: Record<string, RowClientePago> = {};
+    const catalogMap: Record<string, string> = {};
     if (clienteIds.length > 0) {
-      const { data: clientesData } = await supabase.from("clientes").select("id, empresa, nombre_contacto").in("id", clienteIds);
-      clienteMap = Object.fromEntries((clientesData ?? []).map((c: { id: string; empresa?: string; nombre_contacto?: string }) => [c.id, { empresa: c.empresa, nombre_contacto: c.nombre_contacto }]));
+      const { data: clientesData } = await supabase
+        .from("clientes")
+        .select("id, empresa, nombre_contacto, tipo_servicio_cliente")
+        .in("id", clienteIds);
+      const rowsC = (clientesData as RowClientePago[] | null | undefined) ?? [];
+      clienteMap = Object.fromEntries(
+        rowsC.filter((c): c is RowClientePago => Boolean(c?.id)).map((c) => [c.id, c] as [string, RowClientePago])
+      );
+      const { data: catRows } = await supabase
+        .from("cliente_tipos_servicio_catalogo")
+        .select("slug, nombre")
+        .eq("empresa_id", auth.empresa_id);
+      const cr = (catRows as { slug: string; nombre: string }[] | null | undefined) ?? [];
+      for (const r of cr) {
+        if (r?.slug && r.nombre) catalogMap[String(r.slug).toLowerCase()] = r.nombre;
+      }
     }
     const usuarioIds = [...new Set(pagos.map((p) => p.usuario_id).filter(Boolean))] as string[];
     const usuarioMap: Record<string, string> = {};
@@ -55,6 +77,13 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const labelTipoCliente = (c: RowClientePago | null) => {
+      if (!c) return "—";
+      const raw = (c.tipo_servicio_cliente ?? "").trim();
+      if (!raw) return "Sin clasificar";
+      return etiquetaVisibleTipoServicio(raw, catalogMap);
+    };
+
     const enriched = pagos.map((p) => {
       const factura = p.facturas as { numero_factura?: string; cliente_id?: string } | null;
       const clienteId = factura?.cliente_id;
@@ -63,6 +92,8 @@ export async function GET(request: NextRequest) {
         ...p,
         factura_numero: factura?.numero_factura ?? "—",
         cliente_nombre: cliente ? (cliente.empresa ?? cliente.nombre_contacto ?? "—") : "—",
+        /** Nombre legible; slug en `clientes.tipo_servicio_cliente` + catálogo. */
+        cliente_tipo_nombre: labelTipoCliente(cliente ?? null),
         usuario_email: p.usuario_id ? usuarioMap[p.usuario_id] ?? "—" : "—",
       };
     });
