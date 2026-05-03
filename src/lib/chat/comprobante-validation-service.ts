@@ -30,6 +30,22 @@ export function sha256Hex(bytes: Buffer): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
+/** Referencias OCR más cortas generan demasiados falsos positivos al comparar contra otras sesiones. */
+export const MIN_OCR_REF_LENGTH_FOR_STRONG_DUPLICATE = 10;
+
+/**
+ * Estados en los que un hash ya visto implica “no reenviar la misma imagen” para bloqueo temprano.
+ * No incluye `ocr_error`: permite reintentar OCR con el mismo archivo sin mensaje de hash duplicado.
+ */
+const ESTADOS_HASH_BLOQUEA_REUSO: ComprobanteEstadoValidacion[] = [
+  "valido",
+  "revision_manual",
+  "duplicado_hash",
+  "duplicado_ocr",
+  "monto_incoherente",
+  "datos_bancarios_incoherentes",
+];
+
 function normalizeWs(s: string): string {
   return s.replace(/\s+/g, " ").trim();
 }
@@ -40,11 +56,21 @@ function ocrFingerprint(fullText: string): string {
   return createHash("sha256").update(n, "utf8").digest("hex");
 }
 
+function maskComprobanteRefForLog(r: string | null | undefined): string {
+  const t = (r ?? "").trim();
+  if (!t) return "";
+  if (t.length <= 4) return "****";
+  return `${t.slice(0, 2)}…(${t.length})`;
+}
+
 /**
  * Huellas sobre texto OCR muy corto colisionan entre comprobantes distintos (mismo encabezado de banco).
- * Solo tiene sentido bloquear por fingerprint si hay suficiente texto distintivo.
+ * Solo tiene sentido comparar huellas largas; coincidencias débiles van a revisión humana.
  */
-const MIN_CHARS_FOR_OCR_FINGERPRINT_DUPLICATE = 64;
+const MIN_CHARS_FOR_OCR_FINGERPRINT_CHECK = 120;
+
+/** Motivo persistido cuando solo coincide huella OCR vs otro historial (sin referencia robusta). */
+export const MOTIVO_REVISION_HUELLA_OCR_DEBIL = "ocr_huella_similar_revision";
 
 export type ExtractedReceiptFields = {
   monto: string;
@@ -146,11 +172,13 @@ async function existsHashDuplicate(
   empresaId: string,
   hash: string
 ): Promise<boolean> {
+  if (!hash.trim()) return false;
   const { data, error } = await supabase
     .from("chat_comprobante_validaciones")
     .select("id")
     .eq("empresa_id", empresaId)
     .eq("comprobante_hash", hash)
+    .in("estado_validacion", ESTADOS_HASH_BLOQUEA_REUSO)
     .limit(1)
     .maybeSingle();
   if (error) return false;
@@ -351,6 +379,17 @@ export async function runComprobanteValidationPipeline(ctx: PipelineCtx): Promis
   if (settings.deteccion_duplicados_hash && settings.bloquear_por_hash_duplicado) {
     const dup = await existsHashDuplicate(supabase, ctx.empresaId, hash);
     if (dup) {
+      console.info("[sorteo-comprobante][duplicate-check]", {
+        empresa_id: ctx.empresaId,
+        conversation_id: ctx.conversationId,
+        flow_session_id: sid,
+        media_id_present: Boolean(ctx.mediaId?.trim()),
+        hash_prefix: hash.slice(0, 12),
+        duplicate_decision: "block_hash",
+        duplicate_match_type: "comprobante_hash",
+        confidence: "high",
+        reason: "hash_ya_en_bd_estado_bloqueante",
+      });
       const validationId = await insertValidationRow(supabase, {
         empresa_id: ctx.empresaId,
         conversation_id: ctx.conversationId,
@@ -515,7 +554,7 @@ export async function runComprobanteValidationPipeline(ctx: PipelineCtx): Promis
   const bankFlowResult = validateReceiptBankDataAgainstExpected(settings, fullText);
 
   const fpLongEnough =
-    extracted.texto_completo.length >= MIN_CHARS_FOR_OCR_FINGERPRINT_DUPLICATE;
+    extracted.texto_completo.length >= MIN_CHARS_FOR_OCR_FINGERPRINT_CHECK;
   const fp =
     settings.ocr_fields.texto_completo.use_duplicate_detection &&
     fpLongEnough &&
@@ -524,6 +563,51 @@ export async function runComprobanteValidationPipeline(ctx: PipelineCtx): Promis
       : null;
 
   const refStored = extracted.referencia.trim().toUpperCase() || null;
+  const refStrong =
+    Boolean(refStored && refStored.length >= MIN_OCR_REF_LENGTH_FOR_STRONG_DUPLICATE);
+
+  let ocrRefStrongDup = false;
+  let ocrFingerprintWeakDup = false;
+  if (settings.bloquear_por_ocr_duplicado) {
+    if (settings.ocr_fields.referencia.use_duplicate_detection && refStrong && refStored) {
+      ocrRefStrongDup = await existsOcrRefDuplicate(supabase, ctx.empresaId, refStored, sid);
+    }
+    if (
+      !ocrRefStrongDup &&
+      settings.ocr_fields.texto_completo.use_duplicate_detection &&
+      fp
+    ) {
+      ocrFingerprintWeakDup = await existsOcrFingerprintDuplicate(supabase, ctx.empresaId, fp, sid);
+    }
+  }
+
+  let dupDecision: "none" | "block_strong_ref" | "weak_fingerprint_revision" = "none";
+  if (ocrRefStrongDup) dupDecision = "block_strong_ref";
+  else if (ocrFingerprintWeakDup) dupDecision = "weak_fingerprint_revision";
+
+  console.info("[sorteo-comprobante][duplicate-check]", {
+    empresa_id: ctx.empresaId,
+    conversation_id: ctx.conversationId,
+    flow_session_id: sid,
+    media_id_present: Boolean(ctx.mediaId?.trim()),
+    hash_prefix: hash.slice(0, 12),
+    ocr_present: fullText.trim().length > 0,
+    normalized_fields_present: {
+      ref: Boolean(refStored),
+      ref_strong: refStrong,
+      monto: Boolean(extracted.monto),
+      fecha: Boolean(extracted.fecha),
+    },
+    duplicate_decision: dupDecision,
+    duplicate_match_type: ocrRefStrongDup
+      ? "ocr_referencia"
+      : ocrFingerprintWeakDup
+        ? "ocr_fingerprint_debil"
+        : null,
+    confidence: ocrRefStrongDup ? "high" : ocrFingerprintWeakDup ? "low" : null,
+    reason: dupDecision,
+    ocr_ref_masked: maskComprobanteRefForLog(refStored),
+  });
 
   // --- Reglas campos analizados / obligatorios ---
   let missingWorst: OnMissingBehavior = "continuar";
@@ -539,17 +623,6 @@ export async function runComprobanteValidationPipeline(ctx: PipelineCtx): Promis
     }
   }
 
-  // --- Duplicado OCR (referencia o huella texto) ---
-  let duplicadoOcr = false;
-  if (settings.bloquear_por_ocr_duplicado) {
-    if (settings.ocr_fields.referencia.use_duplicate_detection && refStored) {
-      duplicadoOcr = await existsOcrRefDuplicate(supabase, ctx.empresaId, refStored, sid);
-    }
-    if (!duplicadoOcr && settings.ocr_fields.texto_completo.use_duplicate_detection && fp) {
-      duplicadoOcr = await existsOcrFingerprintDuplicate(supabase, ctx.empresaId, fp, sid);
-    }
-  }
-
   // --- Sospecha heurística (solo si hubo texto OCR; si OCR es opcional y vino vacío, no forzar revisión por longitud) ---
   const sospecha =
     settings.revision_manual_si_sospecha_ocr &&
@@ -557,13 +630,16 @@ export async function runComprobanteValidationPipeline(ctx: PipelineCtx): Promis
     fullText.length > 0 &&
     fullText.length < settings.ocr_min_chars_sospecha;
 
-  // Resolver prioridad: duplicado OCR > missing bloquear > missing revision > sospecha > válido
+  // Resolver prioridad: duplicado OCR fuerte > huella débil (revisión) > missing bloquear > missing revision > sospecha > válido
   let estado: ComprobanteEstadoValidacion = "valido";
   let motivo = "ok";
 
-  if (duplicadoOcr) {
+  if (ocrRefStrongDup) {
     estado = "duplicado_ocr";
-    motivo = "ocr_duplicado_referencia_o_huella";
+    motivo = "ocr_duplicado_referencia";
+  } else if (ocrFingerprintWeakDup) {
+    estado = "revision_manual";
+    motivo = MOTIVO_REVISION_HUELLA_OCR_DEBIL;
   } else if (missingWorst === "bloquear") {
     estado = "ocr_error";
     motivo = `campo_obligatorio:${missingParts.join(",")}`;
@@ -713,6 +789,10 @@ export async function runComprobanteValidationPipeline(ctx: PipelineCtx): Promis
 
   if (estado === "revision_manual") {
     const takeover = settings.revision_manual_activar_takeover;
+    const manualText =
+      motivo === MOTIVO_REVISION_HUELLA_OCR_DEBIL
+        ? settings.messages.ocr_coincidencia_debil
+        : settings.messages.revision_manual;
     return {
       kind: "resolved",
       validationId,
@@ -721,7 +801,7 @@ export async function runComprobanteValidationPipeline(ctx: PipelineCtx): Promis
       flowUpserts,
       // Con takeover el bot no debe avanzar el flujo: queda a cargo del operador humano.
       advance: !takeover,
-      sendText: settings.messages.revision_manual,
+      sendText: manualText,
       humanTakeover: takeover,
     };
   }
@@ -743,7 +823,8 @@ const DEFAULT_MSG_COMPROBANTE_NO_CIERRA =
 export async function mensajeClienteComprobanteNoValido(
   supabase: AppSupabaseClient,
   conversationId: string,
-  estado: string
+  estado: string,
+  motivoValidacion?: string | null
 ): Promise<string> {
   const { data: conv, error } = await supabase
     .from("chat_conversations")
@@ -757,7 +838,13 @@ export async function mensajeClienteComprobanteNoValido(
     .eq("id", conv.channel_id as string)
     .maybeSingle();
   const s = parseComprobanteValidationConfig(ch?.config);
-  if (estado === "revision_manual") return s.messages.revision_manual;
+  if (estado === "revision_manual") {
+    const m = (motivoValidacion ?? "").trim();
+    if (m === MOTIVO_REVISION_HUELLA_OCR_DEBIL || m.startsWith("ocr_huella_similar")) {
+      return s.messages.ocr_coincidencia_debil;
+    }
+    return s.messages.revision_manual;
+  }
   if (estado === "duplicado_hash") return s.messages.hash_duplicado;
   if (estado === "duplicado_ocr") return s.messages.ocr_duplicado;
   if (estado === "monto_incoherente") return s.messages.monto_incoherente;

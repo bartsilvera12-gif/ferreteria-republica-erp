@@ -24,6 +24,10 @@ export interface OcrFieldRule {
 export interface ComprobanteValidationMessages {
   hash_duplicado: string;
   ocr_duplicado: string;
+  /**
+   * Coincidencia débil (p. ej. solo huella de texto OCR sin referencia robusta): no acusa «pago ya usado».
+   */
+  ocr_coincidencia_debil: string;
   revision_manual: string;
   ocr_insuficiente: string;
   /** Monto del comprobante no coincide con el elegido en el flujo (validación opt-in). */
@@ -122,6 +126,8 @@ export const DEFAULT_COMPROBANTE_VALIDATION_MESSAGES: ComprobanteValidationMessa
     "Este comprobante ya fue registrado en una compra anterior. Si es un error, enviá otro comprobante o hablá con un asesor.",
   ocr_duplicado:
     "Detectamos que los datos del comprobante coinciden con un pago ya registrado. Enviá otro comprobante o contactá a un asesor.",
+  ocr_coincidencia_debil:
+    "No pudimos validar automáticamente tu comprobante. Un asesor lo revisará; en breve te contactamos.",
   revision_manual:
     "Recibimos tu comprobante. Nuestro equipo lo está revisando; en breve te confirmamos. Podés seguir con los datos si el flujo te lo pide.",
   ocr_insuficiente:
@@ -220,6 +226,10 @@ export function parseComprobanteValidationConfig(config: unknown): ComprobanteVa
       typeof messages.ocr_duplicado === "string" && messages.ocr_duplicado.trim()
         ? messages.ocr_duplicado.trim()
         : base.messages.ocr_duplicado,
+    ocr_coincidencia_debil:
+      typeof messages.ocr_coincidencia_debil === "string" && messages.ocr_coincidencia_debil.trim()
+        ? messages.ocr_coincidencia_debil.trim()
+        : base.messages.ocr_coincidencia_debil,
     revision_manual:
       typeof messages.revision_manual === "string" && messages.revision_manual.trim()
         ? messages.revision_manual.trim()

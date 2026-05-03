@@ -1958,7 +1958,8 @@ export function createFlowEngine(ctx: FlowEngineContext) {
           detail = await mensajeClienteComprobanteNoValido(
             supabase,
             state.id,
-            typeof fin.comprobanteEstado === "string" ? fin.comprobanteEstado : ""
+            typeof fin.comprobanteEstado === "string" ? fin.comprobanteEstado : "",
+            typeof fin.comprobanteMotivo === "string" ? fin.comprobanteMotivo : undefined
           );
         } else {
           detail = await getSorteoDatosIncompletosMessage(
@@ -3152,7 +3153,8 @@ export function createFlowEngine(ctx: FlowEngineContext) {
           detail = await mensajeClienteComprobanteNoValido(
             supabase,
             state.id,
-            typeof finImg.comprobanteEstado === "string" ? finImg.comprobanteEstado : ""
+            typeof finImg.comprobanteEstado === "string" ? finImg.comprobanteEstado : "",
+            typeof finImg.comprobanteMotivo === "string" ? finImg.comprobanteMotivo : undefined
           );
         } else {
           detail = SORTEO_IMAGE_ORDER_INCOMPLETE_MESSAGE;

@@ -9,6 +9,7 @@ import {
 import { flowTrace, summarizeFlowDataForTrace } from "@/lib/chat/flow-trace-log";
 import {
   SORTEO_COMPROBANTE_ESTADO_VALIDACION_FIELD,
+  SORTEO_COMPROBANTE_MOTIVO_VALIDACION_FIELD,
   SORTEO_COMPROBANTE_VALIDACION_ID_FIELD,
 } from "@/lib/chat/comprobante-validation-types";
 import { parseMoneyPy } from "@/lib/sorteos/parse-money-py";
@@ -644,7 +645,14 @@ export type EnsureSorteoOrderCreatedData = {
 };
 
 export type EnsureSorteoOrderFromChatResult =
-  | { ok: true; skipped: true; reason: string; comprobanteEstado?: string }
+  | {
+      ok: true;
+      skipped: true;
+      reason: string;
+      comprobanteEstado?: string;
+      /** Copia de `sorteo_comprobante_motivo_validacion` en flow_data (si existe). */
+      comprobanteMotivo?: string;
+    }
   | ({ ok: true; skipped: false } & EnsureSorteoOrderCreatedData)
   | { ok: false; message: string };
 
@@ -781,12 +789,14 @@ export async function finalizeSorteoOrderFromConfirmedFlowData(
     return { ok: true, skipped: true, reason: "sin_comprobante_en_sesion" };
   }
   const estVal = norm(input.flowData[SORTEO_COMPROBANTE_ESTADO_VALIDACION_FIELD]);
+  const motVal = norm(input.flowData[SORTEO_COMPROBANTE_MOTIVO_VALIDACION_FIELD]);
   if (estVal && estVal !== "valido") {
     return {
       ok: true,
       skipped: true,
       reason: "comprobante_no_validado",
       comprobanteEstado: estVal,
+      comprobanteMotivo: motVal || undefined,
     };
   }
   flowTrace("finalize_sorteo_order_invoke", {

@@ -305,7 +305,8 @@ export function ComprobanteValidationPanelMensajesYOcr({ value: s, onChange }: P
         {(
           [
             ["hash_duplicado", "Hash duplicado"],
-            ["ocr_duplicado", "OCR / datos duplicados"],
+            ["ocr_duplicado", "OCR / referencia duplicada (fuerte)"],
+            ["ocr_coincidencia_debil", "Coincidencia OCR débil (revisión, sin acusar duplicado)"],
             ["monto_incoherente", "Monto no coincide con la opción elegida"],
             ["datos_bancarios_incoherentes", "Datos bancarios no coinciden con lo configurado"],
             ["revision_manual", "Revisión manual"],
