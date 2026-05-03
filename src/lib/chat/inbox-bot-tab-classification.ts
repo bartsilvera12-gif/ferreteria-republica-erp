@@ -30,12 +30,6 @@ export function buildFlowSessionMap(rows: FlowSessionRowMin[] | null | undefined
   return m;
 }
 
-function debugForceNoBotTab(): boolean {
-  return String(process.env.CHAT_BOT_IF_TRUE_RETURN_FALSE ?? "")
-    .trim()
-    .toLowerCase() === "true";
-}
-
 export type InboxBotClassificationInput = {
   /**
    * Tokens que identifican flujos activos en catálogo: `chat_flows.flow_code` y `chat_flows.id` (texto),
@@ -285,14 +279,6 @@ export function explainConversationBotClassification(
   conv: Record<string, unknown>,
   ctx: InboxBotClassificationInput
 ): BotClassificationExplanation {
-  if (debugForceNoBotTab()) {
-    return {
-      isBot: false,
-      reason: "debug_env_CHAT_BOT_IF_TRUE_RETURN_FALSE",
-      resolvedSessionId: null,
-      flags: emptyFlags({ resolutionPath: "none" }),
-    };
-  }
   return evaluateBotConversation(conv, ctx);
 }
 
@@ -312,7 +298,6 @@ export function conversationBelongsToBotTab(
   conv: Record<string, unknown>,
   ctx: InboxBotClassificationInput
 ): boolean {
-  if (debugForceNoBotTab()) return false;
   return evaluateBotConversation(conv, ctx).isBot;
 }
 

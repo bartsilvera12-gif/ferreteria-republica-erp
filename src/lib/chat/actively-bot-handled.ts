@@ -12,12 +12,6 @@ import {
 export type { FlowSessionRowMin };
 export { buildFlowSessionMap };
 
-function debugForceInboxLikeTrue(): boolean {
-  return String(process.env.CHAT_BOT_IF_TRUE_RETURN_FALSE ?? "")
-    .trim()
-    .toLowerCase() === "true";
-}
-
 /**
  * @deprecated Prefer `conversationBelongsToBotTab` (`inbox-bot-tab-classification`).
  */
@@ -27,9 +21,6 @@ export function isActivelyBotHandledConversation(
   sessionById: Map<string, FlowSessionRowMin>,
   activeSessionByConversationId?: Map<string, FlowSessionRowMin>
 ): boolean {
-  if (debugForceInboxLikeTrue()) {
-    return false;
-  }
   const ctx: InboxBotClassificationInput = {
     activeFlowCodeSet,
     sessionById,
