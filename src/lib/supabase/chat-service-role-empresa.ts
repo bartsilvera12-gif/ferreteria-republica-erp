@@ -28,11 +28,17 @@ export async function getChatServiceClientForEmpresa(empresaId: string): Promise
     }) as unknown as AppSupabaseClient;
   }
   if (!pool && isLikelyUnexposedTenantChatSchema(schema)) {
-    console.warn(LOG, "tenant_sin_pool_usando_postgrest", {
+    console.error(LOG, "tenant_sin_pool_postgrest_suele_fallar", {
       empresa_id: empresaId,
       data_schema: schema,
-      hint: "Definir SUPABASE_DB_URL o DIRECT_URL para shim/PG directo",
+      hint:
+        "En Vercel/producción: agregar SUPABASE_DB_URL o DIRECT_URL (misma URL que migraciones) para usar PG directo en schemas erp_* no expuestos en PostgREST.",
     });
+    throw new Error(
+      "Falta SUPABASE_DB_URL o DIRECT_URL en el servidor (p. ej. Vercel → Environment Variables). " +
+        "Sin conexión directa a Postgres no se pueden guardar bloques/nodos del flujo en el schema de esta empresa (erp_*). " +
+        "Usá la misma cadena que en .env.local para migraciones."
+    );
   }
   return createServiceRoleClientForEmpresa(empresaId);
 }

@@ -17,7 +17,7 @@ async function resolveNodeId(
   empresaId: string,
   flowCode: string,
   nodeCode: string
-) {
+): Promise<{ id?: string; lookupError?: string }> {
   const { data, error } = await supabase
     .from("chat_flow_nodes")
     .select("id")
@@ -25,8 +25,8 @@ async function resolveNodeId(
     .eq("flow_code", flowCode)
     .eq("node_code", nodeCode)
     .maybeSingle();
-  if (error) throw new Error(error.message);
-  return data?.id as string | undefined;
+  if (error) return { lookupError: error.message };
+  return { id: data?.id as string | undefined };
 }
 
 export async function GET(
@@ -40,7 +40,15 @@ export async function GET(
     }
     const params = await context.params;
     const supabase = await getChatServiceClientForEmpresa(auth.empresa_id);
-    const nodeId = await resolveNodeId(supabase, auth.empresa_id, params.flowCode, params.nodeCode);
+    const { id: nodeId, lookupError } = await resolveNodeId(
+      supabase,
+      auth.empresa_id,
+      params.flowCode,
+      params.nodeCode
+    );
+    if (lookupError) {
+      return NextResponse.json({ ok: false, error: lookupError }, { status: 400 });
+    }
     if (!nodeId) return NextResponse.json({ ok: false, error: "Nodo no encontrado" }, { status: 404 });
 
     const { data, error } = await supabase
@@ -54,7 +62,8 @@ export async function GET(
     return NextResponse.json({ ok: true, items: data ?? [] });
   } catch (e) {
     console.error("[api/chat/flows/:flowCode/nodes/:nodeCode/blocks][GET]", e);
-    return NextResponse.json({ ok: false, error: "Error interno" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Error interno";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
 
@@ -89,7 +98,15 @@ export async function POST(
         return NextResponse.json({ ok: false, error: "Caption excede 1024 caracteres" }, { status: 400 });
       }
     }
-    const nodeId = await resolveNodeId(supabase, auth.empresa_id, params.flowCode, params.nodeCode);
+    const { id: nodeId, lookupError } = await resolveNodeId(
+      supabase,
+      auth.empresa_id,
+      params.flowCode,
+      params.nodeCode
+    );
+    if (lookupError) {
+      return NextResponse.json({ ok: false, error: lookupError }, { status: 400 });
+    }
     if (!nodeId) return NextResponse.json({ ok: false, error: "Nodo no encontrado" }, { status: 404 });
 
     const { data, error } = await supabase
@@ -108,6 +125,7 @@ export async function POST(
     return NextResponse.json({ ok: true, item: data });
   } catch (e) {
     console.error("[api/chat/flows/:flowCode/nodes/:nodeCode/blocks][POST]", e);
-    return NextResponse.json({ ok: false, error: "Error interno" }, { status: 500 });
+    const message = e instanceof Error ? e.message : "Error interno";
+    return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }
 }
