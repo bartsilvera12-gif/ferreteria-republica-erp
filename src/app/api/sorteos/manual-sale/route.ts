@@ -9,6 +9,7 @@ import {
 } from "@/lib/supabase/empresa-data-schema";
 import { getChatPostgresPool } from "@/lib/supabase/chat-pg-pool";
 import { createSorteoManualCashSaleViaDirectPostgres } from "@/lib/sorteos/sorteo-order-manual-pg";
+import { buildManualSaleOrderResultFromPg } from "@/lib/sorteos/sorteo-manual-order-result-pg";
 import {
   buildOrderResultFromEntradaId,
   flowDataStubFromEntrada,
@@ -126,8 +127,11 @@ export async function POST(request: NextRequest) {
     if (generarTicket) {
       const sbFlow = await getChatServiceClientForEmpresa(empresaId);
       const sb = await createServiceRoleClientForEmpresa(empresaId);
-      const orderResult = await buildOrderResultFromEntradaId(sb, entradaId, empresaId);
-      const fd = await flowDataStubFromEntrada(sb, entradaId);
+      const orderResult =
+        (await buildOrderResultFromEntradaId(sb, entradaId, empresaId)) ??
+        (await buildManualSaleOrderResultFromPg(schema, empresaId, entradaId));
+      /** Shim PG: mismo origen que el ticket; PostgREST del tenant a veces no lee `sorteo_entradas`. */
+      const fd = await flowDataStubFromEntrada(sbFlow, entradaId);
 
       if (orderResult) {
         const r = await maybeGenerateAndSendSorteoTicketDelivery({
@@ -154,7 +158,11 @@ export async function POST(request: NextRequest) {
           last_status: r.lastStatus,
         };
       } else {
-        ticket = { attempted: true, delivery_ok: false, reason: "order_snapshot_failed" };
+        ticket = {
+          attempted: true,
+          delivery_ok: false,
+          reason: "order_snapshot_failed_postgrest_and_pg",
+        };
       }
     } else {
       ticket = { attempted: false };
