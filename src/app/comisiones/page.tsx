@@ -73,6 +73,17 @@ function fmtMoney(n: number): string {
   return new Intl.NumberFormat("es-PY", { minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(n);
 }
 
+/** Texto claro para KPIs de fuentes sin vendedor (sin exponer nombres de columnas técnicas). */
+function mensajeFuentesSinVendedor(k: PreviewKpis): string {
+  const p = k.alertas_sin_vendedor_pagos;
+  const f = k.alertas_sin_vendedor_facturas;
+  const trozos: string[] = [];
+  if (p > 0) trozos.push(`${p} ${p === 1 ? "pago" : "pagos"}`);
+  if (f > 0) trozos.push(`${f} ${f === 1 ? "movimiento de factura" : "movimientos de factura"}`);
+  const lista = trozos.join(" y ");
+  return `Hay ${lista} de clientes sin vendedor asignado. Para que entren al cálculo, asigná un vendedor responsable en la ficha del cliente.`;
+}
+
 export default function ComisionesPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -224,18 +235,21 @@ export default function ComisionesPage() {
             <ConfigMetricCard
               label="Fuentes sin vendedor"
               value={kpis.fuentes_sin_vendedor}
-              sub={
-                kpis.fuentes_sin_vendedor > 0
-                  ? `${kpis.alertas_sin_vendedor_pagos} pagos · ${kpis.alertas_sin_vendedor_facturas} facturas/líneas`
-                  : undefined
-              }
+              sub={kpis.fuentes_sin_vendedor > 0 ? "No ingresan al reparto hasta asignar vendedor" : undefined}
             />
           </div>
           {kpis.fuentes_sin_vendedor > 0 && (
-            <p className="mt-2 text-xs text-amber-800">
-              Hay movimientos comerciales sin <code className="rounded bg-amber-100 px-1">vendedor_usuario_id</code> en
-              el cliente; no ingresan al reparto por vendedor.
-            </p>
+            <div className="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              <p>{mensajeFuentesSinVendedor(kpis)}</p>
+              <div className="mt-3">
+                <Link
+                  href="/clientes"
+                  className="inline-flex rounded-lg bg-amber-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-950"
+                >
+                  Ir a Clientes
+                </Link>
+              </div>
+            </div>
           )}
         </section>
       )}
@@ -317,20 +331,24 @@ export default function ComisionesPage() {
       </section>
 
       {meta?.documentacion_base && (
-        <section className="rounded-xl border border-slate-100 bg-slate-50/80 px-4 py-3 text-xs text-slate-600">
-          <p className="font-semibold text-slate-700">Criterios de esta base</p>
-          <ul className="mt-2 list-inside list-disc space-y-1">
-            <li>
-              <strong>Pago registrado:</strong> {meta.documentacion_base.pago_registrado}
-            </li>
-            <li>
-              <strong>Factura emitida:</strong> {meta.documentacion_base.factura_emitida}
-            </li>
-            <li>
-              <strong>Factura pagada:</strong> {meta.documentacion_base.factura_pagada}
-            </li>
-          </ul>
-        </section>
+        <details className="rounded-xl border border-slate-200 bg-white text-sm shadow-sm">
+          <summary className="cursor-pointer list-none px-4 py-3 font-semibold text-slate-800 [&::-webkit-details-marker]:hidden">
+            Ver explicación del cálculo
+          </summary>
+          <div className="border-t border-slate-100 px-4 pb-4 pt-1 text-xs leading-relaxed text-slate-600">
+            <ul className="mt-2 list-inside list-disc space-y-2">
+              <li>
+                <strong>Pago registrado:</strong> {meta.documentacion_base.pago_registrado}
+              </li>
+              <li>
+                <strong>Factura emitida:</strong> {meta.documentacion_base.factura_emitida}
+              </li>
+              <li>
+                <strong>Factura pagada:</strong> {meta.documentacion_base.factura_pagada}
+              </li>
+            </ul>
+          </div>
+        </details>
       )}
     </div>
   );
