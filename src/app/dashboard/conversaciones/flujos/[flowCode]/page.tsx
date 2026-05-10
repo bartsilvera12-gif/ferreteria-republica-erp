@@ -9,6 +9,7 @@ import { getSorteos } from "@/lib/sorteos/actions";
 import { parseMoneyPy } from "@/lib/sorteos/parse-money-py";
 import { optionPayloadFinalizesSorteoOrder } from "@/lib/sorteos/sorteo-option-payload";
 import { computeFlowGraphWarnings } from "@/lib/chat/flow-graph-warnings";
+import { FlowRecontactAutomationsPanel } from "./flow-recontact-automations-panel";
 import {
   buttonQuickReplyGroupsEnabled,
   partitionQuickReplyButtonGroups,
@@ -388,6 +389,17 @@ export default function FlowEditorPage() {
 
   const nodeByCode = useMemo(
     () => new Map(orderedNodes.map((n) => [n.node_code, n])),
+    [orderedNodes]
+  );
+
+  const [editorTab, setEditorTab] = useState<"pasos" | "automatizaciones">("pasos");
+
+  const nodePickerOptions = useMemo(
+    () =>
+      orderedNodes.map((n) => ({
+        node_code: n.node_code,
+        label: friendlyNodeTitle(n),
+      })),
     [orderedNodes]
   );
 
@@ -1256,6 +1268,31 @@ export default function FlowEditorPage() {
         </Link>
       </div>
 
+      <div className="flex flex-wrap gap-2 border-b border-slate-200 pb-2">
+        <button
+          type="button"
+          onClick={() => setEditorTab("pasos")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            editorTab === "pasos"
+              ? "bg-[#0EA5E9] text-white border-[#0EA5E9]"
+              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          Pasos del flujo
+        </button>
+        <button
+          type="button"
+          onClick={() => setEditorTab("automatizaciones")}
+          className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+            editorTab === "automatizaciones"
+              ? "bg-[#0EA5E9] text-white border-[#0EA5E9]"
+              : "bg-white text-slate-700 border-slate-200 hover:bg-slate-50"
+          }`}
+        >
+          Automatizaciones
+        </button>
+      </div>
+
       {error && (
         <div className="text-sm text-red-700 bg-red-50 border border-red-200 rounded-lg px-4 py-2 whitespace-pre-wrap">
           {error}
@@ -1263,6 +1300,8 @@ export default function FlowEditorPage() {
       )}
       {success && <div className="text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-lg px-4 py-2">{success}</div>}
 
+      {editorTab === "pasos" && (
+        <>
       <div className="text-sm text-sky-900 bg-sky-50 border border-sky-200 rounded-lg px-4 py-3 space-y-1">
         <p className="font-medium">Edición del grafo del flujo</p>
         <p className="text-sky-800/90">
@@ -2778,6 +2817,11 @@ export default function FlowEditorPage() {
           )}
         </div>
       </details>
+        </>
+      )}
+      {editorTab === "automatizaciones" && (
+        <FlowRecontactAutomationsPanel flowCode={flowCode} nodePickerOptions={nodePickerOptions} />
+      )}
     </div>
   );
 }

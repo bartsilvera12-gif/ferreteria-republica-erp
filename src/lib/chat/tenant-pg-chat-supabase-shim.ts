@@ -27,6 +27,8 @@ const ALLOWED_TABLES = new Set([
   "chat_flow_nodes",
   "chat_flow_options",
   "chat_flow_sessions",
+  "chat_flow_recontact_rules",
+  "chat_flow_recontact_runs",
   "chat_flows",
   "chat_messages",
   "chat_queue_channels",
@@ -84,6 +86,7 @@ function serializeCell(col: string, val: unknown, params: unknown[]): string {
   if (val === undefined) return "DEFAULT";
   const lower = col.toLowerCase();
   const jsonbCol =
+    lower.includes("node_codes") ||
     lower.includes("payload") ||
     lower.includes("config") ||
     lower.includes("routing_config") ||
