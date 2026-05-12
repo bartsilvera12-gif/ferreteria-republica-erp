@@ -59,7 +59,7 @@ type ProyectoPrioridadConfigItem = {
 
 type PrioridadDraft = Pick<
   ProyectoPrioridadConfigItem,
-  "nombre" | "color" | "bg_color" | "text_color" | "border_color" | "sort_order" | "activo"
+  "nombre" | "bg_color" | "sort_order" | "activo"
 >;
 
 type EstadosConfigResponse = {
@@ -124,10 +124,7 @@ function toDraft(estado: ProyectoEstadoConfigItem): EstadoDraft {
 function toPrioridadDraft(prioridad: ProyectoPrioridadConfigItem): PrioridadDraft {
   return {
     nombre: prioridad.nombre,
-    color: prioridad.color,
-    bg_color: prioridad.bg_color,
-    text_color: prioridad.text_color,
-    border_color: prioridad.border_color,
+    bg_color: prioridad.bg_color ?? prioridad.color ?? prioridadFallbackCardColor(prioridad.codigo),
     sort_order: prioridad.sort_order,
     activo: prioridad.activo,
   };
@@ -135,6 +132,26 @@ function toPrioridadDraft(prioridad: ProyectoPrioridadConfigItem): PrioridadDraf
 
 function readError(json: ApiEnvelope<unknown>, fallback: string): string {
   return json.error || fallback;
+}
+
+function prioridadFallbackCardColor(codigo: ProyectoPrioridadConfigItem["codigo"]): string {
+  if (codigo === "urgente") return "#fecaca";
+  if (codigo === "alta") return "#fed7aa";
+  if (codigo === "normal") return "#fde68a";
+  return "#e2e8f0";
+}
+
+function isHexColor(value: string | null | undefined): value is string {
+  return typeof value === "string" && /^#[0-9a-fA-F]{6}$/.test(value);
+}
+
+function readableTextColor(hex: string | null | undefined): string {
+  if (!isHexColor(hex)) return "#111827";
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance < 0.52 ? "#ffffff" : "#111827";
 }
 
 export default function ConfiguracionProyectosPage() {
@@ -228,10 +245,7 @@ export default function ConfiguracionProyectosPage() {
       [id]: {
         ...(prev[id] ?? {
           nombre: "",
-          color: null,
           bg_color: null,
-          text_color: null,
-          border_color: null,
           sort_order: 0,
           activo: true,
         }),
@@ -298,13 +312,25 @@ export default function ConfiguracionProyectosPage() {
   const savePrioridad = async (prioridad: ProyectoPrioridadConfigItem) => {
     const draft = prioridadDrafts[prioridad.id];
     if (!draft) return;
+    if (draft.bg_color && !isHexColor(draft.bg_color)) {
+      setMessage({ type: "error", text: "Color de tarjeta debe tener formato hexadecimal, por ejemplo #FDE68A." });
+      return;
+    }
+    const cardColor = isHexColor(draft.bg_color) ? draft.bg_color : prioridadFallbackCardColor(prioridad.codigo);
+    const payload = {
+      ...draft,
+      bg_color: cardColor,
+      color: cardColor,
+      border_color: cardColor,
+      text_color: readableTextColor(cardColor),
+    };
     setSavingPriorityId(prioridad.id);
     setMessage(null);
     try {
       const response = await apiFetch(`/api/configuracion/proyectos/prioridades/${prioridad.id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(draft),
+        body: JSON.stringify(payload),
       });
       const json = (await response.json()) as ApiEnvelope<{ prioridad: ProyectoPrioridadConfigItem }>;
       if (!response.ok || !json.success) {
@@ -621,8 +647,8 @@ export default function ConfiguracionProyectosPage() {
         <ConfigSectionTitle>Prioridades y colores</ConfigSectionTitle>
         <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
           <p className="max-w-2xl text-sm text-slate-600">
-            Configurá la etiqueta visible y los colores del badge en las tarjetas del Kanban. El código interno se
-            mantiene fijo para respetar <span className="font-mono">proyectos.prioridad</span>.
+            Configurá la etiqueta visible y el color de fondo de las tarjetas del Kanban. El código interno se mantiene
+            fijo para respetar <span className="font-mono">proyectos.prioridad</span>.
           </p>
           <button
             type="button"
@@ -650,19 +676,23 @@ export default function ConfiguracionProyectosPage() {
                         Código interno: <span className="font-mono">{prioridad.codigo}</span>
                       </p>
                     </div>
-                    <span
-                      className="rounded border px-2 py-1 text-xs font-semibold"
+                    <div
+                      className="min-w-[180px] rounded-xl border p-3 shadow-sm"
                       style={{
-                        backgroundColor: draft.bg_color ?? draft.color ?? "#f1f5f9",
-                        color: draft.text_color ?? "#475569",
-                        borderColor: draft.border_color ?? draft.bg_color ?? draft.color ?? "#cbd5e1",
+                        backgroundColor: draft.bg_color ?? prioridadFallbackCardColor(prioridad.codigo),
+                        borderColor: draft.bg_color ?? prioridadFallbackCardColor(prioridad.codigo),
+                        color: readableTextColor(draft.bg_color ?? prioridadFallbackCardColor(prioridad.codigo)),
                       }}
                     >
-                      {draft.nombre || prioridad.codigo}
-                    </span>
+                      <p className="text-xs font-bold">{draft.nombre || prioridad.codigo}</p>
+                      <p className="mt-1 text-[11px] opacity-80">Preview de card</p>
+                    </div>
                   </div>
+                  <ConfigHelpText>
+                    Este color se usará como fondo de las tarjetas con esta prioridad.
+                  </ConfigHelpText>
 
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="mt-4 grid gap-4 sm:grid-cols-2">
                     <label>
                       <span className={F_LABEL}>Nombre visible</span>
                       <input
@@ -683,28 +713,10 @@ export default function ConfiguracionProyectosPage() {
                       />
                     </label>
                     <ColorField
-                      label="Color base"
-                      value={draft.color}
-                      disabled={!canEdit}
-                      onChange={(value) => updatePrioridadDraft(prioridad.id, "color", value)}
-                    />
-                    <ColorField
-                      label="Fondo badge"
+                      label="Color de tarjeta"
                       value={draft.bg_color}
                       disabled={!canEdit}
                       onChange={(value) => updatePrioridadDraft(prioridad.id, "bg_color", value)}
-                    />
-                    <ColorField
-                      label="Texto badge"
-                      value={draft.text_color}
-                      disabled={!canEdit}
-                      onChange={(value) => updatePrioridadDraft(prioridad.id, "text_color", value)}
-                    />
-                    <ColorField
-                      label="Borde badge"
-                      value={draft.border_color}
-                      disabled={!canEdit}
-                      onChange={(value) => updatePrioridadDraft(prioridad.id, "border_color", value)}
                     />
                     <ToggleField
                       label="Activo"

@@ -125,15 +125,15 @@ function prioridadFallbackVisual(p: string): {
   accentColor: string;
 } {
   if (p === "urgente") {
-    return { bgColor: "#dc2626", textColor: "#ffffff", borderColor: "#b91c1c", accentColor: "#dc2626" };
+    return { bgColor: "#fecaca", textColor: "#111827", borderColor: "#f87171", accentColor: "#dc2626" };
   }
   if (p === "alta") {
-    return { bgColor: "#f97316", textColor: "#ffffff", borderColor: "#ea580c", accentColor: "#f97316" };
+    return { bgColor: "#fed7aa", textColor: "#111827", borderColor: "#fb923c", accentColor: "#f97316" };
   }
   if (p === "normal") {
-    return { bgColor: "#e2e8f0", textColor: "#1e293b", borderColor: "#cbd5e1", accentColor: "#94a3b8" };
+    return { bgColor: "#fde68a", textColor: "#111827", borderColor: "#f59e0b", accentColor: "#f59e0b" };
   }
-  return { bgColor: "#f1f5f9", textColor: "#475569", borderColor: "#cbd5e1", accentColor: "#94a3b8" };
+  return { bgColor: "#e2e8f0", textColor: "#111827", borderColor: "#94a3b8", accentColor: "#64748b" };
 }
 
 function prioridadFallbackLabel(p: string): string {
@@ -144,19 +144,21 @@ function prioridadFallbackLabel(p: string): string {
   return p;
 }
 
-function prioridadClass(p: string): string {
-  if (p === "urgente") return "bg-red-600 text-white";
-  if (p === "alta") return "bg-orange-500 text-white";
-  if (p === "normal") return "bg-slate-200 text-slate-800";
-  return "bg-slate-100 text-slate-600";
-}
-
 function hexToRgba(hex: string | null | undefined, alpha: number): string | null {
   if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return null;
   const r = parseInt(hex.slice(1, 3), 16);
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function readableTextColor(hex: string | null | undefined): string {
+  if (!hex || !/^#[0-9a-fA-F]{6}$/.test(hex)) return "#111827";
+  const r = parseInt(hex.slice(1, 3), 16) / 255;
+  const g = parseInt(hex.slice(3, 5), 16) / 255;
+  const b = parseInt(hex.slice(5, 7), 16) / 255;
+  const luminance = 0.2126 * r + 0.7152 * g + 0.0722 * b;
+  return luminance < 0.52 ? "#ffffff" : "#111827";
 }
 
 export default function ProyectosKanbanClient() {
@@ -590,32 +592,23 @@ function ProjectCardView({
     ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)` }
     : undefined;
   const fallbackPriority = prioridadFallbackVisual(p.prioridad);
-  const priorityAccent =
-    prioridadConfig?.border_color ??
-    prioridadConfig?.color ??
-    prioridadConfig?.bg_color ??
-    fallbackPriority.accentColor;
   const priorityBg = prioridadConfig?.bg_color ?? prioridadConfig?.color ?? fallbackPriority.bgColor;
-  const cardTint = hexToRgba(priorityBg, 0.18);
-  const softBorder = hexToRgba(priorityAccent, 0.48);
+  const priorityText = readableTextColor(priorityBg);
+  const priorityBorder = priorityBg || fallbackPriority.borderColor;
+  const softMutedText = hexToRgba(priorityText, 0.72) ?? priorityText;
+  const subtleBadgeBg = priorityText === "#ffffff" ? "rgba(255,255,255,0.16)" : "rgba(255,255,255,0.72)";
+  const subtleBadgeBorder = priorityText === "#ffffff" ? "rgba(255,255,255,0.36)" : "rgba(17,24,39,0.16)";
   const cardStyle: CSSProperties = {
     ...style,
-    borderColor: softBorder ?? priorityAccent,
-    borderLeftColor: priorityAccent,
-    borderLeftWidth: 6,
-    background: cardTint ? `linear-gradient(90deg, ${cardTint}, #ffffff 72%)` : undefined,
+    backgroundColor: priorityBg,
+    borderColor: priorityBorder,
+    color: priorityText,
   };
-  const badgeStyle: CSSProperties | undefined = prioridadConfig
-    ? {
-        backgroundColor: prioridadConfig.bg_color ?? prioridadConfig.color ?? undefined,
-        color: prioridadConfig.text_color ?? undefined,
-        borderColor:
-          prioridadConfig.border_color ??
-          prioridadConfig.bg_color ??
-          prioridadConfig.color ??
-          undefined,
-      }
-    : undefined;
+  const softBadgeStyle: CSSProperties = {
+    backgroundColor: subtleBadgeBg,
+    borderColor: subtleBadgeBorder,
+    color: priorityText,
+  };
 
   return (
     <div
@@ -623,15 +616,10 @@ function ProjectCardView({
       style={cardStyle}
       {...attributes}
       {...listeners}
-      className={`relative touch-none overflow-hidden rounded-lg border bg-white p-3 pl-4 shadow-sm transition-shadow hover:shadow-md ${
+      className={`touch-none rounded-lg border p-3 shadow-sm transition-shadow hover:shadow-md ${
         dragOverlay ? "rotate-1 cursor-grabbing shadow-2xl" : "cursor-grab active:cursor-grabbing"
       } ${isDragging ? "opacity-40" : ""} ${moving ? "ring-2 ring-sky-100" : ""}`}
     >
-      <span
-        className="absolute bottom-0 left-0 top-0 w-1.5"
-        style={{ backgroundColor: priorityAccent }}
-        aria-hidden
-      />
       <button
         type="button"
         className="block w-full text-left"
@@ -639,17 +627,19 @@ function ProjectCardView({
           if (!dragOverlay) onOpen(p.id);
         }}
       >
-        <div className="text-sm font-semibold text-indigo-700 hover:underline">{p.titulo}</div>
-        <div className="mt-1 text-xs text-slate-600">{cli}</div>
+        <div className="text-sm font-semibold hover:underline" style={{ color: priorityText }}>
+          {p.titulo}
+        </div>
+        <div className="mt-1 text-xs" style={{ color: softMutedText }}>
+          {cli}
+        </div>
         <div className="mt-2 flex flex-wrap gap-1">
-          <span className="rounded px-1.5 py-0.5 text-[10px] font-medium text-slate-700 ring-1 ring-slate-200">
+          <span className="rounded border px-1.5 py-0.5 text-[10px] font-medium" style={softBadgeStyle}>
             {p.proyecto_tipo?.nombre ?? "Tipo"}
           </span>
           <span
-            className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${
-              prioridadConfig ? "border" : prioridadClass(p.prioridad)
-            }`}
-            style={badgeStyle}
+            className="rounded border px-1.5 py-0.5 text-[10px] font-semibold"
+            style={softBadgeStyle}
           >
             {prioridadConfig?.nombre ?? prioridadFallbackLabel(p.prioridad)}
           </span>
@@ -667,7 +657,7 @@ function ProjectCardView({
             </span>
           ) : null}
         </div>
-        <div className="mt-2 space-y-0.5 text-[11px] text-slate-500">
+        <div className="mt-2 space-y-0.5 text-[11px]" style={{ color: softMutedText }}>
           <div>Com.: {p.responsable_comercial?.nombre ?? "—"}</div>
           <div>Téc.: {p.responsable_tecnico?.nombre ?? "—"}</div>
           <div>Ingreso: {fmtDate(p.fecha_ingreso)}</div>
