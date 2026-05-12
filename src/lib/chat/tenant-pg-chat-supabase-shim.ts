@@ -53,6 +53,7 @@ const ALLOWED_TABLES = new Set([
   "marketing_piezas",
   "marketing_comentarios",
   "marketing_historial_estados",
+  "empresa_sifen_config",
 ]);
 
 function pgErr(message: string, code?: string): { message: string; code?: string } {
@@ -145,9 +146,10 @@ export function createTenantPgChatSupabaseShim(opts: TenantPgChatSupabaseShimOpt
     }
 
     select(columns?: string, opts?: { count: "exact"; head?: boolean }) {
-      /** Tras `.update()`, `.select(cols)` significa `RETURNING cols` (PostgREST). */
+      /** Tras `.update()`, `.select(cols)` significa `RETURNING cols` (PostgREST).
+       *  Sin argumentos = `RETURNING *` (paridad con `supabase-js`). */
       if (this.op === "update") {
-        if (columns != null && columns !== "") this.returningCols = columns;
+        this.returningCols = columns != null && columns !== "" ? columns : "*";
         if (opts?.count === "exact") this.selectCountOpts = opts;
         return this;
       }
@@ -497,8 +499,8 @@ export function createTenantPgChatSupabaseShim(opts: TenantPgChatSupabaseShimOpt
         insert: (row: Record<string, unknown> | Record<string, unknown>[]) => {
           q.insert(row);
           return Object.assign(q, {
-            select: (cols: string) => {
-              q.returningCols = cols;
+            select: (cols?: string) => {
+              q.returningCols = cols != null && cols !== "" ? cols : "*";
               return q;
             },
           });
@@ -510,8 +512,8 @@ export function createTenantPgChatSupabaseShim(opts: TenantPgChatSupabaseShimOpt
         upsert: (rows: Record<string, unknown> | Record<string, unknown>[], opt?: { onConflict?: string }) => {
           q.upsert(rows, opt);
           return Object.assign(q, {
-            select: (cols: string) => {
-              q.returningCols = cols;
+            select: (cols?: string) => {
+              q.returningCols = cols != null && cols !== "" ? cols : "*";
               return q;
             },
           });
