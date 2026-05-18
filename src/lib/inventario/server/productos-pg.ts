@@ -80,6 +80,8 @@ export interface ProductoRow {
   categoria_principal_id: string | null;
   ubicacion_principal_id: string | null;
   proveedor_principal_id: string | null;
+  es_vendible: boolean;
+  es_insumo: boolean;
 }
 
 export interface InsertProductoInput {
@@ -96,13 +98,16 @@ export interface InsertProductoInput {
   categoria_principal_id?: string | null;
   ubicacion_principal_id?: string | null;
   proveedor_principal_id?: string | null;
+  es_vendible?: boolean;
+  es_insumo?: boolean;
 }
 
 const RETURNING = `
   id, empresa_id, nombre, sku, costo_promedio, precio_venta, stock_actual, stock_minimo,
   unidad_medida, metodo_valuacion, activo, created_at, updated_at,
   codigo_barras, codigo_barras_interno, imagen_path, imagen_url,
-  categoria_principal_id, ubicacion_principal_id, proveedor_principal_id
+  categoria_principal_id, ubicacion_principal_id, proveedor_principal_id,
+  es_vendible, es_insumo
 `;
 
 // ─── Operaciones ──────────────────────────────────────────────────────────
@@ -118,11 +123,13 @@ export async function insertProducto(
     INSERT INTO ${t} (
       empresa_id, nombre, sku, costo_promedio, precio_venta, stock_actual, stock_minimo,
       unidad_medida, metodo_valuacion, codigo_barras, codigo_barras_interno,
-      categoria_principal_id, ubicacion_principal_id, proveedor_principal_id
+      categoria_principal_id, ubicacion_principal_id, proveedor_principal_id,
+      es_vendible, es_insumo
     ) VALUES (
       $1::uuid, $2, $3, $4::numeric, $5::numeric, $6::numeric, $7::numeric,
       $8, $9, $10, COALESCE($11::boolean, false),
-      $12::uuid, $13::uuid, $14::uuid
+      $12::uuid, $13::uuid, $14::uuid,
+      COALESCE($15::boolean, true), COALESCE($16::boolean, false)
     )
     RETURNING ${RETURNING}
   `;
@@ -141,6 +148,8 @@ export async function insertProducto(
     d.categoria_principal_id ?? null,
     d.ubicacion_principal_id ?? null,
     d.proveedor_principal_id ?? null,
+    d.es_vendible ?? null,
+    d.es_insumo ?? null,
   ];
   try {
     const { rows } = await pool().query<ProductoRow>(sql, params);
@@ -166,6 +175,8 @@ export interface UpdateProductoInput {
   categoria_principal_id?: string | null;
   ubicacion_principal_id?: string | null;
   proveedor_principal_id?: string | null;
+  es_vendible?: boolean;
+  es_insumo?: boolean;
 }
 
 /** Update parcial. Devuelve la fila o null si no existe / no pertenece a la empresa. */
@@ -208,6 +219,8 @@ export async function updateProductoPg(
   if (patch.categoria_principal_id !== undefined) add("categoria_principal_id", patch.categoria_principal_id || null, "::uuid");
   if (patch.ubicacion_principal_id !== undefined) add("ubicacion_principal_id", patch.ubicacion_principal_id || null, "::uuid");
   if (patch.proveedor_principal_id !== undefined) add("proveedor_principal_id", patch.proveedor_principal_id || null, "::uuid");
+  if (patch.es_vendible !== undefined) add("es_vendible", patch.es_vendible, "::boolean");
+  if (patch.es_insumo !== undefined) add("es_insumo", patch.es_insumo, "::boolean");
   if (sets.length === 0) return await getProductoPg(schemaRaw, empresaId, id);
 
   sets.push(`updated_at = now()`);
@@ -407,5 +420,7 @@ export function rowToProductoApi(r: ProductoRow): Record<string, unknown> {
     categoria_principal_id: r.categoria_principal_id ?? null,
     ubicacion_principal_id: r.ubicacion_principal_id ?? null,
     proveedor_principal_id: r.proveedor_principal_id ?? null,
+    es_vendible: r.es_vendible ?? true,
+    es_insumo: r.es_insumo ?? false,
   };
 }

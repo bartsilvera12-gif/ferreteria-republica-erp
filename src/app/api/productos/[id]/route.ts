@@ -132,6 +132,8 @@ export async function PATCH(
       }
       patch.proveedor_principal_id = v;
     }
+    if (typeof body.es_vendible === "boolean") patch.es_vendible = body.es_vendible;
+    if (typeof body.es_insumo === "boolean") patch.es_insumo = body.es_insumo;
 
     try {
       const row = await updateProductoPg(schema, empresaId, id, patch);

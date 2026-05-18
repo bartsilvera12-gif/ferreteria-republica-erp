@@ -19,6 +19,10 @@ export interface Producto {
   categoria_principal_id?: string | null;
   ubicacion_principal_id?: string | null;
   proveedor_principal_id?: string | null;
+  /** Clasificación gastronómica: producto que se vende al cliente final. */
+  es_vendible?: boolean;
+  /** Clasificación gastronómica: producto usado como insumo en recetas. */
+  es_insumo?: boolean;
 }
 
 export interface MovimientoInventario {

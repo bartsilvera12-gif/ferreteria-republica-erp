@@ -116,6 +116,10 @@ export async function POST(request: NextRequest) {
     const ubicacionPrincipalId = body.ubicacion_principal_id ? String(body.ubicacion_principal_id) : null;
     const proveedorPrincipalId = body.proveedor_principal_id ? String(body.proveedor_principal_id) : null;
 
+    // Clasificación gastronómica (defaults DB: es_vendible=true, es_insumo=false)
+    const esVendible = typeof body.es_vendible === "boolean" ? body.es_vendible : undefined;
+    const esInsumo = typeof body.es_insumo === "boolean" ? body.es_insumo : undefined;
+
     if (categoriaPrincipalId && !(await existsInTenant(schema, empresaId, "categorias_productos", categoriaPrincipalId))) {
       return NextResponse.json(errorResponse("La categoría seleccionada no existe."), { status: 400 });
     }
@@ -141,6 +145,8 @@ export async function POST(request: NextRequest) {
         categoria_principal_id: categoriaPrincipalId,
         ubicacion_principal_id: ubicacionPrincipalId,
         proveedor_principal_id: proveedorPrincipalId,
+        es_vendible: esVendible,
+        es_insumo: esInsumo,
       });
 
       // Inventario inicial (mismo schema, via PG directo).

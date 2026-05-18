@@ -49,6 +49,10 @@ export default function EditarProductoPage() {
   const [ubicaciones, setUbicaciones] = useState<UbiRow[]>([]);
   const [proveedores, setProveedores] = useState<ProvRow[]>([]);
 
+  // Clasificación gastronómica
+  const [esVendible, setEsVendible] = useState(true);
+  const [esInsumo, setEsInsumo] = useState(false);
+
   useEffect(() => {
     let cancel = false;
     async function load(url: string) {
@@ -126,6 +130,8 @@ export default function EditarProductoPage() {
       setCategoriaId(p.categoria_principal_id ?? null);
       setUbicacionId(p.ubicacion_principal_id ?? null);
       setProveedorId(p.proveedor_principal_id ?? null);
+      setEsVendible(p.es_vendible ?? true);
+      setEsInsumo(p.es_insumo ?? false);
     }).finally(() => {
       if (!cancelled) setCargando(false);
     });
@@ -237,6 +243,8 @@ export default function EditarProductoPage() {
         categoria_principal_id: categoriaId,
         ubicacion_principal_id: ubicacionId,
         proveedor_principal_id: proveedorId,
+        es_vendible: esVendible,
+        es_insumo: esInsumo,
       };
       if (cambioCodigo) {
         updatePayload.codigo_barras = codigoIngresado || null;
@@ -460,6 +468,33 @@ export default function EditarProductoPage() {
                   </Link>
                 </div>
               </div>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <label className={labelClass}>Clasificación</label>
+              <div className="flex flex-wrap gap-4 mt-1">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={esVendible}
+                    onChange={(e) => setEsVendible(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  Vendible (se vende al cliente final)
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={esInsumo}
+                    onChange={(e) => setEsInsumo(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  Insumo (se usa en recetas)
+                </label>
+              </div>
+              <p className="mt-1 text-xs text-gray-400">
+                Puede ser ambos (producto mixto).
+              </p>
             </div>
           </div>
 

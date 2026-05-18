@@ -30,6 +30,8 @@ interface ProductoRow {
   categoria_principal_id?: string | null;
   ubicacion_principal_id?: string | null;
   proveedor_principal_id?: string | null;
+  es_vendible?: boolean | null;
+  es_insumo?: boolean | null;
 }
 
 interface MovimientoRow {
@@ -70,6 +72,8 @@ function rowToProducto(row: ProductoRow): Producto {
     categoria_principal_id: row.categoria_principal_id ?? null,
     ubicacion_principal_id: row.ubicacion_principal_id ?? null,
     proveedor_principal_id: row.proveedor_principal_id ?? null,
+    es_vendible: row.es_vendible ?? true,
+    es_insumo: row.es_insumo ?? false,
   };
 }
 
@@ -180,6 +184,8 @@ export async function saveProducto(
     categoria_principal_id: datos.categoria_principal_id ?? null,
     ubicacion_principal_id: datos.ubicacion_principal_id ?? null,
     proveedor_principal_id: datos.proveedor_principal_id ?? null,
+    es_vendible: typeof datos.es_vendible === "boolean" ? datos.es_vendible : true,
+    es_insumo: typeof datos.es_insumo === "boolean" ? datos.es_insumo : false,
   };
 
   const res = await fetch("/api/productos", {
@@ -231,6 +237,8 @@ export async function updateProducto(
   if (datos.categoria_principal_id !== undefined) body.categoria_principal_id = datos.categoria_principal_id ?? null;
   if (datos.ubicacion_principal_id !== undefined) body.ubicacion_principal_id = datos.ubicacion_principal_id ?? null;
   if (datos.proveedor_principal_id !== undefined) body.proveedor_principal_id = datos.proveedor_principal_id ?? null;
+  if (typeof datos.es_vendible === "boolean") body.es_vendible = datos.es_vendible;
+  if (typeof datos.es_insumo === "boolean") body.es_insumo = datos.es_insumo;
 
   const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
     method: "PATCH",

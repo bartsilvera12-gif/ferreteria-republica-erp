@@ -47,6 +47,7 @@ export default function InventarioPage() {
   const [filtroPorPrecio,  setFiltroPorPrecio]  = useState("");
   const [filtroValuacion,  setFiltroValuacion]  = useState<MetodoValuacion | "">("");
   const [filtroUbicacion,  setFiltroUbicacion]  = useState<string>(""); // "", "__sin__" o id
+  const [filtroTipo,       setFiltroTipo]       = useState<"todos" | "vendibles" | "insumos" | "mixtos">("todos");
   const [soloStockBajo,    setSoloStockBajo]    = useState(false);
 
   useEffect(() => {
@@ -109,12 +110,22 @@ export default function InventarioPage() {
     // Solo stock bajo
     if (soloStockBajo && p.stock_actual > p.stock_minimo) return false;
 
+    // Tipo gastronómico (vendible/insumo/mixto)
+    if (filtroTipo !== "todos") {
+      const v = p.es_vendible !== false; // default true si null/undef
+      const i = p.es_insumo === true;
+      if (filtroTipo === "mixtos" && !(v && i)) return false;
+      if (filtroTipo === "vendibles" && !(v && !i)) return false;
+      if (filtroTipo === "insumos" && !(i && !v)) return false;
+    }
+
     return true;
   });
 
   const hayFiltrosActivos =
     filtroPorNombre || filtroPorSku || filtroPorCosto ||
-    filtroPorPrecio || filtroValuacion || filtroUbicacion || soloStockBajo;
+    filtroPorPrecio || filtroValuacion || filtroUbicacion || soloStockBajo ||
+    filtroTipo !== "todos";
 
   function limpiarFiltros() {
     setFiltroPorNombre("");
@@ -124,6 +135,7 @@ export default function InventarioPage() {
     setFiltroValuacion("");
     setFiltroUbicacion("");
     setSoloStockBajo(false);
+    setFiltroTipo("todos");
   }
 
   return (
@@ -248,6 +260,22 @@ export default function InventarioPage() {
               />
               Solo stock bajo
             </label>
+            <div className="mt-4 flex items-center gap-1 rounded-md border border-gray-200 bg-gray-50 p-0.5">
+              {(["todos","vendibles","insumos","mixtos"] as const).map((opt) => (
+                <button
+                  key={opt}
+                  type="button"
+                  onClick={() => setFiltroTipo(opt)}
+                  className={`px-2.5 py-1 text-xs font-medium rounded transition ${
+                    filtroTipo === opt
+                      ? "bg-white text-amber-700 shadow-sm"
+                      : "text-gray-500 hover:text-gray-700"
+                  }`}
+                >
+                  {opt === "todos" ? "Todos" : opt[0].toUpperCase() + opt.slice(1)}
+                </button>
+              ))}
+            </div>
             {hayFiltrosActivos && (
               <button
                 onClick={limpiarFiltros}
@@ -290,7 +318,19 @@ export default function InventarioPage() {
                 const margen = calcularMargenVenta(p.costo_promedio, p.precio_venta);
                 return (
                   <tr key={p.id} className="border-b border-slate-200 last:border-0 hover:bg-slate-50 transition-colors">
-                    <td className="py-4 pr-4 font-medium text-gray-800">{p.nombre}</td>
+                    <td className="py-4 pr-4 font-medium text-gray-800">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span>{p.nombre}</span>
+                        {(() => {
+                          const v = p.es_vendible !== false;
+                          const i = p.es_insumo === true;
+                          if (v && i) return <span className="inline-flex items-center rounded-full bg-purple-100 text-purple-700 text-[10px] font-medium px-2 py-0.5">Mixto</span>;
+                          if (i) return <span className="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 text-[10px] font-medium px-2 py-0.5">Insumo</span>;
+                          if (v) return <span className="inline-flex items-center rounded-full bg-sky-100 text-sky-700 text-[10px] font-medium px-2 py-0.5">Vendible</span>;
+                          return null;
+                        })()}
+                      </div>
+                    </td>
                     <td className="py-4 pr-4 text-gray-500 font-mono">{p.sku}</td>
                     <td className="py-4 pr-4 text-gray-700">{formatGs(p.costo_promedio)}</td>
                     <td className="py-4 pr-4 text-gray-700">{formatGs(p.precio_venta)}</td>

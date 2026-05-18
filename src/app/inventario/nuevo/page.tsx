@@ -37,6 +37,10 @@ export default function NuevoProductoPage() {
   const [categoriaId, setCategoriaId] = useState<string | null>(null);
   const [ubicacionId, setUbicacionId] = useState<string | null>(null);
   const [proveedorId, setProveedorId] = useState<string | null>(null);
+
+  // Clasificación gastronómica
+  const [esVendible, setEsVendible] = useState(true);
+  const [esInsumo, setEsInsumo] = useState(false);
   const [categorias, setCategorias] = useState<CatRow[]>([]);
   const [ubicaciones, setUbicaciones] = useState<UbiRow[]>([]);
   const [proveedores, setProveedores] = useState<ProvRow[]>([]);
@@ -263,6 +267,8 @@ export default function NuevoProductoPage() {
           categoria_principal_id: categoriaId,
           ubicacion_principal_id: ubicacionId,
           proveedor_principal_id: proveedorId,
+          es_vendible: esVendible,
+          es_insumo: esInsumo,
         });
       } catch (err) {
         const msg = err instanceof Error ? err.message : "No se pudo guardar el producto.";
@@ -657,6 +663,34 @@ export default function NuevoProductoPage() {
                   </Link>
                 </div>
               </div>
+            </div>
+
+            {/* Clasificación gastronómica */}
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <label className={labelClass}>Clasificación</label>
+              <div className="flex flex-wrap gap-4 mt-1">
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={esVendible}
+                    onChange={(e) => setEsVendible(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  Vendible (se vende al cliente final)
+                </label>
+                <label className="inline-flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={esInsumo}
+                    onChange={(e) => setEsInsumo(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  />
+                  Insumo (se usa en recetas)
+                </label>
+              </div>
+              <p className="mt-1 text-xs text-gray-400">
+                Puede ser ambos (producto mixto). Por defecto: vendible.
+              </p>
             </div>
           </div>
 
