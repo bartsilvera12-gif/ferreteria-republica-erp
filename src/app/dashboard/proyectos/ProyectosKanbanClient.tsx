@@ -469,12 +469,8 @@ export default function ProyectosKanbanClient() {
           <h1 className="text-xl font-semibold text-slate-900">Pedidos</h1>
           <p className="text-sm text-slate-500">Tablero de cocina — pedidos por modalidad y estado.</p>
         </div>
-        <Link
-          href="/dashboard/proyectos/nuevo"
-          className="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Nuevo proyecto
-        </Link>
+        {/* Botón "Nuevo proyecto" oculto en instancia En lo de Mari:
+            los pedidos nacen desde Ventas, no se crean manualmente desde el tablero. */}
       </div>
 
       {err ? <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">{err}</div> : null}
