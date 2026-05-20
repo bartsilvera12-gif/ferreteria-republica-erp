@@ -86,11 +86,10 @@ export default function NuevaVentaPage() {
   const [errorLinea, setErrorLinea] = useState<string | null>(null);
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
 
-  // ── Condiciones de la venta ────────────────────────────────────────────────
-  const [moneda,     setMoneda]     = useState<MonedaVenta>("GS");
-  const [tipoCambio, setTipoCambio] = useState("");
-  const [tipoVenta,  setTipoVenta]  = useState<TipoVenta>("CONTADO");
-  const [plazoDias,  setPlazoDias]  = useState("");
+  // ── Condiciones de la venta (fijas para En lo de Mari) ────────────────────
+  // Instancia dedicada: siempre Guaraníes + Contado.
+  const moneda: MonedaVenta = "GS";
+  const tipoVenta: TipoVenta = "CONTADO";
 
   // Pedidos (gastronomía): modalidad obligatoria en instancia En lo de Mari
   type Modalidad = "local" | "delivery" | "carry_out";
@@ -103,14 +102,6 @@ export default function NuevaVentaPage() {
 
   // ── Cobro (solo CONTADO, no se persiste — solo ayuda al cajero) ───────────
   const [montoRecibido, setMontoRecibido] = useState("");
-
-  function handleTipoVentaChange(v: TipoVenta) {
-    setTipoVenta(v);
-    if (v === "CREDITO") {
-      setMontoRecibido("");
-      setErrorVenta(null);
-    }
-  }
 
   // ── Línea en construcción ─────────────────────────────────────────────────
   const [lineaProdId, setLineaProdId] = useState("");
@@ -160,13 +151,7 @@ export default function NuevaVentaPage() {
    */
   function handleAgregarDesdePicker(payload: AgregarVentaPayload): boolean {
     const { producto: p, cantidad, precio_input, iva } = payload;
-    // Validar tipo de cambio si moneda=USD
-    if (moneda === "USD" && (tipoCambioNum <= 0)) {
-      setErrorVenta("Cargá el tipo de cambio antes de agregar productos en USD.");
-      return false;
-    }
-    // Convertir precio a PYG
-    const precioPyg = moneda === "USD" ? precio_input * tipoCambioNum : precio_input;
+    const precioPyg = precio_input;
     // Verificar stock vs lo ya cargado SOLO si el producto controla stock.
     // Productos del Menú (controla_stock=false) no validan stock.
     const ctrlStock = (p as { controla_stock?: boolean }).controla_stock !== false;
@@ -232,13 +217,12 @@ export default function NuevaVentaPage() {
   }, [comboHighlight]);
 
   // ── Cálculos ───────────────────────────────────────────────────────────────
-  const tipoCambioNum   = moneda === "USD" ? (parseFloat(tipoCambio) || 0) : 1;
-  const monedaBloqueada = items.length > 0;
+  const tipoCambioNum = 1;
 
   const prodSel     = productos.find((p) => p.id === lineaProdId);
   const cantNum     = parseInt(lineaCant) || 0;
   const precioInput = parseFloat(lineaPrecio) || 0;
-  const precioGs    = precioInput * tipoCambioNum;
+  const precioGs    = precioInput;
 
   const enCarrito = items
     .filter((i) => i.producto_id === lineaProdId)
@@ -254,8 +238,7 @@ export default function NuevaVentaPage() {
   // Productos del Menú (controla_stock=false) se venden sin restricción de stock.
   const stockInsuf  = prodSel !== undefined && prodSelControlaStock && cantNum > 0 && cantNum > stockDisp;
   const lineaValida =
-    !!prodSel && cantNum > 0 && precioGs > 0 && !stockInsuf &&
-    (moneda === "GS" || tipoCambioNum > 0);
+    !!prodSel && cantNum > 0 && precioGs > 0 && !stockInsuf;
 
   const totalSubtotal = items.reduce((s, i) => s + i.subtotal, 0);
   const totalIva      = items.reduce((s, i) => s + i.monto_iva, 0);
@@ -266,7 +249,7 @@ export default function NuevaVentaPage() {
     if (modalidad === "delivery") return pedidoClienteTelefono.trim().length > 0 && pedidoDireccion.trim().length > 0;
     return true; // carry_out: todos opcionales
   })();
-  const ventaValida   = items.length > 0 && (moneda === "GS" || tipoCambioNum > 0) && pedidoValido;
+  const ventaValida   = items.length > 0 && pedidoValido;
 
   // Vuelto (solo informativo, no se persiste)
   const montoRecibidoNum = parseFloat(montoRecibido) || 0;
@@ -337,8 +320,6 @@ export default function NuevaVentaPage() {
     if (!prodSel)          return setErrorLinea("Seleccioná un producto.");
     if (cantNum <= 0)      return setErrorLinea("La cantidad debe ser mayor a 0.");
     if (precioGs <= 0)     return setErrorLinea("El precio de venta debe ser mayor a 0.");
-    if (moneda === "USD" && tipoCambioNum <= 0)
-                           return setErrorLinea("Ingresá el tipo de cambio antes de agregar.");
     if (stockInsuf)
       return setErrorLinea(
         `Stock insuficiente para "${prodSel.nombre}". Disponible: ${stockDisp} u.`
@@ -388,8 +369,6 @@ export default function NuevaVentaPage() {
         monto_iva:    totalIva,
         total:        totalGeneral,
         tipo_venta:   tipoVenta,
-        plazo_dias:
-          tipoVenta === "CREDITO" && plazoDias ? parseInt(plazoDias) : undefined,
       },
       modalidad === ""
         ? undefined
@@ -418,81 +397,13 @@ export default function NuevaVentaPage() {
       <div>
         <h1 className="text-3xl font-bold text-gray-800">Nueva venta</h1>
         <p className="text-gray-600">
-          Agregá uno o más productos. Al confirmar se generan las salidas de inventario.
+          Agregá productos del menú o reventa. Al confirmar se registra la venta y se genera el pedido.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-7xl">
 
-        {/* ── SECCIÓN 1: Condiciones generales ─────────────────────────────── */}
-        <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
-          <SectionTitle>Condiciones de la venta</SectionTitle>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-            {/* Fila 1: Moneda | Tipo de venta (lado a lado) */}
-            <div>
-              <label className={labelClass}>Moneda</label>
-              <SegmentedControl<MonedaVenta>
-                value={moneda}
-                disabled={monedaBloqueada}
-                options={[
-                  { value: "GS",  label: "Guaraníes (₲)" },
-                  { value: "USD", label: "Dólares (USD)"  },
-                ]}
-                onChange={(v) => { setMoneda(v); setTipoCambio(""); }}
-              />
-              {monedaBloqueada && (
-                <p className="mt-1 text-xs text-gray-400">
-                  La moneda no puede cambiarse con ítems en el carrito.
-                </p>
-              )}
-            </div>
-
-            <div>
-              <label className={labelClass}>Tipo de venta</label>
-              <SegmentedControl<TipoVenta>
-                value={tipoVenta}
-                options={[
-                  { value: "CONTADO", label: "Contado" },
-                  { value: "CREDITO", label: "Crédito" },
-                ]}
-                onChange={handleTipoVentaChange}
-              />
-            </div>
-
-            {/* Fila 2: sub-campos condicionales (alineados bajo su parent) */}
-            {moneda === "USD" && (
-              <div className="md:col-start-1">
-                <label className={labelClass}>Tipo de cambio (USD → Gs.)</label>
-                <MontoInput
-                  value={tipoCambio}
-                  onChange={(n) => setTipoCambio(String(n))}
-                  placeholder="Ej: 7500"
-                  className={inputClass}
-                  decimals={false}
-                  disabled={monedaBloqueada}
-                />
-              </div>
-            )}
-
-            {tipoVenta === "CREDITO" && (
-              <div className="md:col-start-2">
-                <label className={labelClass}>Plazo (días)</label>
-                <input
-                  type="number"
-                  value={plazoDias}
-                  onChange={(e) => setPlazoDias(e.target.value)}
-                  placeholder="Ej: 30"
-                  className={inputClass}
-                  min={1} step={1}
-                />
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* ── SECCIÓN 2: Agregar producto ───────────────────────────────────── */}
+        {/* ── SECCIÓN 1: Agregar producto ───────────────────────────────────── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
           <SectionTitle>Agregar producto</SectionTitle>
 
@@ -617,20 +528,15 @@ export default function NuevaVentaPage() {
 
             {/* Precio — 2 cols */}
             <div className="md:col-span-2">
-              <label className={labelClass}>
-                Precio ({moneda === "USD" ? "USD" : "Gs."})
-              </label>
+              <label className={labelClass}>Precio (Gs.)</label>
               <MontoInput
                 value={lineaPrecio}
                 onChange={(n) => { setErrorLinea(null); setLineaPrecio(String(n)); }}
                 onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleAgregarLinea(); }}}
                 placeholder="Precio"
                 className={inputClass}
-                decimals={moneda === "USD"}
+                decimals={false}
               />
-              {moneda === "USD" && precioInput > 0 && tipoCambioNum > 0 && (
-                <p className="mt-1 text-xs text-gray-400">≈ {formatGs(precioGs)}</p>
-              )}
             </div>
 
             {/* IVA — 2 cols */}
@@ -722,12 +628,7 @@ export default function NuevaVentaPage() {
                           {item.cantidad}
                         </td>
                         <td className="py-3 pr-3 text-right tabular-nums text-gray-600 text-xs">
-                          {moneda === "USD"
-                            ? <>USD {item.precio_venta_original.toLocaleString("es-PY")}
-                                <br/><span className="text-gray-400">≈ {formatGs(item.precio_venta)}</span>
-                              </>
-                            : formatGs(item.precio_venta)
-                          }
+                          {formatGs(item.precio_venta)}
                         </td>
                         <td className="py-3 pr-3 text-center">
                           <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-gray-100 text-gray-600">
