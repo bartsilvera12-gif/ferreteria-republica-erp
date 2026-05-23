@@ -4,7 +4,8 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import AppLoadingScreen from "@/components/AppLoadingScreen";
+import ZentraLoader from "@/components/ZentraLoader";
+import { BootProvider, useBoot } from "@/components/BootContext";
 import { getCurrentUser, getSession } from "@/lib/auth";
 import { isBootstrapSuperAdminEmail } from "@/lib/auth/super-admin-bootstrap-email";
 import {
@@ -22,12 +23,25 @@ type ModuleAccess = {
   strict: boolean;
 };
 
+/**
+ * Wrapper exportado: envuelve la app con BootProvider para que el loader
+ * se sincronice con el estado del Sidebar (sidebarReady).
+ */
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
+  return (
+    <BootProvider>
+      <AuthGuardInner>{children}</AuthGuardInner>
+    </BootProvider>
+  );
+}
+
+function AuthGuardInner({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [loading, setLoading] = useState(true);
   const [access, setAccess] = useState<ModuleAccess | null>(null);
   const [blockedSlug, setBlockedSlug] = useState<string | null>(null);
+  const { sidebarReady } = useBoot();
 
   const isPublic = useMemo(
     () => !!(pathname && PUBLIC_ROUTES.includes(pathname)),
@@ -136,7 +150,8 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
 
   // Overlay de carga: el loader queda encima MIENTRAS children se montan en background.
   // Así el sidebar/dashboard ya están fetcheando sus datos al desaparecer el loader.
-  const showLoader = loading && !isPublic;
+  // Esperamos a que termine la auth Y a que el Sidebar reporte que cargó sus módulos.
+  const showLoader = !isPublic && (loading || !sidebarReady);
 
   if (blockedSlug && access) {
     const fallback = firstAccessibleHref(access.slugs, {
@@ -171,7 +186,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
   return (
     <>
       {children}
-      <AppLoadingScreen active={showLoader} />
+      {showLoader ? <ZentraLoader overlay /> : null}
     </>
   );
 }

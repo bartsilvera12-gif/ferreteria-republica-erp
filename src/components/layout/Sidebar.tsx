@@ -43,6 +43,7 @@ import { supabase } from "@/lib/supabase";
 import type { ModuloEmpresa } from "@/lib/empresas/actions";
 import { getFavoritos, toggleFavorito } from "@/lib/favorites";
 import { canAccessSidebarSlug } from "@/lib/modulos/route-slug-map";
+import { useBoot } from "@/components/BootContext";
 
 type MenuItem = {
   key: string;
@@ -337,6 +338,13 @@ export default function Sidebar() {
   const [esSuperAdmin, setEsSuperAdmin] = useState(false);
   /** Filtro visual del menú (no altera permisos ni rutas). */
   const [menuSearchQuery, setMenuSearchQuery] = useState("");
+  const { setSidebarReady } = useBoot();
+
+  /** Reporta al BootContext cuándo el sidebar tiene sus módulos cargados.
+   *  El AuthGuard mantiene el ZentraLoader overlay hasta que esto sea true. */
+  useEffect(() => {
+    setSidebarReady(!cargando);
+  }, [cargando, setSidebarReady]);
 
   useEffect(() => {
     setFavoritos(getFavoritos());
