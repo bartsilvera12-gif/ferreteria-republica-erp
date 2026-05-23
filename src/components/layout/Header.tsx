@@ -88,11 +88,11 @@ export default function Header() {
         {/* Notificaciones */}
         <button
           type="button"
-          className="relative rounded-lg p-2 text-slate-500 transition-colors hover:bg-slate-50 hover:text-[#3F8E91]"
+          className="relative rounded-lg p-2 text-[#475569] transition-colors hover:bg-slate-50 hover:text-[#0EA5E9]"
           aria-label="Notificaciones"
         >
           <Bell className="h-5 w-5" />
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#4FAEB2] text-[10px] font-bold text-white">
+          <span className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-[#0EA5E9] text-[10px] font-bold text-white">
             0
           </span>
         </button>
@@ -102,57 +102,38 @@ export default function Header() {
           <button
             type="button"
             onClick={() => setUserMenuOpen(!userMenuOpen)}
-            className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-1.5 shadow-sm transition-all hover:border-[#4FAEB2]/60"
+            className="flex items-center gap-2 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 transition-colors hover:bg-slate-100"
           >
-            <div
-              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#4FAEB2] to-[#3F8E91] text-white"
-              style={{ boxShadow: "0 0 0 3px rgba(79, 174, 178, 0.25)" }}
-            >
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[color:var(--zentra-sidebar)] text-white ring-1 ring-sky-400/35">
               <span className="text-sm font-bold">{avatarInitial}</span>
             </div>
             <div className="hidden text-left sm:block">
-              <p className="max-w-[180px] truncate text-sm font-semibold text-slate-900">{displayName}</p>
-              <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#3F8E91]">{displayRole}</p>
+              <p className="max-w-[180px] truncate text-sm font-medium text-[#0F172A]">{displayName}</p>
+              <p className="text-xs text-[#475569]">{displayRole}</p>
             </div>
-            <ChevronDown
-              className={`h-4 w-4 text-slate-400 transition-transform ${userMenuOpen ? "rotate-180" : ""}`}
-            />
+            <ChevronDown className={`h-4 w-4 text-slate-500 transition-transform ${userMenuOpen ? "rotate-180" : ""}`} />
           </button>
 
-          {userMenuOpen ? (
-            <div className="absolute right-0 top-full z-50 mt-2 w-56 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-xl ring-1 ring-[#4FAEB2]/15">
-              {/* franja superior turquesa */}
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-[#4FAEB2] via-[#4FAEB2]/80 to-[#4FAEB2]/40"
-              />
-              <div className="flex items-center gap-2 px-4 pt-4 pb-2">
-                <span
-                  aria-hidden="true"
-                  className="inline-block h-1.5 w-1.5 rounded-full bg-[#4FAEB2]"
-                  style={{ boxShadow: "0 0 0 3px rgba(79, 174, 178, 0.18)" }}
-                />
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">Sesión</p>
-              </div>
-              <div className="border-b border-slate-100 px-4 pb-3">
-                <p className="truncate text-sm font-semibold text-slate-900">{dropdownName}</p>
-                {fallbackEmail ? (
-                  <p className="truncate text-xs text-slate-500">{fallbackEmail}</p>
-                ) : null}
-              </div>
-              <button
-                type="button"
-                onClick={async () => {
-                  await signOut();
-                  router.push("/login");
-                }}
-                className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-slate-700 transition-colors hover:bg-slate-50 hover:text-[#3F8E91]"
-              >
-                <LogOut className="h-4 w-4" />
-                Cerrar sesión
-              </button>
+          <div
+            className={`absolute right-0 top-full mt-1 w-48 rounded-lg border border-slate-200 bg-white py-1 shadow-lg ${
+              userMenuOpen ? "block" : "hidden"
+            }`}
+          >
+            <div className="border-b border-slate-200 px-4 py-2">
+              <p className="truncate text-sm font-medium text-[#0F172A]">{dropdownName}</p>
             </div>
-          ) : null}
+            <button
+              type="button"
+              onClick={async () => {
+                await signOut();
+                router.push("/login");
+              }}
+              className="flex w-full items-center gap-2 px-4 py-2 text-sm text-[#475569] transition-colors hover:bg-slate-50 hover:text-[#0EA5E9]"
+            >
+              <LogOut className="h-4 w-4" />
+              Cerrar sesión
+            </button>
+          </div>
         </div>
       </div>
     </header>
