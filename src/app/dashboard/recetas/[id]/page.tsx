@@ -342,17 +342,21 @@ export default function EditarRecetaPage() {
         )}
 
         {items.length > 0 && costeo && (
-          <table className="w-full text-sm mb-4">
+          /* Wrapper overflow-x-auto + min-w-[840px] activa scroll horizontal
+              real en mobile. Columnas secundarias (Merma, Costo unit., Stock,
+              Unid. posibles) se ocultan progresivamente para no aplastar todo. */
+          <div className="overflow-x-auto -mx-px sm:mx-0">
+          <table className="w-full min-w-[840px] sm:min-w-0 text-sm mb-4">
             <thead className="text-left text-xs text-gray-500 uppercase">
               <tr>
                 <th className="py-2">Insumo</th>
                 <th className="py-2">Cantidad</th>
-                <th className="py-2">Unidad</th>
-                <th className="py-2">Merma</th>
-                <th className="py-2">Costo unit.</th>
+                <th className="py-2 hidden md:table-cell">Unidad</th>
+                <th className="py-2 hidden lg:table-cell">Merma</th>
+                <th className="py-2 hidden md:table-cell">Costo unit.</th>
                 <th className="py-2">Subcosto</th>
-                <th className="py-2">Stock</th>
-                <th className="py-2">Unid. posibles</th>
+                <th className="py-2 hidden lg:table-cell">Stock</th>
+                <th className="py-2 hidden lg:table-cell">Unid. posibles</th>
                 <th className="py-2"></th>
               </tr>
             </thead>
@@ -361,16 +365,16 @@ export default function EditarRecetaPage() {
                 <tr key={row.item_id}>
                   <td className="py-2 font-medium text-gray-800">{row.insumo_nombre}</td>
                   <td className="py-2">{row.cantidad}</td>
-                  <td className="py-2 text-gray-600">{row.unidad_medida ?? "—"}</td>
-                  <td className="py-2 text-gray-600">{(row.merma_pct * 100).toFixed(0)}%</td>
-                  <td className="py-2">{fmtGs(row.costo_promedio)}</td>
+                  <td className="py-2 text-gray-600 hidden md:table-cell">{row.unidad_medida ?? "—"}</td>
+                  <td className="py-2 text-gray-600 hidden lg:table-cell">{(row.merma_pct * 100).toFixed(0)}%</td>
+                  <td className="py-2 hidden md:table-cell">{fmtGs(row.costo_promedio)}</td>
                   <td className="py-2">{fmtGs(row.subcosto)}</td>
-                  <td className="py-2 text-gray-600">{row.stock_actual}</td>
-                  <td className="py-2">{row.unidades_aporte ?? "—"}</td>
+                  <td className="py-2 text-gray-600 hidden lg:table-cell">{row.stock_actual}</td>
+                  <td className="py-2 hidden lg:table-cell">{row.unidades_aporte ?? "—"}</td>
                   <td className="py-2 text-right">
                     <button
                       onClick={() => removeItem(row.item_id)}
-                      className="text-red-600 hover:text-red-700"
+                      className="inline-flex items-center justify-center min-w-[40px] min-h-[40px] text-red-600 hover:text-red-700 hover:bg-red-50 rounded"
                       aria-label="Eliminar"
                     >
                       <Trash2 className="h-4 w-4" />
@@ -380,6 +384,7 @@ export default function EditarRecetaPage() {
               ))}
             </tbody>
           </table>
+          </div>
         )}
 
         {/* Add item */}

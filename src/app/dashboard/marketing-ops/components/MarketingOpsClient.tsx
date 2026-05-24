@@ -306,8 +306,11 @@ export default function MarketingOpsClient() {
       </div>
 
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* min-w-[1200px] activa scroll horizontal en mobile (10 columnas).
+            Antes min-w-full hacia que la tabla se encogiera y los botones
+            "Editar"/"Detalle" quedaran cortados. */}
         <div className="overflow-x-auto">
-          <table className="min-w-full divide-y divide-slate-200 text-sm">
+          <table className="w-full min-w-[1200px] xl:min-w-0 divide-y divide-slate-200 text-sm">
             <thead className="bg-slate-50 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
               <tr>
                 <th className="px-4 py-3">Título</th>

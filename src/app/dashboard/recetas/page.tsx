@@ -93,14 +93,16 @@ export default function RecetasListPage() {
       )}
 
       {!loading && recetas.length > 0 && (
-        <div className="overflow-hidden rounded-md border border-gray-200 bg-white">
-          <table className="w-full text-sm">
+        /* overflow-x-auto + min-w para que el link "Editar" no se corte en mobile.
+           "Actualizado" se oculta en mobile (data secundaria). */
+        <div className="overflow-x-auto rounded-md border border-gray-200 bg-white">
+          <table className="w-full min-w-[680px] sm:min-w-0 text-sm">
             <thead className="bg-gray-50 text-left text-xs uppercase text-gray-500">
               <tr>
                 <th className="px-4 py-2">Nombre</th>
                 <th className="px-4 py-2">Rendimiento</th>
                 <th className="px-4 py-2">Estado</th>
-                <th className="px-4 py-2">Actualizado</th>
+                <th className="px-4 py-2 hidden md:table-cell">Actualizado</th>
                 <th className="px-4 py-2"></th>
               </tr>
             </thead>
@@ -122,7 +124,7 @@ export default function RecetasListPage() {
                       {r.activa ? "Activa" : "Inactiva"}
                     </span>
                   </td>
-                  <td className="px-4 py-2 text-xs text-gray-500">
+                  <td className="px-4 py-2 text-xs text-gray-500 hidden md:table-cell">
                     {new Date(r.updated_at).toLocaleString("es-PY")}
                   </td>
                   <td className="px-4 py-2 text-right">
