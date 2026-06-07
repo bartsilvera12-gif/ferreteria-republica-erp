@@ -63,6 +63,69 @@ export interface SaveCompraError {
   error: string;
 }
 
+// ── Compra multiproducto ────────────────────────────────────────────────────
+
+export interface CompraItemPayload {
+  producto_id: string;
+  producto_nombre: string;
+  cantidad: number;
+  costo_unitario: number;
+  costo_unitario_original: number;
+  iva_tipo: string;
+  subtotal: number;
+  monto_iva: number;
+  total: number;
+  precio_venta: number;
+  margen_venta: number | null;
+}
+export interface CompraHeaderPayload {
+  proveedor_id: string;
+  proveedor_nombre: string;
+  moneda: "PYG" | "USD";
+  tipo_cambio: number;
+  tipo_pago: "contado" | "credito";
+  plazo_dias?: number;
+  nro_timbrado: string;
+}
+export interface SaveComprasMultiResult {
+  success: true;
+  numero_control: string;
+  compras: Compra[];
+  warning?: string | null;
+}
+
+/** Guarda una compra con N líneas (un solo numero_control). */
+export async function saveCompraMulti(
+  header: CompraHeaderPayload,
+  items: CompraItemPayload[]
+): Promise<SaveComprasMultiResult | SaveCompraError> {
+  try {
+    const r = await fetch("/api/compras", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...header, items }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.success) {
+      const err = (j as { error?: string })?.error ?? `Error ${r.status} al guardar la compra.`;
+      console.error("[compras] saveCompraMulti:", err);
+      return { success: false, error: err };
+    }
+    const data = j.data as { numero_control?: string; compras?: CompraApiRow[]; warning?: string | null };
+    return {
+      success: true,
+      numero_control: data.numero_control ?? "",
+      compras: (data.compras ?? []).map(mapRow),
+      warning: data.warning ?? null,
+    };
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : "Error de red";
+    console.error("[compras] saveCompraMulti:", e);
+    return { success: false, error: msg };
+  }
+}
+
 export async function saveCompra(
   datos: Omit<Compra, "id" | "numero_control" | "fecha">
 ): Promise<SaveCompraResult | SaveCompraError> {
