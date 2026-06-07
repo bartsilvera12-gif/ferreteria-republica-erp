@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
-import { saveCompraMulti, type CompraItemPayload } from "@/lib/compras/storage";
+import { saveCompraMulti, uploadComprobante, type CompraItemPayload } from "@/lib/compras/storage";
 import { getProveedores, proveedorExiste, createProveedor } from "@/lib/proveedores/storage";
 import { getProductos, productoExiste, saveProducto } from "@/lib/inventario/storage";
 import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
@@ -120,9 +120,29 @@ export default function NuevaCompraPage() {
   const [errorSku, setErrorSku] = useState<string | null>(null);
   const [productoCreado, setProductoCreado] = useState<string | null>(null);
 
+  // Comprobante / factura del proveedor (opcional, para toda la compra)
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
+  const [comprobanteError, setComprobanteError] = useState<string | null>(null);
+
   const [errorLinea, setErrorLinea] = useState<string | null>(null);
   const [errorSubmit, setErrorSubmit] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+
+  function handleComprobanteChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setComprobanteError(null);
+    const f = e.target.files?.[0] ?? null;
+    if (f && !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(f.type)) {
+      setComprobanteError("Formato no permitido. Usá JPG, PNG, WebP o PDF.");
+      setComprobanteFile(null);
+      return;
+    }
+    if (f && f.size > 10 * 1024 * 1024) {
+      setComprobanteError("Archivo demasiado grande (máx. 10 MB).");
+      setComprobanteFile(null);
+      return;
+    }
+    setComprobanteFile(f);
+  }
 
   async function recargarProveedores() {
     const data = await getProveedores();
@@ -234,6 +254,14 @@ export default function NuevaCompraPage() {
 
     setSubmitting(true);
     try {
+      // Subir comprobante primero (si hay) para asociarlo a toda la compra.
+      let comprobante: { comprobante_storage_path: string; comprobante_nombre: string; comprobante_mime_type: string } | null = null;
+      if (comprobanteFile) {
+        const up = await uploadComprobante(comprobanteFile);
+        if (!up.ok) { setErrorSubmit(`Comprobante: ${up.error}`); return; }
+        comprobante = up.data;
+      }
+
       const res = await saveCompraMulti(
         {
           proveedor_id: String(proveedor.id),
@@ -243,6 +271,9 @@ export default function NuevaCompraPage() {
           tipo_pago: cab.tipo_pago,
           plazo_dias: cab.tipo_pago === "credito" && cab.plazo_dias ? parseInt(cab.plazo_dias) : undefined,
           nro_timbrado: cab.nro_timbrado,
+          comprobante_storage_path: comprobante?.comprobante_storage_path ?? null,
+          comprobante_nombre: comprobante?.comprobante_nombre ?? null,
+          comprobante_mime_type: comprobante?.comprobante_mime_type ?? null,
         },
         items
       );
@@ -349,6 +380,20 @@ export default function NuevaCompraPage() {
                     <option key={p.id} value={p.id}>{p.nombre} — RUC {p.ruc}</option>
                   ))}
                 </select>
+              </div>
+              <div className="sm:col-span-2">
+                <label className={labelClass}>Comprobante / factura <span className="text-gray-400 font-normal">(opcional)</span></label>
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp,application/pdf"
+                  onChange={handleComprobanteChange}
+                  className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#4FAEB2] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#3F8E91]"
+                />
+                {comprobanteFile && !comprobanteError && (
+                  <p className="mt-1.5 text-xs text-green-600">✓ {comprobanteFile.name} listo para subir al guardar.</p>
+                )}
+                {comprobanteError && <p className="mt-1.5 text-xs text-red-600">{comprobanteError}</p>}
+                <p className="mt-1 text-xs text-gray-400">JPG, PNG, WebP o PDF — máx. 10 MB. Se asocia a toda la compra.</p>
               </div>
             </div>
 

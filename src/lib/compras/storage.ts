@@ -9,6 +9,9 @@ interface CompraApiRow {
   precio_venta: string | number; margen_venta: string | number | null;
   tipo_pago: string; plazo_dias: number | null; nro_timbrado: string; estado: string;
   fecha: string;
+  comprobante_storage_path?: string | null;
+  comprobante_nombre?: string | null;
+  comprobante_mime_type?: string | null;
 }
 
 function mapRow(r: CompraApiRow): Compra {
@@ -33,6 +36,9 @@ function mapRow(r: CompraApiRow): Compra {
     tipo_pago: r.tipo_pago as Compra["tipo_pago"],
     plazo_dias: r.plazo_dias ?? undefined,
     nro_timbrado: r.nro_timbrado,
+    comprobante_storage_path: r.comprobante_storage_path ?? null,
+    comprobante_nombre: r.comprobante_nombre ?? null,
+    comprobante_mime_type: r.comprobante_mime_type ?? null,
     fecha: r.fecha,
   };
 }
@@ -86,6 +92,37 @@ export interface CompraHeaderPayload {
   tipo_pago: "contado" | "credito";
   plazo_dias?: number;
   nro_timbrado: string;
+  comprobante_storage_path?: string | null;
+  comprobante_nombre?: string | null;
+  comprobante_mime_type?: string | null;
+}
+
+export interface UploadComprobanteResult {
+  comprobante_storage_path: string;
+  comprobante_nombre: string;
+  comprobante_mime_type: string;
+}
+
+/** Sube el comprobante (imagen/PDF) y devuelve su referencia para asociarla a la compra. */
+export async function uploadComprobante(
+  file: File
+): Promise<{ ok: true; data: UploadComprobanteResult } | { ok: false; error: string }> {
+  try {
+    const fd = new FormData();
+    fd.append("file", file);
+    const r = await fetch("/api/compras/comprobante/upload", {
+      method: "POST",
+      credentials: "include",
+      body: fd,
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.success) {
+      return { ok: false, error: (j as { error?: string })?.error ?? `Error ${r.status} al subir el comprobante.` };
+    }
+    return { ok: true, data: j.data as UploadComprobanteResult };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de red al subir el comprobante." };
+  }
 }
 export interface SaveComprasMultiResult {
   success: true;

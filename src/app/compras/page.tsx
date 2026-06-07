@@ -44,6 +44,7 @@ type GrupoCompra = {
   plazo_dias?: number;
   items: Compra[];
   total: number;
+  comprobante: boolean;
 };
 
 function agrupar(rows: Compra[]): GrupoCompra[] {
@@ -60,11 +61,13 @@ function agrupar(rows: Compra[]): GrupoCompra[] {
         plazo_dias: c.plazo_dias,
         items: [],
         total: 0,
+        comprobante: false,
       };
       map.set(key, g);
     }
     g.items.push(c);
     g.total += Number(c.total) || 0;
+    if (c.comprobante_storage_path) g.comprobante = true;
   }
   return [...map.values()].sort(
     (a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime()
@@ -203,7 +206,20 @@ export default function ComprasPage() {
                           {g.numero_control}
                         </td>
                         <td className="py-4 pr-4 font-medium text-gray-800">{g.proveedor_nombre}</td>
-                        <td className="py-4 pr-4 text-gray-600">{resumenProductos(g.items)}</td>
+                        <td className="py-4 pr-4 text-gray-600">
+                          <div>{resumenProductos(g.items)}</div>
+                          {g.comprobante && (
+                            <a
+                              href={`/api/compras/comprobante?numero_control=${encodeURIComponent(g.numero_control)}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="mt-0.5 inline-flex items-center gap-1 text-xs font-medium text-[#4FAEB2] hover:text-[#3F8E91] hover:underline"
+                            >
+                              📎 Ver comprobante
+                            </a>
+                          )}
+                        </td>
                         <td className="py-4 pr-4 text-right tabular-nums text-gray-700">{g.items.length}</td>
                         <td className="py-4 pr-4 text-right tabular-nums font-semibold text-gray-800">{formatGs(g.total)}</td>
                         <td className="hidden py-4 pr-4 lg:table-cell">

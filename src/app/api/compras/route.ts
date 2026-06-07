@@ -62,6 +62,10 @@ export async function POST(request: NextRequest) {
       plazo_dias: body.plazo_dias != null && String(body.plazo_dias).trim() !== ""
         ? parseInt(String(body.plazo_dias), 10) || null : null,
       nro_timbrado: String(body.nro_timbrado).trim().toUpperCase(),
+      comprobante_url: body.comprobante_url != null && String(body.comprobante_url).trim() !== "" ? String(body.comprobante_url) : null,
+      comprobante_storage_path: body.comprobante_storage_path != null && String(body.comprobante_storage_path).trim() !== "" ? String(body.comprobante_storage_path) : null,
+      comprobante_nombre: body.comprobante_nombre != null && String(body.comprobante_nombre).trim() !== "" ? String(body.comprobante_nombre) : null,
+      comprobante_mime_type: body.comprobante_mime_type != null && String(body.comprobante_mime_type).trim() !== "" ? String(body.comprobante_mime_type) : null,
       created_by: ctx.auth.usuarioCatalogId ?? null,
       usuario_nombre: ctx.auth.user?.email ?? null,
     };
