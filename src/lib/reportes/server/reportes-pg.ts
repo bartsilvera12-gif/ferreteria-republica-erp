@@ -28,6 +28,9 @@ import type {
   ItemVendidoRow,
   VentaProductoTotal,
   TipoPrecioReporte,
+  ConciliacionReporte,
+  ConciliacionAgrupado,
+  ConciliacionVentaRow,
 } from "@/lib/reportes/types";
 
 function pool() {
@@ -377,5 +380,83 @@ export async function getReporteVentas(
       total_linea: num(i.total_linea),
       tipo_precio: normTipoPrecio(i.tipo_precio),
     })),
+  };
+}
+
+// ── Conciliación bancaria (ventas del mes + detalle de cobro) ─────────────────
+
+export async function getReporteConciliacion(
+  schemaRaw: string,
+  empresaId: string,
+  b: MesBounds
+): Promise<ConciliacionReporte> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tV = quoteSchemaTable(schema, "ventas");
+  const tD = quoteSchemaTable(schema, "ventas_pagos_detalle");
+  const tCli = quoteSchemaTable(schema, "clientes");
+  const p = pool();
+  const perV = `v.empresa_id=$1::uuid AND v.fecha>=$2::timestamptz AND v.fecha<=$3::timestamptz`;
+  const args = [empresaId, b.start, b.end];
+
+  // Un detalle por venta (defensivo: el más reciente si hubiera más de uno).
+  const detLateral = `LEFT JOIN LATERAL (
+      SELECT d.metodo_pago, d.entidad_nombre_snapshot, d.referencia, d.monto
+        FROM ${tD} d WHERE d.venta_id=v.id AND d.empresa_id=v.empresa_id
+       ORDER BY d.fecha_pago DESC LIMIT 1
+    ) d ON true`;
+
+  // Detalle por venta (todas las ventas del mes; con o sin cobro).
+  const ventasQ = p.query<ConciliacionVentaRow & { con_detalle: boolean }>(
+    `SELECT v.id AS venta_id, v.numero_control, v.fecha, c.nombre AS cliente,
+            d.metodo_pago, d.entidad_nombre_snapshot AS entidad, d.referencia,
+            d.monto::float8 AS monto, (d.metodo_pago IS NOT NULL) AS con_detalle
+       FROM ${tV} v
+       LEFT JOIN ${tCli} c ON c.id=v.cliente_id AND c.empresa_id=v.empresa_id
+       ${detLateral}
+      WHERE ${perV} ORDER BY v.fecha DESC, v.numero_control DESC`, args);
+
+  // Totales de cabecera de ventas (para sin/con detalle).
+  const ventasTotQ = p.query<{ ventas: number }>(
+    `SELECT count(*)::int AS ventas FROM ${tV} v WHERE ${perV}`, args);
+
+  // Agregados sobre los detalles de cobro de ventas del mes.
+  const detPer = `d.empresa_id=$1::uuid AND EXISTS (SELECT 1 FROM ${tV} v WHERE v.id=d.venta_id AND ${perV})`;
+  const totQ = p.query<{ cantidad: number; total: number }>(
+    `SELECT count(*)::int AS cantidad, COALESCE(SUM(monto),0)::float8 AS total FROM ${tD} d WHERE ${detPer}`, args);
+  const porMetodoQ = p.query<ConciliacionAgrupado>(
+    `SELECT metodo_pago AS clave, count(*)::int AS cantidad, COALESCE(SUM(monto),0)::float8 AS total
+       FROM ${tD} d WHERE ${detPer} GROUP BY metodo_pago ORDER BY total DESC`, args);
+  const porEntidadQ = p.query<ConciliacionAgrupado>(
+    `SELECT COALESCE(NULLIF(entidad_nombre_snapshot,''),'(sin entidad)') AS clave,
+            count(*)::int AS cantidad, COALESCE(SUM(monto),0)::float8 AS total
+       FROM ${tD} d WHERE ${detPer} GROUP BY 1 ORDER BY total DESC`, args);
+
+  const [ventas, ventasTot, tot, porMetodo, porEntidad] = await Promise.all([
+    ventasQ, ventasTotQ, totQ, porMetodoQ, porEntidadQ]);
+
+  const ventasRows: ConciliacionVentaRow[] = ventas.rows.map((r) => ({
+    venta_id: r.venta_id,
+    numero_control: r.numero_control,
+    fecha: r.fecha,
+    cliente: r.cliente || null,
+    metodo_pago: r.metodo_pago || null,
+    entidad: r.entidad || null,
+    referencia: r.referencia || null,
+    monto: r.con_detalle ? num(r.monto) : null,
+    con_detalle: r.con_detalle === true,
+  }));
+  const cantidadVentas = num(ventasTot.rows[0]?.ventas);
+  const ventasConDetalle = ventasRows.filter((v) => v.con_detalle).length;
+
+  return {
+    mes: b.mes,
+    totalCobrado: num(tot.rows[0]?.total),
+    cantidadOperaciones: num(tot.rows[0]?.cantidad),
+    cantidadVentas,
+    ventasConDetalle,
+    ventasSinDetalle: cantidadVentas - ventasConDetalle,
+    porMetodo: porMetodo.rows.map((r) => ({ clave: r.clave, cantidad: num(r.cantidad), total: num(r.total) })),
+    porEntidad: porEntidad.rows.map((r) => ({ clave: r.clave, cantidad: num(r.cantidad), total: num(r.total) })),
+    ventas: ventasRows,
   };
 }

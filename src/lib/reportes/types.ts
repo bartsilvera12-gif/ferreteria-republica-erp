@@ -151,3 +151,36 @@ export interface VentasReporte {
   ventas: VentaReporteRow[];
   items: ItemVendidoRow[];
 }
+
+// ── Conciliación bancaria (ventas_pagos_detalle, venta-céntrico) ──────────────
+
+export interface ConciliacionAgrupado {
+  clave: string;   // método o entidad
+  cantidad: number;
+  total: number;
+}
+
+/** Una venta del mes con su detalle de cobro (o sin él). */
+export interface ConciliacionVentaRow {
+  venta_id: string;
+  numero_control: string;
+  fecha: string;
+  cliente: string | null;
+  metodo_pago: string | null;
+  entidad: string | null;
+  referencia: string | null;
+  monto: number | null;       // null si sin detalle
+  con_detalle: boolean;
+}
+
+export interface ConciliacionReporte {
+  mes: string;
+  totalCobrado: number;          // SUM(monto) de los detalles
+  cantidadOperaciones: number;   // detalles de cobro
+  cantidadVentas: number;        // ventas del mes
+  ventasConDetalle: number;
+  ventasSinDetalle: number;
+  porMetodo: ConciliacionAgrupado[];
+  porEntidad: ConciliacionAgrupado[];
+  ventas: ConciliacionVentaRow[];
+}

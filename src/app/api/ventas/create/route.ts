@@ -3,6 +3,7 @@ import { getUserAndEmpresa } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { createVentaTransaccionalPg } from "@/lib/ventas/server/create-venta-pg";
 import type { CreateVentaItemInput } from "@/lib/ventas/server/create-venta-pg";
+import { insertVentaPagoDetalle } from "@/lib/ventas/server/pago-detalle-pg";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta } from "@/lib/ventas/types";
@@ -196,6 +197,30 @@ export async function POST(request: NextRequest) {
       totalDeclarado,
       pedidoCocina,
     });
+
+    // Detalle de cobro (conciliación) — best-effort, FUERA de la transacción de
+    // venta. Si falla, la venta queda igual (no se rompe ni se afectan recetas).
+    // 1 detalle por venta: método = metodoPago; monto = total (suma = total).
+    try {
+      const pd = (o.pago_detalle ?? null) as Record<string, unknown> | null;
+      const str = (v: unknown, max = 200) =>
+        v === null || v === undefined || String(v).trim() === "" ? null : String(v).trim().slice(0, max);
+      const fechaAcred = (() => {
+        const v = pd?.fecha_acreditacion;
+        return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+      })();
+      await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+        metodo_pago: metodoPago,
+        entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
+        entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
+        monto: totalDeclarado,
+        referencia: str(pd?.referencia),
+        fecha_acreditacion: fechaAcred,
+        observacion: str(pd?.observacion, 500),
+      });
+    } catch (e) {
+      console.error("[ventas/create] pago_detalle best-effort fallo (venta OK):", e instanceof Error ? e.message : e);
+    }
 
     let sub = 0;
     let iv = 0;

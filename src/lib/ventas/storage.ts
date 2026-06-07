@@ -15,6 +15,15 @@ export type PedidoCocinaInput = {
   observacion?: string | null;
 };
 
+/** Detalle de cobro (conciliación bancaria) — opcional, 1 por venta. */
+export type PagoDetalleInput = {
+  entidad_bancaria_id?: string | null;
+  entidad_nombre_snapshot?: string | null;
+  referencia?: string | null;
+  observacion?: string | null;
+  fecha_acreditacion?: string | null;
+};
+
 /**
  * Lista ventas del tenant (misma fuente que el dashboard: tablas `ventas` / `ventas_items`).
  */
@@ -42,7 +51,8 @@ export async function getVentas(): Promise<Venta[]> {
  */
 export async function saveVenta(
   datos: Omit<Venta, "id" | "numero_control" | "fecha">,
-  pedidoCocina?: PedidoCocinaInput
+  pedidoCocina?: PedidoCocinaInput,
+  pagoDetalle?: PagoDetalleInput | null
 ): Promise<ResultadoGuardarVenta> {
   if (!datos.items || datos.items.length === 0) {
     return { success: false, error: "La venta debe tener al menos un producto." };
@@ -65,6 +75,7 @@ export async function saveVenta(
         cliente_id: null,
         observaciones: null,
         pedido_cocina: pedidoCocina ?? null,
+        pago_detalle: pagoDetalle ?? null,
       }),
     });
 

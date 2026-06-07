@@ -122,6 +122,12 @@ export default function NuevaVentaPage() {
   const [montoRecibido, setMontoRecibido] = useState("");
   const [metodoPago, setMetodoPago] = useState<MetodoPago>("efectivo");
 
+  // ── Detalle de cobro (conciliación bancaria) ──────────────────────────────
+  const [entidades, setEntidades] = useState<{ id: string; nombre: string; tipo: string | null }[]>([]);
+  const [pagoEntidadId, setPagoEntidadId] = useState("");
+  const [pagoReferencia, setPagoReferencia] = useState("");
+  const [pagoObservacion, setPagoObservacion] = useState("");
+
   // ── Línea en construcción ─────────────────────────────────────────────────
   const [lineaProdId, setLineaProdId] = useState("");
   const [lineaCant,   setLineaCant]   = useState("");
@@ -217,6 +223,16 @@ export default function NuevaVentaPage() {
     getProductos().then((data) => {
       if (!cancelled) setProductos(data);
     });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Cargar entidades bancarias (caja/banco/tarjeta/billetera) para el detalle de cobro.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/entidades-bancarias", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled && j?.success) setEntidades(j.data?.entidades ?? []); })
+      .catch(() => { /* no bloquea la venta si falla */ });
     return () => { cancelled = true; };
   }, []);
 
@@ -411,7 +427,13 @@ export default function NuevaVentaPage() {
             cliente_telefono: pedidoClienteTelefono.trim() || null,
             direccion_entrega: pedidoDireccion.trim() || null,
             observacion: pedidoObservacion.trim() || null,
-          }
+          },
+      {
+        entidad_bancaria_id: pagoEntidadId || null,
+        entidad_nombre_snapshot: entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null,
+        referencia: pagoReferencia.trim() || null,
+        observacion: pagoObservacion.trim() || null,
+      }
     );
 
     if (!resultado.success) {
@@ -811,8 +833,51 @@ export default function NuevaVentaPage() {
                         </div>
                       )}
                       <p className="text-[11px] text-gray-400 leading-snug">
-                        Cálculo solo informativo — no se guarda en la venta.
+                        El monto recibido / vuelto es solo informativo — no se guarda.
                       </p>
+
+                      {/* Detalle de cobro (conciliación bancaria) — opcional */}
+                      <div className="mt-2 border-t border-slate-200 pt-2 space-y-2">
+                        <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                          Detalle de cobro <span className="font-normal normal-case tracking-normal text-gray-400">(conciliación · opcional)</span>
+                        </p>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Entidad / caja</label>
+                          <select
+                            value={pagoEntidadId}
+                            onChange={(e) => setPagoEntidadId(e.target.value)}
+                            className={inputClass}
+                          >
+                            <option value="">— Sin especificar —</option>
+                            {entidades.map((en) => (
+                              <option key={en.id} value={en.id}>{en.nombre}</option>
+                            ))}
+                          </select>
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Referencia / comprobante</label>
+                          <input
+                            type="text"
+                            value={pagoReferencia}
+                            onChange={(e) => setPagoReferencia(e.target.value)}
+                            placeholder="Opcional — N° de comprobante / transacción"
+                            className={inputClass}
+                          />
+                        </div>
+                        <div>
+                          <label className="block text-xs text-gray-600 mb-1">Observación</label>
+                          <input
+                            type="text"
+                            value={pagoObservacion}
+                            onChange={(e) => setPagoObservacion(e.target.value)}
+                            placeholder="Opcional"
+                            className={inputClass}
+                          />
+                        </div>
+                        <p className="text-[11px] text-gray-400 leading-snug">
+                          Se registra para la conciliación; el cobro es por el total de la venta.
+                        </p>
+                      </div>
                     </div>
                   )}
                 </div>
