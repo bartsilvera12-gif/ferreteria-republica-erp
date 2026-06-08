@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserAndEmpresa } from "@/lib/middleware/auth";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
-import { createVentaTransaccionalPg } from "@/lib/ventas/server/create-venta-pg";
+import { createVentaTransaccionalPg, StockInsuficienteError } from "@/lib/ventas/server/create-venta-pg";
 import type { CreateVentaItemInput } from "@/lib/ventas/server/create-venta-pg";
 import { insertVentaPagoDetalle } from "@/lib/ventas/server/pago-detalle-pg";
 import { successResponse, errorResponse } from "@/lib/api/response";
@@ -125,6 +125,7 @@ export async function POST(request: NextRequest) {
       o.observaciones === null || o.observaciones === undefined
         ? null
         : String(o.observaciones).slice(0, 4000);
+    const permitirSinStock = o.permitir_sin_stock === true;
 
     // Pedido de cocina (modalidad obligatoria en instancia En lo de Mari)
     const pedidoRaw = (o.pedido_cocina ?? null) as Record<string, unknown> | null;
@@ -196,6 +197,7 @@ export async function POST(request: NextRequest) {
       montoIvaDeclarado,
       totalDeclarado,
       pedidoCocina,
+      permitirSinStock,
     });
 
     // Detalle de cobro (conciliación) — best-effort, FUERA de la transacción de
@@ -248,6 +250,14 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(successResponse({ venta }));
   } catch (err) {
+    // Falta de stock sin autorizar: 409 con el detalle de faltantes para que la UI
+    // muestre el modal de confirmación y reintente con permitir_sin_stock=true.
+    if (err instanceof StockInsuficienteError) {
+      return NextResponse.json(
+        { ...errorResponse("Stock insuficiente: requiere confirmación."), faltantes: err.faltantes },
+        { status: 409 }
+      );
+    }
     const msg = err instanceof Error ? err.message : "Error al crear la venta.";
     const status =
       msg.includes("Stock insuficiente") ||

@@ -1,5 +1,30 @@
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 
+/** Un faltante de stock detectado al validar la venta. */
+export interface FaltanteStock {
+  tipo: "producto" | "insumo";
+  producto_id: string;
+  nombre: string;
+  sku: string;
+  stock_actual: number;
+  solicitado: number;
+  faltante: number;
+}
+
+/**
+ * Se lanza cuando falta stock y NO se autorizó la venta sin stock
+ * (`permitir_sin_stock` ausente/false). Lleva el detalle para que la UI
+ * muestre el modal de confirmación y reintente con el flag.
+ */
+export class StockInsuficienteError extends Error {
+  faltantes: FaltanteStock[];
+  constructor(faltantes: FaltanteStock[]) {
+    super("Stock insuficiente para uno o más productos/insumos.");
+    this.name = "StockInsuficienteError";
+    this.faltantes = faltantes;
+  }
+}
+
 export interface CreateVentaItemInput {
   producto_id: string;
   producto_nombre: string;
@@ -38,6 +63,8 @@ export interface CreateVentaPgParams {
   montoIvaDeclarado: number;
   totalDeclarado: number;
   pedidoCocina?: CreateVentaPedidoCocinaInput | null;
+  /** Si true, autoriza vender aunque falte stock de productos o insumos (stock puede quedar negativo). */
+  permitirSinStock?: boolean;
 }
 
 function recalcTotals(items: CreateVentaItemInput[]) {
@@ -229,23 +256,48 @@ export async function createVentaTransaccionalPg(
     }
   }
 
-  // 3) Validar stock SOLO para productos que controlan stock (Reventa) y NO tienen receta.
-  //    Un producto con receta consume insumos (validado en 3b), no su propio stock.
+  // 3) Validar stock. Se recolectan TODOS los faltantes (productos de reventa con receta
+  //    consumen insumos, no su propio stock). Si hay faltantes y NO se autorizó la venta sin
+  //    stock, se lanza StockInsuficienteError con el detalle (la UI muestra el modal y reintenta
+  //    con permitir_sin_stock=true). Si se autorizó, se continúa y el stock puede quedar negativo.
+  const faltantes: FaltanteStock[] = [];
+
+  // 3a) Productos de reventa (controla_stock=true, sin receta).
   for (const [pid, need] of qtyByProduct) {
     const p = stockMap.get(pid)!;
     if (recetaByProducto.has(pid)) continue;
     if (!p.controlaStock) continue;
     if (p.stock < need) {
-      throw new Error(`Stock insuficiente para "${p.nombre}". Disponible: ${p.stock} u.; requerido: ${need}.`);
+      faltantes.push({
+        tipo: "producto", producto_id: pid, nombre: p.nombre, sku: p.sku,
+        stock_actual: p.stock, solicitado: need, faltante: Math.round((need - p.stock) * 1e6) / 1e6,
+      });
     }
   }
 
-  // 3b) Validar disponibilidad de materia prima (insumos) requerida por las recetas.
+  // 3b) Materia prima (insumos) requerida por las recetas.
   for (const [insId, need] of insumoNeed) {
     const m = insumoMeta.get(insId)!;
     if (m.stock < need) {
-      throw new Error(`Materia prima insuficiente: "${m.nombre}". Disponible: ${m.stock}; requerido por esta venta: ${need}.`);
+      faltantes.push({
+        tipo: "insumo", producto_id: insId, nombre: m.nombre, sku: m.sku,
+        stock_actual: m.stock, solicitado: need, faltante: Math.round((need - m.stock) * 1e6) / 1e6,
+      });
     }
+  }
+
+  if (faltantes.length > 0 && !params.permitirSinStock) {
+    throw new StockInsuficienteError(faltantes);
+  }
+
+  // Auditoría: si se autorizó vender sin stock y hubo faltantes, dejar constancia en la venta.
+  let observacionesFinal = params.observaciones;
+  if (faltantes.length > 0 && params.permitirSinStock) {
+    const detalle = faltantes
+      .map((f) => `${f.nombre} (stock ${f.stock_actual}, pedido ${f.solicitado}, falta ${f.faltante})`)
+      .join("; ");
+    const nota = `Venta con stock insuficiente autorizada: ${detalle}`;
+    observacionesFinal = (observacionesFinal ? `${observacionesFinal} | ${nota}` : nota).slice(0, 4000);
   }
 
   // 4) Numero control VTA-XXXXXX (best-effort: race posible en entorno multi-usuario).
@@ -283,7 +335,7 @@ export async function createVentaTransaccionalPg(
       plazo_dias: params.plazoDias,
       metodo_pago: params.metodoPago,
       fecha: fechaIso,
-      observaciones: params.observaciones,
+      observaciones: observacionesFinal,
     })
     .select("id")
     .single();

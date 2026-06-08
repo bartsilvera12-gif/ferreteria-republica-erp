@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
-import { saveVenta } from "@/lib/ventas/storage";
+import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
 import { getProductos } from "@/lib/inventario/storage";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import type { Producto } from "@/lib/inventario/types";
@@ -108,6 +108,9 @@ export default function NuevaVentaPage() {
   const [items, setItems]           = useState<LineaVenta[]>([]);
   const [errorLinea, setErrorLinea] = useState<string | null>(null);
   const [errorVenta, setErrorVenta] = useState<string | null>(null);
+  // Venta sin stock: faltantes devueltos por el backend + modal de confirmación.
+  const [faltantes, setFaltantes] = useState<FaltanteStock[]>([]);
+  const [confirmSinStockOpen, setConfirmSinStockOpen] = useState(false);
 
   // ── Condiciones de la venta ───────────────────────────────────────────────
   // Instancia dedicada: siempre Guaraníes.
@@ -192,15 +195,8 @@ export default function NuevaVentaPage() {
     const { producto: p, cantidad, precio_input, iva, tipo_precio } = payload;
     const precioPyg = precio_input;
     // Verificar stock vs lo ya cargado SOLO si el producto controla stock.
-    // Productos del Menú (controla_stock=false) no validan stock.
-    const ctrlStock = (p as { controla_stock?: boolean }).controla_stock !== false;
-    if (ctrlStock) {
-      const yaEnCarrito = items.filter((i) => i.producto_id === p.id).reduce((s, i) => s + i.cantidad, 0);
-      const disp = p.stock_actual - yaEnCarrito;
-      if (cantidad > disp) {
-        return false;
-      }
-    }
+    // Venta sin stock (Fase 5): NO se bloquea por falta de stock al agregar; la
+    // confirmación se pide al registrar la venta. El Menú (controla_stock=false) tampoco valida.
     const subtotal = cantidad * precioPyg;
     const montoIva = calcIva(iva, subtotal);
     const totalLinea = subtotal + montoIva;
@@ -313,11 +309,12 @@ export default function NuevaVentaPage() {
   const lineaMontoIva   = calcIva(lineaIva, lineaSubtotal);
   const lineaTotalLinea = lineaSubtotal + lineaMontoIva;
 
-  // Solo validar stock para productos que lo controlan (Reventa).
-  // Productos del Menú (controla_stock=false) se venden sin restricción de stock.
+  // Aviso de stock (no bloquea): si falta stock se permite agregar igual y se pide
+  // confirmación al confirmar la venta (venta sin stock con confirmación, Fase 5).
+  // Productos del Menú (controla_stock=false) no controlan stock.
   const stockInsuf  = prodSel !== undefined && prodSelControlaStock && cantNum > 0 && cantNum > stockDisp;
   const lineaValida =
-    !!prodSel && cantNum > 0 && precioGs > 0 && !stockInsuf;
+    !!prodSel && cantNum > 0 && precioGs > 0;
 
   const totalSubtotal = items.reduce((s, i) => s + i.subtotal, 0);
   const totalIva      = items.reduce((s, i) => s + i.monto_iva, 0);
@@ -439,10 +436,7 @@ export default function NuevaVentaPage() {
     if (!prodSel)          return setErrorLinea("Seleccioná un producto.");
     if (cantNum <= 0)      return setErrorLinea("La cantidad debe ser mayor a 0.");
     if (precioGs <= 0)     return setErrorLinea("El precio de venta debe ser mayor a 0.");
-    if (stockInsuf)
-      return setErrorLinea(
-        `Stock insuficiente para "${prodSel.nombre}". Disponible: ${stockDisp} u.`
-      );
+    // Nota: si falta stock NO se bloquea; se confirma al registrar la venta.
 
     setItems((prev) => [
       ...prev,
@@ -476,11 +470,8 @@ export default function NuevaVentaPage() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
-  async function handleSubmit(e: React.FormEvent) {
-    e.preventDefault();
-    setErrorVenta(null);
-    if (!ventaValida) return;
-
+  /** Envía la venta. Con `permitirSinStock=true` autoriza vender aunque falte stock. */
+  async function enviarVenta(permitirSinStock: boolean) {
     const resultado = await saveVenta(
       {
         items,
@@ -501,10 +492,17 @@ export default function NuevaVentaPage() {
         referencia: pagoReferencia.trim() || null,
         titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
         observacion: pagoObservacion.trim() || null,
-      }
+      },
+      { permitirSinStock }
     );
 
     if (!resultado.success) {
+      // Falta stock sin autorizar → abrir modal de confirmación con el detalle.
+      if (resultado.faltantes && resultado.faltantes.length > 0) {
+        setFaltantes(resultado.faltantes);
+        setConfirmSinStockOpen(true);
+        return;
+      }
       setErrorVenta(resultado.error);
       return;
     }
@@ -513,6 +511,19 @@ export default function NuevaVentaPage() {
       window.open(`/api/ventas/${resultado.venta.id}/ticket?mode=comandas&auto=1`, "_blank", "noopener");
     } catch {}
     router.push("/ventas");
+  }
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErrorVenta(null);
+    if (!ventaValida) return;
+    await enviarVenta(false);
+  }
+
+  async function confirmarVentaSinStock() {
+    setConfirmSinStockOpen(false);
+    setErrorVenta(null);
+    await enviarVenta(true);
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
@@ -1102,6 +1113,58 @@ export default function NuevaVentaPage() {
             <button type="button" onClick={() => setCobroModalOpen(false)} className="w-full rounded-lg bg-[#0EA5E9] py-2 text-sm font-medium text-white hover:bg-[#0284C7]">
               Listo
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* Modal de confirmación: venta sin stock suficiente */}
+      {confirmSinStockOpen && faltantes.length > 0 && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmSinStockOpen(false)}>
+          <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-2">
+              <span className="text-amber-500 text-xl leading-none">⚠</span>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-800">Hay productos/insumos sin stock suficiente</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Revisá el detalle. Podés vender igual: el stock quedará negativo y se registrará el movimiento de salida.</p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto rounded-lg border border-slate-200">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="bg-slate-50 text-slate-600 text-xs">
+                    <th className="py-2 px-3 font-medium">Producto / Insumo</th>
+                    <th className="py-2 px-3 font-medium text-right">Stock actual</th>
+                    <th className="py-2 px-3 font-medium text-right">Solicitado</th>
+                    <th className="py-2 px-3 font-medium text-right">Faltante</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {faltantes.map((f) => (
+                    <tr key={f.producto_id} className="border-t border-slate-100">
+                      <td className="py-2 px-3">
+                        <span className="font-medium text-slate-800">{f.nombre}</span>
+                        <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${f.tipo === "insumo" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
+                          {f.tipo === "insumo" ? "Insumo" : "Producto"}
+                        </span>
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums">{f.stock_actual}</td>
+                      <td className="py-2 px-3 text-right tabular-nums">{f.solicitado}</td>
+                      <td className="py-2 px-3 text-right tabular-nums font-semibold text-red-600">{f.faltante}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
+              <button type="button" onClick={() => setConfirmSinStockOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">
+                Cancelar
+              </button>
+              <button type="button" onClick={() => void confirmarVentaSinStock()} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600">
+                Confirmar venta de todos modos
+              </button>
+            </div>
           </div>
         </div>
       )}

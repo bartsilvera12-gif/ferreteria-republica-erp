@@ -158,17 +158,8 @@ export default function ProductPickerModal({
     if (cantNum <= 0) { setFeedback("Cantidad debe ser > 0"); return; }
     if (precioNum <= 0) { setFeedback("Precio debe ser > 0"); return; }
     if (moneda === "USD" && tipoCambio <= 0) { setFeedback("Falta tipo de cambio en la venta"); return; }
-    // Solo validar stock si el producto controla stock (Reventa).
-    // Productos del Menú (controla_stock=false) se agregan sin restricción.
-    const ctrlStock = sel.controla_stock !== false;
-    if (ctrlStock) {
-      const enCarrito = excludeIds.filter((id) => id === sel.id).length;
-      const disp = sel.stock_actual - enCarrito;
-      if (cantNum > disp) {
-        setFeedback(`Stock insuficiente (disponible ${disp})`);
-        return;
-      }
-    }
+    // Venta sin stock (Fase 5): NO se bloquea por falta de stock; se permite agregar
+    // y la confirmación se pide al registrar la venta.
     const ok = onAgregar({ producto: sel, cantidad: cantNum, precio_input: precioNum, iva, tipo_precio: tipoPrecio });
     if (ok !== false) {
       setFeedback("Producto agregado ✓");
@@ -251,10 +242,10 @@ export default function ProductPickerModal({
                   return (
                     <li
                       key={p.id}
-                      onClick={() => !sinStock && selectProducto(p)}
-                      className={`flex items-center gap-3 px-4 py-3 transition-colors ${
-                        sinStock ? "opacity-50 cursor-not-allowed" : "cursor-pointer"
-                      } ${isSel ? "bg-sky-50" : "hover:bg-slate-50"}`}
+                      onClick={() => selectProducto(p)}
+                      className={`flex items-center gap-3 px-4 py-3 transition-colors cursor-pointer ${
+                        isSel ? "bg-sky-50" : "hover:bg-slate-50"
+                      }`}
                     >
                       <div className="w-14 h-14 rounded-lg bg-slate-100 flex items-center justify-center overflow-hidden shrink-0">
                         {p.imagen_url ? (

@@ -1,9 +1,20 @@
 import type { Venta } from "./types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 
+/** Un faltante de stock devuelto por el backend (409) para el modal de confirmación. */
+export type FaltanteStock = {
+  tipo: "producto" | "insumo";
+  producto_id: string;
+  nombre: string;
+  sku: string;
+  stock_actual: number;
+  solicitado: number;
+  faltante: number;
+};
+
 export type ResultadoGuardarVenta =
   | { success: true; venta: Venta }
-  | { success: false; error: string };
+  | { success: false; error: string; faltantes?: FaltanteStock[] };
 
 /** Modalidad del pedido (instancia gastronómica En lo de Mari). */
 export type PedidoCocinaInput = {
@@ -53,7 +64,8 @@ export async function getVentas(): Promise<Venta[]> {
 export async function saveVenta(
   datos: Omit<Venta, "id" | "numero_control" | "fecha"> & { cliente_id?: string | null },
   pedidoCocina?: PedidoCocinaInput,
-  pagoDetalle?: PagoDetalleInput | null
+  pagoDetalle?: PagoDetalleInput | null,
+  opts?: { permitirSinStock?: boolean }
 ): Promise<ResultadoGuardarVenta> {
   if (!datos.items || datos.items.length === 0) {
     return { success: false, error: "La venta debe tener al menos un producto." };
@@ -77,6 +89,7 @@ export async function saveVenta(
         observaciones: null,
         pedido_cocina: pedidoCocina ?? null,
         pago_detalle: pagoDetalle ?? null,
+        permitir_sin_stock: opts?.permitirSinStock === true,
       }),
     });
 
@@ -84,12 +97,14 @@ export async function saveVenta(
       success?: boolean;
       data?: { venta?: Venta };
       error?: string;
+      faltantes?: FaltanteStock[];
     };
 
     if (!res.ok || !json.success || !json.data?.venta) {
       return {
         success: false,
         error: json.error ?? `No se pudo registrar la venta (${res.status}).`,
+        faltantes: Array.isArray(json.faltantes) ? json.faltantes : undefined,
       };
     }
 
