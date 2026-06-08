@@ -37,6 +37,7 @@ export default function NuevoProductoPage() {
     markup: "",
     precio_venta: "",
     precio_mayorista: "",
+    precio_distribuidor: "",
     cantidad_minima_mayorista: "",
     stock_actual: "",
     stock_minimo: "",
@@ -321,6 +322,7 @@ export default function NuevoProductoPage() {
           costo_promedio: parseFloat(form.costo_promedio) || 0,
           precio_venta: parseFloat(form.precio_venta) || 0,
           precio_mayorista: form.precio_mayorista.trim() !== "" ? parseFloat(form.precio_mayorista) || null : null,
+          precio_distribuidor: form.precio_distribuidor.trim() !== "" ? parseFloat(form.precio_distribuidor) || null : null,
           cantidad_minima_mayorista: form.cantidad_minima_mayorista.trim() !== "" ? parseFloat(form.cantidad_minima_mayorista) || null : null,
           stock_actual: parseInt(form.stock_actual) || 0,
           stock_minimo: parseInt(form.stock_minimo) || 0,
@@ -755,8 +757,18 @@ export default function NuevoProductoPage() {
                     className={inputClass}
                   />
                 </div>
+                <div>
+                  <label className={labelClass}>Precio distribuidor (Gs.) <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <MontoInput
+                    value={form.precio_distribuidor}
+                    onChange={(n) => setForm((prev) => ({ ...prev, precio_distribuidor: String(n) }))}
+                    placeholder="Ej: 18000"
+                    className={inputClass}
+                    decimals={false}
+                  />
+                </div>
                 <p className="sm:col-span-2 text-xs text-gray-400">
-                  Informativo: el precio mayorista no se aplica automáticamente en ventas (por ahora se vende al precio minorista).
+                  Precios por canal: en Ventas el cajero elige Minorista, Mayorista o Distribuidor. El precio distribuidor es comercial (no es el costo).
                 </p>
               </div>
             )}

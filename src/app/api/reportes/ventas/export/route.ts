@@ -5,7 +5,7 @@ import { getReporteVentas } from "@/lib/reportes/server/reportes-pg";
 import { asuncionMesBoundsUtc, normalizarMes } from "@/lib/fechas/asuncion-bounds";
 import { sheetFromRows, buildXlsxBufferSheets, xlsxResponseHeaders } from "@/lib/excel/export";
 
-const TP_LABEL: Record<string, string> = { minorista: "Minorista", mayorista: "Mayorista", costo: "Al costo" };
+const TP_LABEL: Record<string, string> = { minorista: "Minorista", mayorista: "Mayorista", distribuidor: "Distribuidor", costo: "Al costo" };
 
 /** GET /api/reportes/ventas/export?mes=YYYY-MM → XLSX (Resumen + Por tipo de precio + Por producto + Ventas + Items). */
 export async function GET(request: NextRequest) {
@@ -27,7 +27,7 @@ export async function GET(request: NextRequest) {
       { concepto: "Unidades vendidas", valor: r.unidadesVendidas },
     ];
 
-    const tipoRows = (["minorista", "mayorista", "costo"] as const).map((t) => ({
+    const tipoRows = (["minorista", "mayorista", "distribuidor", "costo"] as const).map((t) => ({
       tipo: TP_LABEL[t], items: r.porTipoPrecio[t].items, total: r.porTipoPrecio[t].total,
     }));
 

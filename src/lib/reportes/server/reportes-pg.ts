@@ -290,7 +290,7 @@ export async function getReporteCompras(
 /** Normaliza tipo_precio (null/'' → minorista). */
 const TP_SQL = `COALESCE(NULLIF(vi.tipo_precio,''),'minorista')`;
 function normTipoPrecio(v: unknown): TipoPrecioReporte {
-  return v === "mayorista" || v === "costo" ? v : "minorista";
+  return v === "mayorista" || v === "distribuidor" || v === "costo" ? v : "minorista";
 }
 
 export async function getReporteVentas(
@@ -349,6 +349,7 @@ export async function getReporteVentas(
   const porTipoPrecio: Record<TipoPrecioReporte, { items: number; total: number }> = {
     minorista: { items: 0, total: 0 },
     mayorista: { items: 0, total: 0 },
+    distribuidor: { items: 0, total: 0 },
     costo: { items: 0, total: 0 },
   };
   for (const r of tipoPrecio.rows) {

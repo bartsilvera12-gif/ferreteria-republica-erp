@@ -100,7 +100,7 @@ export interface ComprasReporte {
 
 // ── Ventas (header `ventas` + líneas `ventas_items`, con tipo_precio) ──────────
 
-export type TipoPrecioReporte = "minorista" | "mayorista" | "costo";
+export type TipoPrecioReporte = "minorista" | "mayorista" | "distribuidor" | "costo";
 
 /** Totales por nivel de precio: monto e ítems (líneas). */
 export interface VentaTipoPrecioTotal {

@@ -29,13 +29,18 @@ function calcIva(tipo: TipoIvaVenta, base: number) {
  */
 function precioPorTipo(p: Producto, tipo: TipoPrecioVenta): number {
   if (tipo === "mayorista") return p.precio_mayorista != null && p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
-  if (tipo === "costo") return p.costo_promedio ?? 0;
+  if (tipo === "distribuidor") return p.precio_distribuidor != null && p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
+  if (tipo === "costo") return p.costo_promedio ?? 0; // histórico: ya no se ofrece en la UI
   return p.precio_venta;
 }
+
+/** Tipos de precio ofrecidos en la UI (sin 'costo', que queda solo como histórico). */
+const TIPOS_PRECIO_UI: TipoPrecioVenta[] = ["minorista", "mayorista", "distribuidor"];
 
 const tipoPrecioLabel: Record<TipoPrecioVenta, string> = {
   minorista: "Minorista",
   mayorista: "Mayorista",
+  distribuidor: "Distribuidor",
   costo: "Al costo",
 };
 
@@ -154,6 +159,7 @@ export default function NuevaVentaPage() {
       sku: p.sku,
       precio_venta: p.precio_venta,
       precio_mayorista: p.precio_mayorista ?? null,
+      precio_distribuidor: p.precio_distribuidor ?? null,
       stock_actual: p.stock_actual,
       unidad_medida: p.unidad_medida,
       costo_promedio: p.costo_promedio ?? 0,
@@ -751,7 +757,7 @@ export default function NuevaVentaPage() {
             <div className="mt-4">
               <label className={labelClass}>Tipo de precio</label>
               <div className="flex max-w-md border border-slate-200 rounded-lg overflow-hidden">
-                {(["minorista", "mayorista", "costo"] as TipoPrecioVenta[]).map((t) => (
+                {TIPOS_PRECIO_UI.map((t) => (
                   <button
                     key={t}
                     type="button"
@@ -827,6 +833,7 @@ export default function NuevaVentaPage() {
                           <span>{item.producto_nombre}</span>
                           <span className={`ml-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold align-middle ${
                             item.tipo_precio === "mayorista" ? "bg-indigo-100 text-indigo-700"
+                            : item.tipo_precio === "distribuidor" ? "bg-emerald-100 text-emerald-700"
                             : item.tipo_precio === "costo" ? "bg-amber-100 text-amber-700"
                             : "bg-slate-100 text-slate-600"
                           }`}>

@@ -23,6 +23,7 @@ function formatFecha(iso: string) {
 const TP: { key: TipoPrecioReporte; label: string; badge: string }[] = [
   { key: "minorista", label: "Minorista", badge: "bg-slate-100 text-slate-600" },
   { key: "mayorista", label: "Mayorista", badge: "bg-indigo-100 text-indigo-700" },
+  { key: "distribuidor", label: "Distribuidor", badge: "bg-emerald-100 text-emerald-700" },
   { key: "costo", label: "Al costo", badge: "bg-amber-100 text-amber-700" },
 ];
 

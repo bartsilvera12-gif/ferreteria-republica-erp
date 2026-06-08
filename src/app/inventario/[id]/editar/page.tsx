@@ -46,6 +46,7 @@ export default function EditarProductoPage() {
     precio_venta: "",
     precio_mayorista: "",
     cantidad_minima_mayorista: "",
+    precio_distribuidor: "",
     stock_actual: "",
     stock_minimo: "",
     unidad_medida: "",
@@ -179,6 +180,7 @@ export default function EditarProductoPage() {
         precio_venta: String(p.precio_venta),
         precio_mayorista: p.precio_mayorista != null ? String(p.precio_mayorista) : "",
         cantidad_minima_mayorista: p.cantidad_minima_mayorista != null ? String(p.cantidad_minima_mayorista) : "",
+        precio_distribuidor: p.precio_distribuidor != null ? String(p.precio_distribuidor) : "",
         stock_actual: String(p.stock_actual),
         stock_minimo: String(p.stock_minimo),
         unidad_medida: p.unidad_medida,
@@ -302,6 +304,7 @@ export default function EditarProductoPage() {
         precio_venta: parseFloat(form.precio_venta) || 0,
         precio_mayorista: form.precio_mayorista.trim() !== "" ? parseFloat(form.precio_mayorista) || null : null,
         cantidad_minima_mayorista: form.cantidad_minima_mayorista.trim() !== "" ? parseFloat(form.cantidad_minima_mayorista) || null : null,
+        precio_distribuidor: form.precio_distribuidor.trim() !== "" ? parseFloat(form.precio_distribuidor) || null : null,
         stock_actual: parseInt(form.stock_actual) || 0,
         stock_minimo: parseInt(form.stock_minimo) || 0,
         unidad_medida: form.unidad_medida.trim().toUpperCase() || "UNIDAD",
@@ -765,8 +768,18 @@ export default function EditarProductoPage() {
                     className={inputClass}
                   />
                 </div>
+                <div>
+                  <label className={labelClass}>Precio distribuidor (Gs.) <span className="text-gray-400 font-normal">(opcional)</span></label>
+                  <MontoInput
+                    value={form.precio_distribuidor}
+                    onChange={(n) => setForm((prev) => ({ ...prev, precio_distribuidor: String(n) }))}
+                    placeholder="Ej: 18000"
+                    className={inputClass}
+                    decimals={false}
+                  />
+                </div>
                 <p className="sm:col-span-2 text-xs text-gray-400">
-                  Informativo: el precio mayorista no se aplica automáticamente en ventas (por ahora se vende al precio minorista).
+                  Precios por canal: en Ventas el cajero elige Minorista, Mayorista o Distribuidor. El precio distribuidor es comercial (no es el costo).
                 </p>
               </div>
             )}

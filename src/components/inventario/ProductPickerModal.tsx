@@ -10,6 +10,7 @@ export interface ProductoPickerItem {
   codigo_barras_interno: boolean;
   precio_venta: number;
   precio_mayorista: number;
+  precio_distribuidor?: number | null;
   costo_promedio: number;
   stock_actual: number;
   stock_minimo: number;
@@ -37,21 +38,21 @@ export interface AgregarVentaPayload {
   precio_input: number;
   iva: "EXENTA" | "5%" | "10%";
   /** Nivel de precio elegido en el panel de detalle. */
-  tipo_precio: "minorista" | "mayorista" | "costo";
+  tipo_precio: "minorista" | "mayorista" | "distribuidor";
 }
 
 /**
  * Precio unitario (en PYG) según el tipo elegido, con fallbacks:
  *  minorista → precio_venta;
- *  mayorista → precio_mayorista (>0) o fallback a precio_venta;
- *  costo     → costo_promedio.
+ *  mayorista    → precio_mayorista (>0) o fallback a precio_venta;
+ *  distribuidor → precio_distribuidor (>0) o fallback a precio_venta.
  */
 function precioPorTipoPicker(
   p: ProductoPickerItem,
-  tipo: "minorista" | "mayorista" | "costo"
+  tipo: "minorista" | "mayorista" | "distribuidor"
 ): number {
   if (tipo === "mayorista") return p.precio_mayorista != null && p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
-  if (tipo === "costo") return p.costo_promedio ?? 0;
+  if (tipo === "distribuidor") return p.precio_distribuidor != null && p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
   return p.precio_venta;
 }
 
@@ -90,7 +91,7 @@ export default function ProductPickerModal({
   const [cantidad, setCantidad] = useState("1");
   const [precio, setPrecio] = useState("");
   const [iva, setIva] = useState<"EXENTA" | "5%" | "10%">(ivaDefault);
-  const [tipoPrecio, setTipoPrecio] = useState<"minorista" | "mayorista" | "costo">("minorista");
+  const [tipoPrecio, setTipoPrecio] = useState<"minorista" | "mayorista" | "distribuidor">("minorista");
   const [feedback, setFeedback] = useState<string | null>(null);
 
   /** Precio en la moneda activa de la venta (string para el input). */
@@ -100,7 +101,7 @@ export default function ProductPickerModal({
   }
 
   /** Cambia el tipo de precio del producto seleccionado y ajusta el precio unitario. */
-  function handleTipoPrecio(tipo: "minorista" | "mayorista" | "costo") {
+  function handleTipoPrecio(tipo: "minorista" | "mayorista" | "distribuidor") {
     setTipoPrecio(tipo);
     if (sel) setPrecio(precioEnMonedaStr(precioPorTipoPicker(sel, tipo)));
     setFeedback(null);
@@ -363,7 +364,7 @@ export default function ProductPickerModal({
                   <div>
                     <label className="block text-[11px] uppercase text-slate-400 mb-1">Tipo de precio</label>
                     <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-                      {(["minorista", "mayorista", "costo"] as const).map((t) => (
+                      {(["minorista", "mayorista", "distribuidor"] as const).map((t) => (
                         <button
                           key={t}
                           type="button"
@@ -373,7 +374,7 @@ export default function ProductPickerModal({
                           }`}
                         >
                           <span className="block text-xs font-medium">
-                            {t === "minorista" ? "Minorista" : t === "mayorista" ? "Mayorista" : "Al costo"}
+                            {t === "minorista" ? "Minorista" : t === "mayorista" ? "Mayorista" : "Distribuidor"}
                           </span>
                           <span className={`block text-[10px] tabular-nums ${tipoPrecio === t ? "text-white/90" : "text-slate-400"}`}>
                             {formatGs(precioPorTipoPicker(sel, t))}

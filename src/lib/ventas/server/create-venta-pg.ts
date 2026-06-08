@@ -8,7 +8,7 @@ export interface CreateVentaItemInput {
   precio_venta_original: number;
   precio_venta: number;
   tipo_iva: "EXENTA" | "5%" | "10%";
-  tipo_precio: "minorista" | "mayorista" | "costo";
+  tipo_precio: "minorista" | "mayorista" | "distribuidor" | "costo";
   subtotal: number;
   monto_iva: number;
   total_linea: number;
