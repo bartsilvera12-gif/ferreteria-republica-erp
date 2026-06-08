@@ -86,6 +86,7 @@ export async function apiCreateCliente(data: {
   condicion_pago?: string;
   moneda_preferida?: string;
   estado?: string;
+  usa_nota_remision?: boolean;
   plan_comercial_id?: string | null;
   vendedor_asignado?: string;
   vendedor_usuario_id?: string | null;

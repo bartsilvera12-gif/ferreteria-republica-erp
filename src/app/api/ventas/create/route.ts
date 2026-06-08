@@ -182,7 +182,7 @@ export async function POST(request: NextRequest) {
 
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
 
-    const { ventaId, numeroControl, fechaIso } = await createVentaTransaccionalPg({
+    const { ventaId, numeroControl, fechaIso, notaRemisionNumero } = await createVentaTransaccionalPg({
       schema,
       empresaId: auth.empresa_id,
       clienteId,
@@ -198,6 +198,7 @@ export async function POST(request: NextRequest) {
       totalDeclarado,
       pedidoCocina,
       permitirSinStock,
+      generaNotaRemision: o.genera_nota_remision === true,
     });
 
     // Detalle de cobro (conciliación) — best-effort, FUERA de la transacción de
@@ -248,7 +249,7 @@ export async function POST(request: NextRequest) {
       total: tot,
     });
 
-    return NextResponse.json(successResponse({ venta }));
+    return NextResponse.json(successResponse({ venta, nota_remision_numero: notaRemisionNumero }));
   } catch (err) {
     // Falta de stock sin autorizar: 409 con el detalle de faltantes para que la UI
     // muestre el modal de confirmación y reintente con permitir_sin_stock=true.

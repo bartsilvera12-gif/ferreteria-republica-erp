@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     const ventasQ = await ctx.supabase
       .from("ventas")
       .select(
-        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha"
+        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, genera_nota_remision, nota_remision_numero"
       )
       .eq("empresa_id", empresaId)
       .order("fecha", { ascending: false })
@@ -108,6 +108,8 @@ export async function GET(request: NextRequest) {
           : (r as unknown as { metodo_pago?: string }).metodo_pago === "efectivo"
           ? "efectivo"
           : undefined,
+        genera_nota_remision: (r as unknown as { genera_nota_remision?: boolean }).genera_nota_remision === true,
+        nota_remision_numero: (r as unknown as { nota_remision_numero?: string | null }).nota_remision_numero ?? null,
         fecha: r.fecha,
       };
     });

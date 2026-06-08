@@ -80,6 +80,7 @@ function NuevoClienteForm() {
     prospecto_id:          null as string | null,
     tipo_servicio_cliente: "" as string,
     estado:                "activo" as "activo" | "inactivo",
+    usa_nota_remision:     false,
     sifen_receptor_manual: false,
     sifen_receptor_naturaleza: "" as string,
     sifen_ti_ope: "" as string,
@@ -319,6 +320,7 @@ function NuevoClienteForm() {
       condicion_pago: form.condicion_pago.trim().toUpperCase() || undefined,
       moneda_preferida: form.moneda_preferida,
       estado: form.estado,
+      usa_nota_remision: form.usa_nota_remision,
       plan_comercial_id: formSusc.plan_id.trim() || null,
       vendedor_asignado: form.vendedor_asignado.trim().toUpperCase() || undefined,
       vendedor_usuario_id: form.vendedor_usuario_id.trim() || null,
@@ -576,6 +578,17 @@ function NuevoClienteForm() {
                 className={inputClass}
               />
             </div>
+
+            <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={form.usa_nota_remision}
+                onChange={(e) => setForm((p) => ({ ...p, usa_nota_remision: e.target.checked }))}
+                className="h-4 w-4 rounded border-slate-300 text-[#0EA5E9] focus:ring-[#0EA5E9]"
+              />
+              Usa nota de remisión
+              <span className="text-xs text-slate-400">(se generará junto al ticket al venderle)</span>
+            </label>
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>

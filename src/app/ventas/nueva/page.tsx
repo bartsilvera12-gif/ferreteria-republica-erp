@@ -121,12 +121,14 @@ export default function NuevaVentaPage() {
   const [plazoDias, setPlazoDias] = useState("");
 
   // Cliente (opcional). Si se selecciona, se envía cliente_id al crear la venta.
-  type ClienteLite = { id: string; label: string; ruc: string | null };
+  type ClienteLite = { id: string; label: string; ruc: string | null; usa_nota_remision: boolean };
   const [clientes, setClientes] = useState<ClienteLite[]>([]);
   const [clienteId, setClienteId] = useState("");
   const [clienteQuery, setClienteQuery] = useState("");
   const [clienteOpen, setClienteOpen] = useState(false);
   const clienteContainerRef = useRef<HTMLDivElement>(null);
+  // Nota de remisión: activada si el cliente la usa; toggle manual solo con cliente.
+  const [generaNotaRemision, setGeneraNotaRemision] = useState(false);
 
   // ── Cobro (solo CONTADO, no se persiste — solo ayuda al cajero) ───────────
   const [montoRecibido, setMontoRecibido] = useState("");
@@ -256,6 +258,7 @@ export default function NuevaVentaPage() {
           id: String(r.id),
           label: s(r.empresa) || s(r.nombre_contacto) || s(r.nombre) || "Cliente",
           ruc: s(r.ruc) || null,
+          usa_nota_remision: r.usa_nota_remision === true,
         }));
         setClientes(lite);
       })
@@ -484,6 +487,7 @@ export default function NuevaVentaPage() {
         plazo_dias:   tipoVenta === "CREDITO" ? plazoDiasNum : undefined,
         metodo_pago:  metodoPago,
         cliente_id:   clienteId || null,
+        genera_nota_remision: !!clienteId && generaNotaRemision,
       },
       undefined,
       {
@@ -562,7 +566,7 @@ export default function NuevaVentaPage() {
                 {clienteSel && (
                   <button
                     type="button"
-                    onClick={() => { setClienteId(""); setClienteQuery(""); }}
+                    onClick={() => { setClienteId(""); setClienteQuery(""); setGeneraNotaRemision(false); }}
                     className="shrink-0 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
                   >
                     Quitar
@@ -578,11 +582,12 @@ export default function NuevaVentaPage() {
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => { setClienteId(c.id); setClienteQuery(""); setClienteOpen(false); }}
+                        onClick={() => { setClienteId(c.id); setClienteQuery(""); setClienteOpen(false); setGeneraNotaRemision(c.usa_nota_remision); }}
                         className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
                       >
                         <span className="font-medium text-gray-800">{c.label}</span>
                         {c.ruc && <span className="ml-2 text-xs text-gray-400">RUC {c.ruc}</span>}
+                        {c.usa_nota_remision && <span className="ml-2 text-[10px] rounded-full bg-sky-100 text-sky-700 px-1.5 py-0.5 font-semibold">Nota remisión</span>}
                       </button>
                     ))
                   )}
@@ -591,6 +596,26 @@ export default function NuevaVentaPage() {
               <p className="mt-1 text-[11px] text-gray-400">
                 Si no seleccionás cliente, la venta se registra sin cliente.
               </p>
+
+              {/* Nota de remisión: solo con cliente. Si el cliente la usa, viene activada. */}
+              {clienteSel && (
+                <div className="mt-2 rounded-lg border border-sky-100 bg-sky-50/60 px-3 py-2">
+                  {clienteSel.usa_nota_remision && (
+                    <p className="mb-1.5 text-[11px] text-sky-700">
+                      Este cliente usa nota de remisión. Se generará junto al ticket.
+                    </p>
+                  )}
+                  <label className="flex items-center gap-2 text-xs text-slate-700 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={generaNotaRemision}
+                      onChange={(e) => setGeneraNotaRemision(e.target.checked)}
+                      className="h-4 w-4 rounded border-slate-300 text-[#0EA5E9] focus:ring-[#0EA5E9]"
+                    />
+                    Generar nota de remisión
+                  </label>
+                </div>
+              )}
             </div>
 
             {/* Condición: Contado / Crédito */}

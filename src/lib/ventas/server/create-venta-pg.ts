@@ -65,6 +65,8 @@ export interface CreateVentaPgParams {
   pedidoCocina?: CreateVentaPedidoCocinaInput | null;
   /** Si true, autoriza vender aunque falte stock de productos o insumos (stock puede quedar negativo). */
   permitirSinStock?: boolean;
+  /** Si true y hay cliente, la venta emite nota de remisión (documento NO fiscal) con número NR-XXXXXX. */
+  generaNotaRemision?: boolean;
 }
 
 function recalcTotals(items: CreateVentaItemInput[]) {
@@ -99,7 +101,7 @@ const TOL = 2;
  */
 export async function createVentaTransaccionalPg(
   params: CreateVentaPgParams
-): Promise<{ ventaId: string; numeroControl: string; fechaIso: string }> {
+): Promise<{ ventaId: string; numeroControl: string; fechaIso: string; notaRemisionNumero: string | null }> {
   const items = params.items;
   if (!items.length) {
     throw new Error("La venta debe tener al menos un ítem.");
@@ -318,6 +320,28 @@ export async function createVentaTransaccionalPg(
   const numeroControl = `VTA-${String(nextNum).padStart(6, "0")}`;
   const fechaIso = new Date().toISOString();
 
+  // 4b) Nota de remisión (solo si se solicita Y hay cliente). Numeración simple por
+  //     empresa: NR-XXXXXX. Documento NO fiscal — no toca SIFEN/timbrado.
+  const generaNota = params.generaNotaRemision === true && !!params.clienteId;
+  let notaRemisionNumero: string | null = null;
+  if (generaNota) {
+    const nrQ = await sb
+      .from("ventas")
+      .select("nota_remision_numero")
+      .eq("empresa_id", params.empresaId)
+      .like("nota_remision_numero", "NR-%")
+      .order("nota_remision_numero", { ascending: false })
+      .limit(1);
+    if (nrQ.error) throw new Error(nrQ.error.message);
+    let nextNr = 1;
+    const lastNr = (nrQ.data?.[0] as { nota_remision_numero?: string } | undefined)?.nota_remision_numero;
+    if (lastNr) {
+      const m = lastNr.match(/^NR-(\d+)$/);
+      if (m) nextNr = parseInt(m[1], 10) + 1;
+    }
+    notaRemisionNumero = `NR-${String(nextNr).padStart(6, "0")}`;
+  }
+
   // 5) Insertar venta
   const insVenta = await sb
     .from("ventas")
@@ -334,6 +358,8 @@ export async function createVentaTransaccionalPg(
       tipo_venta: params.tipoVenta,
       plazo_dias: params.plazoDias,
       metodo_pago: params.metodoPago,
+      genera_nota_remision: generaNota,
+      nota_remision_numero: notaRemisionNumero,
       fecha: fechaIso,
       observaciones: observacionesFinal,
     })
@@ -514,7 +540,7 @@ export async function createVentaTransaccionalPg(
       if (insProy.error) throw new Error(insProy.error.message);
     }
 
-    return { ventaId, numeroControl, fechaIso };
+    return { ventaId, numeroControl, fechaIso, notaRemisionNumero };
   } catch (err) {
     await rollback();
     throw err;

@@ -41,6 +41,9 @@ export interface Cliente {
   ciudad?:             string;
   pais?:               string;
 
+  /** El cliente requiere nota de remisión al venderle (documento no fiscal). */
+  usa_nota_remision?:  boolean;
+
   sitio_web?:          string;
   instagram?:          string;
   linkedin?:           string;

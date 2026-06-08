@@ -42,5 +42,10 @@ export interface Venta {
 
   metodo_pago?: MetodoPago;  // En lo de Mari: efectivo/tarjeta/transferencia
 
+  /** La venta emite nota de remisión (documento no fiscal). */
+  genera_nota_remision?: boolean;
+  /** Número de nota de remisión (NR-XXXXXX) si genera_nota_remision. */
+  nota_remision_numero?: string | null;
+
   fecha: string;             // ISO string, generado automáticamente
 }

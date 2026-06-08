@@ -204,6 +204,7 @@ export default function ClienteDetailPage() {
     vendedor_usuario_id:   "",
     tipo_servicio_cliente: "" as string,
     estado:                "activo" as Cliente["estado"],
+    usa_nota_remision:     false,
     sifen_receptor_manual: false,
     sifen_receptor_naturaleza: "" as string,
     sifen_ti_ope: "" as string,
@@ -360,6 +361,7 @@ export default function ClienteDetailPage() {
         vendedor_usuario_id:  c.vendedor_usuario_id ?? "",
         tipo_servicio_cliente: c.tipo_servicio_cliente ?? "",
         estado:               c.estado,
+        usa_nota_remision:    c.usa_nota_remision === true,
         sifen_receptor_manual: Boolean(c.sifen_receptor_manual),
         sifen_receptor_naturaleza: c.sifen_receptor_naturaleza ?? "",
         sifen_ti_ope: c.sifen_ti_ope != null ? String(c.sifen_ti_ope) : "",
@@ -641,6 +643,7 @@ export default function ClienteDetailPage() {
         vendedor_usuario_id: form.vendedor_usuario_id.trim() || null,
         tipo_servicio_cliente: tipoTs || null,
         estado:              form.estado,
+        usa_nota_remision:   form.usa_nota_remision,
         ...sifenManualPayload,
       });
     } catch (err) {
@@ -1542,6 +1545,17 @@ export default function ClienteDetailPage() {
                   <label className={labelClass}>Dirección</label>
                   <input type="text" name="direccion" value={form.direccion} onChange={handleChange} className={inputClass} />
                 </div>
+
+                <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={form.usa_nota_remision}
+                    onChange={(e) => setForm((p) => ({ ...p, usa_nota_remision: e.target.checked }))}
+                    className="h-4 w-4 rounded border-slate-300 text-[#0EA5E9] focus:ring-[#0EA5E9]"
+                  />
+                  Usa nota de remisión
+                  <span className="text-xs text-slate-400">(se generará junto al ticket al venderle)</span>
+                </label>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>

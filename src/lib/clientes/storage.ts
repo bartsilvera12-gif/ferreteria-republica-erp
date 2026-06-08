@@ -32,6 +32,7 @@ interface SupabaseRow {
   direccion:          string | null;
   ciudad:             string | null;
   pais:               string | null;
+  usa_nota_remision?: boolean | null;
   sifen_receptor_extranjero?: boolean | null;
   sifen_codigo_pais?: string | null;
   sifen_tipo_doc_receptor?: number | string | null;
@@ -94,6 +95,7 @@ function rowToCliente(row: SupabaseRow): Cliente {
     direccion:           row.direccion ?? undefined,
     ciudad:              row.ciudad ?? undefined,
     pais:                row.pais ?? undefined,
+    usa_nota_remision:   row.usa_nota_remision === true,
     sitio_web:           row.sitio_web ?? undefined,
     instagram:           row.instagram ?? undefined,
     linkedin:            row.linkedin ?? undefined,
@@ -361,6 +363,7 @@ export function construirPatchActualizacionCliente(datos: ActualizarClienteInput
   if (datos.direccion !== undefined) patch.direccion = datos.direccion ?? null;
   if (datos.ciudad !== undefined) patch.ciudad = datos.ciudad ?? null;
   if (datos.pais !== undefined) patch.pais = datos.pais ?? null;
+  if (datos.usa_nota_remision !== undefined) patch.usa_nota_remision = datos.usa_nota_remision === true;
   if (datos.sifen_receptor_extranjero !== undefined) {
     patch.sifen_receptor_extranjero = Boolean(datos.sifen_receptor_extranjero);
   }
