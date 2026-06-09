@@ -219,12 +219,15 @@ export async function listProductosVendiblesSinReceta(sb: AppSupabaseClient, emp
     .eq("empresa_id", empresaId);
   if (errUsados) throw new Error(errUsados.message);
   const usadosSet = new Set((usados ?? []).map((r: { producto_id: string }) => r.producto_id));
+  // Solo productos elaborados / tipo Menú: vendibles que NO controlan su propio stock
+  // (se arman por receta). Excluye reventa (controla_stock=true) y materia prima (es_vendible=false).
   const { data, error } = await sb
     .from("productos")
     .select("id, nombre, sku, precio_venta, unidad_medida")
     .eq("empresa_id", empresaId)
     .eq("activo", true)
     .eq("es_vendible", true)
+    .eq("controla_stock", false)
     .order("nombre");
   if (error) throw new Error(error.message);
   return (data ?? []).filter((p: { id: string }) => !usadosSet.has(p.id));

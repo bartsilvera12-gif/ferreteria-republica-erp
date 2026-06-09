@@ -5,6 +5,10 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ChefHat, ArrowLeft, Loader2 } from "lucide-react";
+import { NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
+
+/** Reserva monocliente: la receta pertenece al producto; el nombre se autogenera. */
+const RECETA_SIMPLE = NEURA_CLIENT_SCHEMA === "reservacaacupe";
 
 type Producto = {
   id: string;
@@ -117,7 +121,7 @@ export default function NuevaRecetaPage() {
         <form onSubmit={handleSubmit} className="space-y-4 bg-white p-6 rounded-md border border-gray-200">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              Producto vendible <span className="text-red-500">*</span>
+              Producto del menú <span className="text-red-500">*</span>
             </label>
             <select
               value={productoId}
@@ -131,12 +135,16 @@ export default function NuevaRecetaPage() {
             >
               {productos.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.nombre} ({p.sku}) — Gs. {Number(p.precio_venta).toLocaleString("es-PY")}
+                  {p.nombre} ({p.sku})
                 </option>
               ))}
             </select>
+            <p className="mt-1 text-[11px] text-gray-400">
+              Solo productos elaborados / de menú. Los de reventa y la materia prima no llevan receta.
+            </p>
           </div>
 
+          {!RECETA_SIMPLE && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">
               Nombre (opcional, override)
@@ -149,6 +157,7 @@ export default function NuevaRecetaPage() {
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
             />
           </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3">
             <div>

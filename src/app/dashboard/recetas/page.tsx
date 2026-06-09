@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ChefHat, Plus, Loader2 } from "lucide-react";
+import { formatUnidad } from "@/lib/unidades/format";
 
 type RecetaRow = {
   id: string;
@@ -118,7 +119,7 @@ export default function RecetasListPage() {
                         : <span className="text-gray-400">(sin nombre)</span>}
                   </td>
                   <td className="px-4 py-2 text-gray-700">
-                    {r.rendimiento_cantidad} {r.rendimiento_unidad ?? ""}
+                    {r.rendimiento_cantidad} {formatUnidad(r.rendimiento_unidad)}
                   </td>
                   <td className="px-4 py-2">
                     <span

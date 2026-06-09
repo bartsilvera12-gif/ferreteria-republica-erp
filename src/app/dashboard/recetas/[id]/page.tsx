@@ -5,6 +5,11 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ChefHat, ArrowLeft, Plus, Trash2, Save, Loader2 } from "lucide-react";
+import { NEURA_CLIENT_SCHEMA } from "@/lib/supabase/schema";
+import { formatUnidad } from "@/lib/unidades/format";
+
+/** Reserva monocliente: receta pertenece al producto; nombre interno oculto (autogenera). */
+const RECETA_SIMPLE = NEURA_CLIENT_SCHEMA === "reservacaacupe";
 
 type Receta = {
   id: string;
@@ -262,7 +267,7 @@ export default function EditarRecetaPage() {
               {costeo.unidades_posibles == null
                 ? "—"
                 : Math.floor(costeo.unidades_posibles * (receta.rendimiento_cantidad || 1)).toLocaleString("es-PY")}
-              {receta.rendimiento_unidad ? <span className="ml-1 text-xs font-normal text-gray-400">{receta.rendimiento_unidad}</span> : null}
+              {receta.rendimiento_unidad ? <span className="ml-1 text-xs font-normal text-gray-400">{formatUnidad(receta.rendimiento_unidad)}</span> : null}
             </div>
             <div className="text-xs text-gray-500">
               {costeo.unidades_posibles == null
@@ -287,6 +292,15 @@ export default function EditarRecetaPage() {
           Ej: 1.500 G de avena + 300 G de miel para producir <b>10 paquetes</b>.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          {RECETA_SIMPLE ? (
+            <div className="md:col-span-3">
+              <label className="block text-xs font-medium text-gray-600 mb-1">Receta de</label>
+              <div className="rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm font-medium text-gray-800">
+                {receta.producto_nombre ?? "—"}
+              </div>
+              <p className="mt-1 text-[11px] text-gray-400">La receta pertenece a este producto del menú.</p>
+            </div>
+          ) : (
           <div className="md:col-span-3">
             <label className="block text-xs font-medium text-gray-600 mb-1">Nombre de la receta</label>
             <input
@@ -300,6 +314,7 @@ export default function EditarRecetaPage() {
               Si lo dejás vacío, se mostrará el nombre del producto: <b>{receta.producto_nombre ?? "—"}</b>.
             </p>
           </div>
+          )}
           <div>
             <label className="block text-xs font-medium text-gray-600 mb-1">Rendimiento (cantidad)</label>
             <input
@@ -320,9 +335,9 @@ export default function EditarRecetaPage() {
               className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
             >
               <option value="">— Elegí —</option>
-              {UNIDADES_RENDIMIENTO.map((u) => <option key={u} value={u}>{u}</option>)}
+              {UNIDADES_RENDIMIENTO.map((u) => <option key={u} value={u}>{formatUnidad(u)}</option>)}
               {receta.rendimiento_unidad && !UNIDADES_RENDIMIENTO.includes(receta.rendimiento_unidad) && (
-                <option value={receta.rendimiento_unidad}>{receta.rendimiento_unidad}</option>
+                <option value={receta.rendimiento_unidad}>{formatUnidad(receta.rendimiento_unidad)}</option>
               )}
             </select>
             <p className="mt-1 text-[11px] text-gray-400">paquetes, unidades, frascos…</p>
@@ -396,12 +411,12 @@ export default function EditarRecetaPage() {
               {costeo.items.map((row) => (
                 <tr key={row.item_id}>
                   <td className="py-2 font-medium text-gray-800">{row.insumo_nombre}</td>
-                  <td className="py-2 tabular-nums">{Number(row.cantidad).toLocaleString("es-PY")} <span className="text-xs text-gray-400">{row.unidad_medida ?? ""}</span></td>
-                  <td className="py-2 text-gray-600 hidden md:table-cell">{row.unidad_medida ?? "—"}</td>
+                  <td className="py-2 tabular-nums">{Number(row.cantidad).toLocaleString("es-PY")} <span className="text-xs text-gray-400">{formatUnidad(row.unidad_medida)}</span></td>
+                  <td className="py-2 text-gray-600 hidden md:table-cell">{formatUnidad(row.unidad_medida) || "—"}</td>
                   <td className="py-2 text-gray-600 hidden lg:table-cell">{(row.merma_pct * 100).toFixed(0)}%</td>
-                  <td className="py-2 hidden md:table-cell">{fmtGs(row.costo_promedio)}<span className="text-[10px] text-gray-400">/{row.unidad_medida ?? "u"}</span></td>
+                  <td className="py-2 hidden md:table-cell">{fmtGs(row.costo_promedio)}<span className="text-[10px] text-gray-400">/{formatUnidad(row.unidad_medida) || "u"}</span></td>
                   <td className="py-2 tabular-nums">{fmtGs(row.subcosto)}</td>
-                  <td className="py-2 text-gray-600 hidden lg:table-cell tabular-nums">{Number(row.stock_actual).toLocaleString("es-PY")} <span className="text-xs text-gray-400">{row.unidad_medida ?? ""}</span></td>
+                  <td className="py-2 text-gray-600 hidden lg:table-cell tabular-nums">{Number(row.stock_actual).toLocaleString("es-PY")} <span className="text-xs text-gray-400">{formatUnidad(row.unidad_medida)}</span></td>
                   <td className="py-2 hidden lg:table-cell tabular-nums">
                     {row.unidades_aporte == null ? "—" : `${Math.floor(row.unidades_aporte * (receta.rendimiento_cantidad || 1)).toLocaleString("es-PY")} u.`}
                   </td>
@@ -443,7 +458,7 @@ export default function EditarRecetaPage() {
                 >
                   {insumosDisponibles.map((p) => (
                     <option key={p.id} value={p.id}>
-                      {p.nombre} — {fmtGs(p.costo_promedio)}/{p.unidad_medida ?? ""} (stock {p.stock_actual})
+                      {p.nombre}
                     </option>
                   ))}
                 </select>
@@ -468,8 +483,8 @@ export default function EditarRecetaPage() {
                   className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white"
                 >
                   <option value="">— Elegí —</option>
-                  {UNIDADES_INSUMO.map((u) => <option key={u} value={u}>{u}</option>)}
-                  {newUnidad && !UNIDADES_INSUMO.includes(newUnidad) && <option value={newUnidad}>{newUnidad}</option>}
+                  {UNIDADES_INSUMO.map((u) => <option key={u} value={u}>{formatUnidad(u)}</option>)}
+                  {newUnidad && !UNIDADES_INSUMO.includes(newUnidad) && <option value={newUnidad}>{formatUnidad(newUnidad)}</option>}
                 </select>
               </div>
               <div>
