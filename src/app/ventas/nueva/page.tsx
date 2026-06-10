@@ -333,8 +333,15 @@ export default function NuevaVentaPage() {
 
   // UX rápida: abrir el buscador de productos al entrar (carrito vacío).
   // Si el usuario lo cierra, sigue usando el formulario normal (no queda atrapado).
+  // EXCEPCIÓN: al facturar un pedido (?pedido_id=...) NO se auto-abre, porque el
+  // carrito viene precargado; el usuario usa el botón "+ Agregar producto" si quiere más.
+  // Se lee la URL directamente (no el estado pedidoId) para evitar la carrera de montaje.
   useEffect(() => {
-    setPickerOpen(true);
+    let tienePedido = false;
+    try {
+      tienePedido = !!new URLSearchParams(window.location.search).get("pedido_id");
+    } catch { tienePedido = false; }
+    if (!tienePedido) setPickerOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
