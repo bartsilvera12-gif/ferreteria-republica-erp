@@ -15,7 +15,6 @@ const SIDEBAR_SLUG_HREF_ORDER: { slug: string; href: string }[] = [
   { slug: "recetas", href: "/dashboard/recetas" },
   { slug: "inventario", href: "/inventario" },
   { slug: "clientes", href: "/clientes" },
-  { slug: "cobros", href: "/cobros" },
   { slug: "compras", href: "/compras" },
   { slug: "gastos", href: "/gastos" },
   { slug: "reportes", href: "/reportes" },

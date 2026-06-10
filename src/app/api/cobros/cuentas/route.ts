@@ -80,21 +80,62 @@ export async function GET(request: NextRequest) {
 
     // Cobrado del mes en curso.
     const inicioMes = `${hoy.slice(0, 7)}-01`;
-    const cobQ = await ctx.supabase
+    const cobMesQ = await ctx.supabase
       .from("cobros_clientes")
       .select("monto, fecha_pago")
       .eq("empresa_id", empresaId)
       .gte("fecha_pago", inicioMes);
     let cobradoMes = 0;
-    for (const r of (cobQ.data ?? []) as Record<string, unknown>[]) cobradoMes += Number(r.monto) || 0;
+    for (const r of (cobMesQ.data ?? []) as Record<string, unknown>[]) cobradoMes += Number(r.monto) || 0;
+
+    // Cuentas parciales (cantidad) para el resumen.
+    let parciales = 0;
+    for (const r of (allQ.data ?? []) as Record<string, unknown>[]) if (r.estado === "parcial") parciales += 1;
+
+    // Historial de cobros recientes (para la pestaña de cobros registrados).
+    const histQ = await ctx.supabase
+      .from("cobros_clientes")
+      .select("id, cliente_id, venta_id, cuenta_por_cobrar_id, fecha_pago, monto, metodo_pago, referencia")
+      .eq("empresa_id", empresaId)
+      .order("fecha_pago", { ascending: false })
+      .limit(200);
+    const histRows = (histQ.data ?? []) as Record<string, unknown>[];
+    // Nombres de clientes que aún no estén en el mapa.
+    const faltanIds = [...new Set(histRows.map((r) => String(r.cliente_id)).filter((idc) => idc && !nombreById.has(idc)))];
+    if (faltanIds.length) {
+      const cq2 = await ctx.supabase
+        .from("clientes")
+        .select("id, empresa, nombre_contacto, nombre")
+        .eq("empresa_id", empresaId)
+        .in("id", faltanIds);
+      for (const c of (cq2.data ?? []) as Record<string, unknown>[]) {
+        const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+        nombreById.set(String(c.id), s(c.empresa) || s(c.nombre_contacto) || s(c.nombre) || "Cliente");
+      }
+    }
+    // numero_venta por cuenta_por_cobrar_id (de las cuentas ya cargadas).
+    const ventaByCuenta = new Map<string, string>();
+    for (const r of rows) ventaByCuenta.set(String(r.id), String(r.numero_venta ?? ""));
+    const cobros = histRows.map((r) => ({
+      id: String(r.id),
+      cliente_id: r.cliente_id ? String(r.cliente_id) : null,
+      cliente_nombre: nombreById.get(String(r.cliente_id)) ?? "Cliente",
+      numero_venta: ventaByCuenta.get(String(r.cuenta_por_cobrar_id)) || null,
+      fecha_pago: r.fecha_pago ?? null,
+      monto: Number(r.monto) || 0,
+      metodo_pago: r.metodo_pago ?? "efectivo",
+      referencia: r.referencia ?? null,
+    }));
 
     return NextResponse.json(
       successResponse({
         cuentas,
+        cobros,
         resumen: {
           total_pendiente: Math.round(totalPendiente),
           total_vencido: Math.round(totalVencido),
           cobrado_mes: Math.round(cobradoMes),
+          parciales,
         },
       })
     );
