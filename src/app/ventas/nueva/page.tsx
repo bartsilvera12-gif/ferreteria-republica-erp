@@ -118,6 +118,10 @@ export default function NuevaVentaPage() {
   const [guardando, setGuardando] = useState(false);
   const isSubmittingRef = useRef(false);
 
+  // Facturación de un pedido enviado a Caja (?pedido_id=...). Precarga items + cliente.
+  const [pedidoId, setPedidoId] = useState<string | null>(null);
+  const [pedidoNumero, setPedidoNumero] = useState<string | null>(null);
+
   // ── Condiciones de la venta ───────────────────────────────────────────────
   // Instancia dedicada: siempre Guaraníes.
   const moneda: MonedaVenta = "GS";
@@ -239,6 +243,61 @@ export default function NuevaVentaPage() {
     getProductos().then((data) => {
       if (!cancelled) setProductos(data);
     });
+    return () => { cancelled = true; };
+  }, []);
+
+  // Precarga al facturar un pedido (Caja): lee ?pedido_id=, trae el pedido y carga sus
+  // items + cliente en el carrito. NO crea nada acá; la venta se genera al confirmar.
+  useEffect(() => {
+    let cancelled = false;
+    let pid: string | null = null;
+    try {
+      pid = new URLSearchParams(window.location.search).get("pedido_id");
+    } catch { pid = null; }
+    if (!pid) return;
+    setPedidoId(pid);
+    (async () => {
+      try {
+        const res = await fetch(`/api/proyectos/${pid}`, { credentials: "include", cache: "no-store" });
+        const j = await res.json();
+        if (cancelled || !j?.success || !j.data?.proyecto) return;
+        const p = j.data.proyecto as { brief_data?: unknown; cliente_id?: string | null; metadata?: unknown };
+        const brief = (p.brief_data && typeof p.brief_data === "object" && !Array.isArray(p.brief_data))
+          ? (p.brief_data as Record<string, unknown>) : {};
+        const meta = (p.metadata && typeof p.metadata === "object" && !Array.isArray(p.metadata))
+          ? (p.metadata as Record<string, unknown>) : {};
+        setPedidoNumero(
+          (typeof brief.numero_control === "string" && brief.numero_control) ||
+          (typeof brief.numero_presupuesto === "string" && brief.numero_presupuesto) ||
+          (typeof meta.numero_presupuesto === "string" && meta.numero_presupuesto) || null
+        );
+        const itemsRaw = Array.isArray(brief.items) ? (brief.items as Record<string, unknown>[]) : [];
+        const lineas: LineaVenta[] = itemsRaw
+          .filter((it) => it.producto_id && (Number(it.cantidad) || 0) > 0)
+          .map((it) => {
+            const cantidad = Number(it.cantidad) || 0;
+            const precio = Number(it.precio_venta) || 0;
+            const iva: TipoIvaVenta = "10%";
+            const subtotal = cantidad * precio;
+            const montoIva = calcIva(iva, subtotal);
+            return {
+              producto_id: String(it.producto_id),
+              producto_nombre: typeof it.producto_nombre === "string" ? it.producto_nombre : "",
+              sku: typeof it.sku === "string" ? it.sku : "",
+              cantidad,
+              precio_venta_original: precio,
+              precio_venta: precio,
+              tipo_iva: iva,
+              tipo_precio: "minorista" as TipoPrecioVenta,
+              subtotal,
+              monto_iva: montoIva,
+              total_linea: subtotal + montoIva,
+            };
+          });
+        if (!cancelled && lineas.length) setItems(lineas);
+        if (!cancelled && p.cliente_id) setClienteId(String(p.cliente_id));
+      } catch { /* el aviso seguirá visible; el cajero puede cargar manualmente */ }
+    })();
     return () => { cancelled = true; };
   }, []);
 
@@ -510,7 +569,7 @@ export default function NuevaVentaPage() {
           titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
           observacion: pagoObservacion.trim() || null,
         },
-        { permitirSinStock }
+        { permitirSinStock, pedidoId }
       );
 
       if (!resultado.success) {
@@ -577,6 +636,13 @@ export default function NuevaVentaPage() {
           + Agregar producto
         </button>
       </div>
+
+      {pedidoId && (
+        <div className="rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-4 py-3 text-sm text-slate-700">
+          <span className="font-semibold text-[#3F8E91]">Estás facturando un pedido{pedidoNumero ? ` (${pedidoNumero})` : ""}.</span>{" "}
+          La venta se generará al confirmar y el pedido quedará marcado como facturado. Podés ajustar items, precios y método de pago.
+        </div>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-6 max-w-7xl">
 

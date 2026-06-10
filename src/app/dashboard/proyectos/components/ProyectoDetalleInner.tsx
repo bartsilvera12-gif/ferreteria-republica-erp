@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { getFacturacionEstado, asMetadataObject } from "@/lib/caja/facturacion";
 import {
   ProyectoModuloSelector,
   type ProyectoModuloCatalogo as ModuloCatalogo,
@@ -288,6 +289,25 @@ export default function ProyectoDetalleInner({
     }
   }
 
+  const [enviandoCaja, setEnviandoCaja] = useState(false);
+  async function enviarACaja() {
+    if (enviandoCaja) return;
+    setEnviandoCaja(true);
+    setErr(null);
+    try {
+      const res = await fetchWithSupabaseSession(`/api/proyectos/${projectId}/enviar-a-caja`, { method: "POST" });
+      const j = (await res.json()) as { success?: boolean; error?: string };
+      if (!res.ok || !j.success) {
+        setErr(j.error ?? "No se pudo enviar a Caja");
+        return;
+      }
+      await load();
+      onProjectUpdated?.();
+    } finally {
+      setEnviandoCaja(false);
+    }
+  }
+
   const slaFmt = useMemo(() => {
     const s = data?.sla as { segundos_interno?: number; segundos_cliente?: number; segundos_pausado?: number } | undefined;
     if (!s) return null;
@@ -311,6 +331,15 @@ export default function ProyectoDetalleInner({
       ? (proyecto.brief_data as Record<string, unknown>)
       : {};
   const esPedido = codigoTipo === "pedido";
+  const facturacionEstado = getFacturacionEstado((proyecto as { metadata?: unknown } | undefined)?.metadata);
+  const ventaIdPedido = (() => {
+    const m = asMetadataObject((proyecto as { metadata?: unknown } | undefined)?.metadata);
+    return typeof m.venta_id === "string" ? m.venta_id : null;
+  })();
+  const ventaNumeroPedido = (() => {
+    const m = asMetadataObject((proyecto as { metadata?: unknown } | undefined)?.metadata);
+    return typeof m.venta_numero === "string" ? m.venta_numero : null;
+  })();
   const pedidoModalidad = typeof briefRaw.modalidad === "string" ? briefRaw.modalidad : null;
   const pedidoModalidadLabel =
     pedidoModalidad === "local"
@@ -387,7 +416,32 @@ export default function ProyectoDetalleInner({
             {data.avance_pct ?? "—"}%
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          {esPedido && facturacionEstado === "facturado" && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-100 px-3 py-2 text-sm font-medium text-emerald-700">
+              ✓ Facturado
+              {ventaIdPedido && (
+                <Link href={`/ventas?venta=${ventaIdPedido}`} className="underline hover:text-emerald-900">
+                  {ventaNumeroPedido ?? "Ver venta"}
+                </Link>
+              )}
+            </span>
+          )}
+          {esPedido && facturacionEstado === "pendiente_caja" && (
+            <span className="inline-flex items-center gap-1.5 rounded-lg bg-amber-100 px-3 py-2 text-sm font-medium text-amber-700">
+              ⏳ Pendiente en Caja
+            </span>
+          )}
+          {esPedido && facturacionEstado === null && (
+            <button
+              type="button"
+              onClick={() => void enviarACaja()}
+              disabled={enviandoCaja}
+              className="rounded-lg bg-[#4FAEB2] px-3 py-2 text-sm font-medium text-white hover:bg-[#3F8E91] disabled:opacity-50"
+            >
+              {enviandoCaja ? "Enviando…" : "Enviar a Caja"}
+            </button>
+          )}
           <select
             className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700"
             value={String(proyecto.estado_id ?? "")}

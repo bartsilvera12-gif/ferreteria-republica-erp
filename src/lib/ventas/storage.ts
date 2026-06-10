@@ -65,7 +65,7 @@ export async function saveVenta(
   datos: Omit<Venta, "id" | "numero_control" | "fecha"> & { cliente_id?: string | null; genera_nota_remision?: boolean },
   pedidoCocina?: PedidoCocinaInput,
   pagoDetalle?: PagoDetalleInput | null,
-  opts?: { permitirSinStock?: boolean }
+  opts?: { permitirSinStock?: boolean; pedidoId?: string | null }
 ): Promise<ResultadoGuardarVenta> {
   if (!datos.items || datos.items.length === 0) {
     return { success: false, error: "La venta debe tener al menos un producto." };
@@ -91,6 +91,7 @@ export async function saveVenta(
         pago_detalle: pagoDetalle ?? null,
         permitir_sin_stock: opts?.permitirSinStock === true,
         genera_nota_remision: datos.genera_nota_remision === true,
+        pedido_id: opts?.pedidoId ?? null,
       }),
     });
 
