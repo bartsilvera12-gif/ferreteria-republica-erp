@@ -1,16 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { membreteA4 } from "@/lib/documentos/membrete";
 
 /**
  * GET /api/recibos-dinero/[id]/pdf?auto=1
  * Recibo de dinero A4 imprimible (HTML). Documento interno NO fiscal.
  */
-const NEGOCIO_FALLBACK = "Reserva Ecológica Caacupé";
-function resolveNegocio(nombreEmpresa?: string | null): string {
-  const env = (process.env.NEURA_CLIENT_NAME ?? "").trim();
-  if (env) return env;
-  return (nombreEmpresa ?? "").trim() || NEGOCIO_FALLBACK;
-}
 function esc(v: unknown): string {
   return String(v ?? "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
@@ -43,12 +38,6 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   if (rq.error || !rq.data) return new NextResponse("Recibo no encontrado", { status: 404 });
   const r = rq.data as Record<string, unknown>;
 
-  let nombreEmpresa: string | null = null;
-  try {
-    const eq = await ctx.supabase.from("empresas").select("nombre_empresa").eq("id", ctx.auth.empresa_id).maybeSingle();
-    nombreEmpresa = (eq.data as { nombre_empresa?: string } | null)?.nombre_empresa ?? null;
-  } catch { /* fallback */ }
-  const negocio = resolveNegocio(nombreEmpresa);
   const moneda = String(r.moneda ?? "PYG");
   const metodo = METODO_LBL[String(r.metodo_pago ?? "")] ?? (r.metodo_pago ?? "—");
 
@@ -80,8 +69,9 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 </style></head><body>
 <div class="toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
 <div class="page">
+  ${membreteA4()}
   <div class="head">
-    <div><div class="negocio">${esc(negocio)}</div><div class="tag">RECIBO DE DINERO</div></div>
+    <div><div class="tag">RECIBO DE DINERO</div></div>
     <div class="meta">
       <div class="num">${esc(r.numero_recibo)}</div>
       <div>Fecha: ${fmtFecha(r.fecha)}</div>

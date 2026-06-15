@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { membreteA4, membreteTicket } from "@/lib/documentos/membrete";
 
 /**
  * GET /api/ventas/[id]/ticket?w=58|80&mode=comandas&auto=1
@@ -167,7 +168,7 @@ function renderCopia(opts: {
   isLast: boolean;
   negocio: string;
 }): string {
-  const { tipo, venta, items, brief, fontPx, isLast, negocio } = opts;
+  const { tipo, venta, items, brief, fontPx, isLast } = opts;
   const showPrices = tipo === "cliente";
   const sectorBadge = tipo === "pizzeria" ? "COMANDA PIZZERÍA" : tipo === "plancha" ? "COMANDA PLANCHA" : "";
   const modalidad = modalidadLabel(brief?.modalidad);
@@ -235,7 +236,7 @@ function renderCopia(opts: {
     : `<div class="footer-cocina">${formatFecha(venta.fecha)}</div>`;
 
   return `<section class="paper ${isLast ? "last" : ""}">
-    ${headerCocina || `<h1>${escapeHtml(negocio)}</h1>`}
+    ${headerCocina || membreteTicket()}
     <div class="meta">
       ${escapeHtml(venta.numero_control)}<br>
       ${formatFecha(venta.fecha)}
@@ -312,7 +313,7 @@ function renderNotaRemision(opts: {
   @media print { body { background:#fff; padding:0; } .doc { box-shadow:none; max-width:none; } }
 </style></head>
 <body><div class="doc">
-  <h1>${escapeHtml(negocio)}</h1>
+  ${membreteA4()}
   <div class="titulo">NOTA DE REMISIÓN</div>
   <div class="row">
     <div class="box"><h3>Documento</h3>

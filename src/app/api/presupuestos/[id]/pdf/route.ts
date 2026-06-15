@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { membreteA4 } from "@/lib/documentos/membrete";
 
 /**
  * GET /api/presupuestos/[id]/pdf?auto=1
@@ -157,10 +158,11 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 <body>
   <div class="toolbar"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
   <div class="page">
+    ${membreteA4()}
     <div class="head">
       <div>
-        <div class="negocio">${esc(negocio)}</div>
-        <div class="doc-tag">Presupuesto</div>
+        <div class="negocio">PRESUPUESTO</div>
+        <div class="doc-tag">${esc(negocio)}</div>
       </div>
       <div class="meta">
         <div class="num">${esc(p.numero_control)}</div>
