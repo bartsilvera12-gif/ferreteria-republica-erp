@@ -1,0 +1,16 @@
+{
+  "rewrites": [
+    {
+      "source": "/((?!assets|uploads|support\\.js|image-slot\\.js).*)",
+      "destination": "/Ferreteria Republica Store.dc.html"
+    }
+  ],
+  "headers": [
+    {
+      "source": "/(.*)\\.dc\\.html",
+      "headers": [
+        { "key": "Content-Type", "value": "text/html; charset=utf-8" }
+      ]
+    }
+  ]
+}

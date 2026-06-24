@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="icon" type="image/png" href="assets/republica-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Montserrat',system-ui,sans-serif;color:#0E1B33;background:#F6F7FA;-webkit-font-smoothing:antialiased;}
+  ::selection{background:#E97932;color:#fff;}
+  button,input{font-family:'Montserrat',sans-serif;}
+  .cat-prod{transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s,border-color .35s;}
+  .cat-prod:hover{transform:translateY(-7px);box-shadow:0 28px 56px -26px rgba(2,31,95,.4);border-color:#E97932;}
+  .cat-prod:hover .cat-prod-img{transform:scale(1.06);}
+  .cat-prod-img{transition:transform .5s cubic-bezier(.2,.7,.2,1);}
+  .chip{transition:background .2s,color .2s,border-color .2s;}
+  .cnav{display:flex;align-items:center;gap:22px;margin-left:18px;flex-wrap:wrap;}
+  .cnav a{color:#fff;text-decoration:none;font-size:14px;font-weight:600;transition:color .2s;}
+  .cnav a:hover{color:#ffb37a;}
+  .cnav a.active{color:#E97932;}
+  .cdd-item:hover{background:rgba(233,121,50,.1)!important;}
+  .search-field{transition:border-color .25s ease,background .25s ease,box-shadow .25s ease;}
+  .search-field:focus{border-color:#E97932!important;background:rgba(255,255,255,.16)!important;box-shadow:0 0 0 4px rgba(233,121,50,.16);}
+  .icon-btn{transition:background .25s,border-color .25s,transform .25s;}
+  .icon-btn:hover{transform:translateY(-2px);background:rgba(255,255,255,.16);border-color:#E97932;}
+  @media(max-width:640px){.fr-detail{flex-direction:column;max-height:92vh;overflow-y:auto;}.fr-detail>div:first-child{width:100%!important;min-height:200px!important;height:200px;}}
+  @keyframes ddPop{from{opacity:0;transform:translateY(26px) scale(.96);}to{opacity:1;transform:none;}}
+  @keyframes ddImgPan{0%{transform:scale(1.08) translateY(0);}100%{transform:scale(1.16) translateY(-8px);}}
+  .dd-card{animation:ddPop .42s cubic-bezier(.2,.8,.25,1) both;}
+  .dd-cta{transition:transform .22s cubic-bezier(.2,.7,.2,1),box-shadow .25s,filter .22s;}
+  .dd-cta:hover{transform:translateY(-2px);box-shadow:0 18px 38px -14px rgba(37,211,102,.75);filter:brightness(1.03);}
+  .dd-cta:active{transform:translateY(0) scale(.98);}
+</style>
+</helmet>
+
+<div style="min-height:100vh;">
+  <!-- HEADER -->
+  <header style="position:sticky;top:0;z-index:50;background:#021F5F url('assets/header-bg.png') center center/cover no-repeat;border-bottom:1px solid rgba(255,255,255,.08);box-shadow:0 10px 30px -16px rgba(0,0,0,.5);">
+    <div style="max-width:1240px;margin:0 auto;padding:14px 28px;display:flex;align-items:center;gap:20px;">
+      <a href="Ferreteria Republica Store.dc.html" style="flex:none;display:flex;align-items:center;"><img src="assets/republica-logo.png" alt="Ferretería República" style="height:36px;width:auto;"/></a>
+      <nav class="cnav" style="margin-left:auto;">
+        <a href="Ferreteria Republica Store.dc.html#inicio">Inicio</a>
+        <a href="Catalogo.dc.html" class="active">Catálogo</a>
+        <a onClick="{{ goOfertas }}" style="cursor:pointer;">Ofertas</a>
+        <div style="position:relative;" data-catdd>
+          <a onClick="{{ toggleCatMenu }}" style="display:inline-flex;align-items:center;gap:5px;cursor:pointer;">Categorías<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="{{ catCaretStyle }}"><path d="M6 9l6 6 6-6"/></svg></a>
+          <div style="{{ catMenuStyle }}">
+            <div style="position:relative;margin-bottom:10px;">
+              <input value="{{ catSearch }}" onInput="{{ onCatSearch }}" placeholder="Buscar categoría..." style="width:100%;height:40px;border-radius:10px;border:1.5px solid #E2E7EF;background:#F6F7FA;color:#15213b;padding:0 14px 0 38px;font-size:13.5px;outline:none;transition:border-color .2s;" style-focus="border-color:#E97932;"/>
+              <svg style="position:absolute;left:12px;top:11px;" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+            </div>
+            <div style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">
+              <sc-for list="{{ catMenuItems }}" as="c" hint-placeholder-count="6">
+                <a onClick="{{ c.go }}" class="cdd-item" style="display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;cursor:pointer;text-decoration:none;color:#27324c;transition:background .15s;">
+                  <span style="flex:none;width:32px;height:32px;border-radius:9px;background:linear-gradient(140deg,#F4552A,#E97932);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.iconPath }}"/></svg></span>
+                  <span style="flex:1;font-size:13.5px;font-weight:600;">{{ c.name }}</span>
+                  <span style="font-size:11px;color:#9aa3b2;font-weight:600;">{{ c.count }}</span>
+                </a>
+              </sc-for>
+              <sc-if value="{{ catMenuEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:16px 11px;text-align:center;font-size:13px;color:#9aa3b2;">Sin coincidencias</div></sc-if>
+            </div>
+          </div>
+        </div>
+        <a href="Ferreteria Republica Store.dc.html#contacto">Contacto</a>
+      </nav>
+      <div style="display:flex;align-items:center;gap:10px;flex:none;">
+        <a href="{{ waContact }}" target="_blank" aria-label="WhatsApp" style="width:44px;height:44px;border-radius:12px;background:#25D366;display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none;"><svg width="21" height="21" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2zm0 2a8 8 0 11-4.1 14.9l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 0112 4zm-3 4.3c-.2 0-.5.1-.6.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.7 2.8 4.3 3.8 2.1.8 2.6.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.6-2.2-1.4-.6-.6-1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.3 0-.5l-.7-1.7c-.2-.4-.4-.4-.6-.4z"/></svg></a>
+        <a href="Ferreteria Republica Store.dc.html" class="icon-btn" aria-label="Carrito" style="width:44px;height:44px;border-radius:12px;border:1.5px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg></a>
+      </div>
+    </div>
+  </header>
+
+  <!-- TITLE -->
+  <section style="background:#021F5F url('assets/necesidad-bg.png') center center/cover no-repeat;color:#fff;position:relative;">
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,31,95,.55),rgba(2,21,63,.78));pointer-events:none;"></div>
+    <div style="max-width:1240px;margin:0 auto;padding:54px 28px 60px;position:relative;z-index:1;">
+      <div style="font-size:13px;font-weight:700;letter-spacing:.14em;color:#E97932;text-transform:uppercase;margin-bottom:12px;">Nuestro catálogo</div>
+      <h1 style="font-size:clamp(32px,4.5vw,46px);font-weight:800;letter-spacing:-.01em;margin:0 0 14px;">Todo para tu casa, obra y negocio</h1>
+      <p style="font-size:16px;color:#c4cde0;max-width:560px;line-height:1.55;margin:0 0 26px;">Explorá nuestra selección de herramientas, materiales e insumos. Tocá un producto para ver el detalle.</p>
+      <div style="display:flex;gap:14px;flex-wrap:wrap;align-items:center;max-width:760px;">
+        <div style="position:relative;flex:1;min-width:260px;">
+          <input value="{{ search }}" onInput="{{ onSearch }}" placeholder="Buscá: taladro, cable, pintura, 20L..." style="width:100%;height:50px;border-radius:13px;border:1.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;padding:0 16px 0 48px;font-size:14.5px;outline:none;transition:border-color .2s,background .2s,box-shadow .2s;" style-focus="border-color:#E97932;background:rgba(255,255,255,.16);box-shadow:0 0 0 4px rgba(233,121,50,.16);"/>
+          <svg style="position:absolute;left:16px;top:15px;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#aeb7c7" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+          <sc-if value="{{ hasSearch }}" hint-placeholder-val="{{ false }}"><button onClick="{{ clearSearch }}" aria-label="Limpiar" style="position:absolute;right:11px;top:13px;width:26px;height:26px;border:none;border-radius:8px;background:rgba(255,255,255,.14);color:#fff;cursor:pointer;font-size:13px;">✕</button></sc-if>
+        </div>
+        <div style="position:relative;" data-filter>
+          <button onClick="{{ toggleFilter }}" style="{{ filterBtnStyle }}">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h18M6 12h12M10 19h4"/></svg>
+            {{ filterLabel }}
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" style="{{ filterCaretStyle }}"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+          <div style="{{ filterMenuStyle }}">
+            <sc-for list="{{ filters }}" as="f" hint-placeholder-count="7">
+              <button onClick="{{ f.set }}" style="{{ f.style }}"><span>{{ f.label }}</span><sc-if value="{{ f.active }}" hint-placeholder-val="{{ false }}"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E97932" stroke-width="2.6"><path d="M5 12l5 5 9-10"/></svg></sc-if></button>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- GRID -->
+  <section data-grid style="background:#fff url('assets/productos-bg.png') center top/cover no-repeat;">
+    <div style="max-width:1240px;margin:0 auto;padding:46px 28px 80px;">
+      <div style="font-size:14px;color:#697287;font-weight:600;margin-bottom:22px;">{{ resultLabel }}</div>
+      <sc-if value="{{ hasResults }}" hint-placeholder-val="{{ true }}">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(244px,1fr));gap:24px;">
+        <sc-for list="{{ products }}" as="p" hint-placeholder-count="8">
+          <div onClick="{{ p.open }}" class="cat-prod" style="cursor:pointer;background:#fff;border:1px solid #E7EAF0;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;">
+            <div style="position:relative;aspect-ratio:3/4;overflow:hidden;background:#0a1f50;">
+              <div class="cat-prod-img" style="position:absolute;inset:0;background-image:url('{{ p.img }}');background-size:cover;background-position:center;"></div>
+              <span style="position:absolute;top:12px;left:12px;background:{{ p.badgeBg }};color:{{ p.badgeFg }};font-size:11px;font-weight:700;padding:5px 11px;border-radius:999px;">{{ p.badgeText }}</span>
+            </div>
+            <div style="padding:16px 17px 18px;display:flex;flex-direction:column;flex:1;">
+              <div style="font-size:10.5px;font-weight:700;color:#E97932;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">{{ p.cat }}</div>
+              <div style="font-size:16px;font-weight:700;color:#15213b;line-height:1.25;margin-bottom:3px;">{{ p.name }}</div>
+              <div style="font-size:12.5px;color:#7a849a;margin-bottom:12px;">{{ p.attr }}</div>
+              <div style="margin-top:auto;display:flex;align-items:baseline;gap:8px;">
+                <span style="font-family:'Oswald',sans-serif;font-weight:600;font-size:25px;color:#021F5F;line-height:1;">{{ p.priceLabel }}</span>
+                <sc-if value="{{ p.hasOld }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Oswald',sans-serif;font-size:14px;color:#A4ACBA;text-decoration:line-through;">{{ p.oldLabel }}</span></sc-if>
+              </div>
+              <div style="margin-top:13px;display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#E97932;">Ver detalle <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      </sc-if>
+      <sc-if value="{{ noResults }}" hint-placeholder-val="{{ false }}">
+        <div style="text-align:center;padding:60px 20px;background:#fff;border-radius:18px;border:1px solid #E7EAF0;">
+          <div style="font-size:17px;font-weight:700;color:#15213b;margin-bottom:6px;">Sin resultados</div>
+          <div style="font-size:14px;color:#7a849a;">Probá con otra palabra o cambiá el filtro de rubro.</div>
+        </div>
+      </sc-if>
+    </div>
+  </section>
+
+  <!-- FOOTER -->
+  <footer style="background:#02153f url('assets/header-bg.png') center center/cover no-repeat;color:#9fb0cb;">
+    <div style="max-width:1240px;margin:0 auto;padding:30px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <img src="assets/republica-logo.png" alt="Ferretería República" style="height:32px;width:auto;"/>
+      <span style="font-size:12.5px;">© 2025 Ferretería República. Todos los derechos reservados.</span>
+    </div>
+  </footer>
+
+  <!-- DETAIL MODAL -->
+  <div style="{{ detailWrapStyle }}">
+    <div onClick="{{ closeDetail }}" style="position:absolute;inset:0;background:rgba(2,12,35,.6);backdrop-filter:blur(3px);"></div>
+    <sc-if value="{{ detailOpen }}" hint-placeholder-val="{{ false }}">
+      <div class="fr-detail dd-card" style="position:relative;background:#fff;border-radius:24px;max-width:820px;width:100%;display:flex;overflow:hidden;box-shadow:0 50px 110px -34px rgba(0,0,0,.7);max-height:90vh;">
+        <div style="width:44%;min-height:460px;position:relative;flex:none;overflow:hidden;background:#0a1f50;">
+          <div style="position:absolute;inset:0;background:#0a1f50 url('{{ detail.img }}') center center/cover no-repeat;animation:ddImgPan 9s ease-in-out infinite alternate;"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(155deg,rgba(2,18,54,.15) 0%,rgba(2,18,54,0) 40%,rgba(2,18,54,.55) 100%);"></div>
+          <span style="position:absolute;top:18px;left:18px;display:inline-flex;align-items:center;gap:6px;background:{{ detail.badgeBg }};color:{{ detail.badgeFg }};font-size:11px;font-weight:700;letter-spacing:.04em;padding:6px 13px;border-radius:999px;box-shadow:0 8px 18px -6px rgba(0,0,0,.4);">{{ detail.badgeText }}</span>
+          <sc-if value="{{ detail.hasOld }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;bottom:18px;left:18px;display:inline-flex;align-items:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:18px;letter-spacing:.02em;color:#fff;background:#F4552A;padding:7px 14px;border-radius:12px;box-shadow:0 10px 22px -8px rgba(244,85,42,.7);">{{ detail.savePct }}</span></sc-if>
+        </div>
+        <div style="flex:1;padding:34px 36px;display:flex;flex-direction:column;overflow-y:auto;">
+          <button onClick="{{ closeDetail }}" aria-label="Cerrar" style="position:absolute;top:18px;right:18px;width:40px;height:40px;border-radius:11px;border:none;background:#F2F5F9;color:#54607a;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s,transform .2s;z-index:2;" style-hover="background:#F4552A;color:#fff;transform:rotate(90deg);">✕</button>
+          <div style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#E97932;margin-bottom:11px;"><span style="width:18px;height:2px;background:#E97932;border-radius:2px;"></span>{{ detail.cat }}</div>
+          <h3 style="font-size:27px;font-weight:800;color:#15213b;line-height:1.12;margin:0 0 7px;letter-spacing:-.01em;">{{ detail.name }}</h3>
+          <div style="font-size:13.5px;color:#7a849a;font-weight:600;margin-bottom:18px;">{{ detail.attr }}</div>
+          <p style="font-size:14px;color:#56607a;line-height:1.65;margin:0 0 20px;">{{ detail.desc }}</p>
+          <div style="background:#F6F8FB;border:1px solid #EAEEF4;border-radius:16px;padding:16px 18px;margin-bottom:20px;margin-top:auto;">
+            <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;">
+              <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:36px;color:#021F5F;line-height:1;">{{ detail.priceLabel }}</span>
+              <sc-if value="{{ detail.hasOld }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Oswald',sans-serif;font-size:18px;color:#A4ACBA;text-decoration:line-through;">{{ detail.oldLabel }}</span></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;margin-top:11px;flex-wrap:wrap;">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#1f8a5b;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1f8a5b" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>Stock disponible</span>
+            </div>
+          </div>
+          <a href="{{ detail.consult }}" target="_blank" class="dd-cta" style="height:52px;border-radius:13px;background:linear-gradient(135deg,#25D366,#1aa34f);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;box-shadow:0 14px 30px -12px rgba(37,211,102,.7);"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2z"/></svg>Consultar por WhatsApp</a>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = { filter: 'Todos', detail: null, search: '', filterOpen: false, catMenuOpen: false, catSearch: '' };
+  get wa() { return (this.props.numeroWhatsapp || '595981000000').replace(/[^0-9]/g, ''); }
+  fmt(n) { return 'Gs. ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  norm(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+
+  catalog() {
+    return [
+      { id: 'taladro', name: 'Taladro percutor', cat: 'Herramientas', attr: '650W · mandril 13mm', price: 485000, badge: 'Más vendido', img: 'taladro', desc: 'Taladro percutor de 650W con mandril de 13mm, ideal para perforar concreto, madera y metal. Velocidad variable y empuñadura ergonómica para trabajos exigentes.' },
+      { id: 'destor', name: 'Juego de destornilladores', cat: 'Herramientas', attr: '6 piezas · punta imantada', price: 89000, badge: 'Nuevo', img: 'destornilladores', desc: 'Set de 6 destornilladores con puntas imantadas (Phillips y planos), mango antideslizante y acero cromo-vanadio resistente al desgaste.' },
+      { id: 'latex', name: 'Pintura látex interior', cat: 'Pinturas', attr: 'Blanco mate · 20L', price: 215000, badge: 'Stock', img: 'latex', desc: 'Pintura látex interior blanco mate, gran rendimiento y fácil aplicación. Lavable, de secado rápido y excelente cubrimiento. Balde de 20 litros.' },
+      { id: 'cinta', name: 'Cinta aisladora', cat: 'Electricidad', attr: '19mm · 20m', price: 8500, old: 12000, badge: 'Oferta', img: 'cinta', desc: 'Cinta aisladora de PVC 19mm x 20m, alta adherencia y aislación eléctrica. Resistente a la humedad y a la temperatura. Ideal para instalaciones.' },
+      { id: 'llave', name: 'Llave francesa', cat: 'Herramientas', attr: '10" ajustable', price: 62000, badge: 'Stock', img: 'llave', desc: 'Llave francesa ajustable de 10 pulgadas en acero forjado, mordaza de apertura amplia y graduación precisa para tuercas de distintos tamaños.' },
+      { id: 'cable', name: 'Cable eléctrico', cat: 'Electricidad', attr: '2.5mm² · rollo 100m', price: 145000, badge: 'Más vendido', img: 'cable', desc: 'Cable eléctrico unipolar de 2.5mm², rollo de 100m. Conductor de cobre, aislación antiflama, ideal para instalaciones domiciliarias y de obra.' },
+      { id: 'pvc', name: 'Caño PVC', cat: 'Plomería', attr: '110mm · 3m', price: 38000, badge: 'Stock', img: 'pvc', desc: 'Caño de PVC de 110mm x 3m para desagüe, resistente y de fácil instalación. Unión por espiga, apto para redes cloacales y pluviales.' },
+      { id: 'silicona', name: 'Silicona selladora', cat: 'Adhesivos', attr: 'Transparente · 280ml', price: 18000, old: 25000, badge: 'Oferta', img: 'silicona', desc: 'Silicona selladora transparente de 280ml, impermeable y flexible. Excelente adherencia en vidrio, cerámica, metal y madera. Uso interior y exterior.' }
+    ];
+  }
+
+  openDetail(id) { this.setState({ detail: id }); }
+  closeDetail() { this.setState({ detail: null }); }
+  pickCat(c) {
+    this.setState({ filter: c, catMenuOpen: false, catSearch: '' });
+    setTimeout(() => {
+      const el = document.querySelector('[data-grid]');
+      if (el) window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+    }, 60);
+  }
+  componentDidMount() {
+    this._onDoc = (e) => {
+      const st = this.state;
+      if (st.filterOpen && !e.target.closest('[data-filter]')) this.setState({ filterOpen: false });
+      if (st.catMenuOpen && !e.target.closest('[data-catdd]')) this.setState({ catMenuOpen: false });
+    };
+    document.addEventListener('click', this._onDoc);
+    try {
+      const raw = new URLSearchParams(window.location.search).get('cat');
+      if (raw) {
+        const valid = ['Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Adhesivos', 'Ofertas'];
+        const map = { 'Adhesivos y selladores': 'Adhesivos' };
+        const v = map[raw] || raw;
+        if (valid.includes(v)) this.setState({ filter: v });
+      }
+    } catch (e) {}
+  }
+  componentWillUnmount() { if (this._onDoc) document.removeEventListener('click', this._onDoc); }
+
+  renderVals() {
+    const st = this.state;
+    const fmt = n => this.fmt(n);
+    const badgeMap = {
+      'Más vendido': { bg: '#E97932', fg: '#fff', text: 'Más vendido' },
+      'Nuevo': { bg: '#021F5F', fg: '#fff', text: 'Nuevo' },
+      'Oferta': { bg: '#F4552A', fg: '#fff', text: 'Oferta' },
+      'Stock': { bg: 'rgba(2,31,95,0.09)', fg: '#021F5F', text: 'En stock' }
+    };
+    const waBase = (msg) => 'https://wa.me/' + this.wa + '?text=' + encodeURIComponent(msg);
+
+    const f = st.filter;
+    const q = this.norm(st.search).trim();
+    const tokens = q ? q.split(/\s+/) : [];
+    const products = this.catalog().filter(p => {
+      const okFilter = (f === 'Todos') || (f === 'Ofertas' ? p.badge === 'Oferta' : p.cat === f);
+      if (!okFilter) return false;
+      if (!tokens.length) return true;
+      const hay = this.norm(p.name + ' ' + p.cat + ' ' + p.attr + ' ' + (p.desc || ''));
+      return tokens.every(t => hay.includes(t));
+    }).map(p => {
+      const b = badgeMap[p.badge];
+      return {
+        id: p.id, name: p.name, cat: p.cat, attr: p.attr,
+        priceLabel: fmt(p.price), hasOld: !!p.old, oldLabel: p.old ? fmt(p.old) : '',
+        badgeBg: b.bg, badgeFg: b.fg, badgeText: b.text,
+        img: 'assets/prod/' + p.img + '.png',
+        open: () => this.openDetail(p.id)
+      };
+    });
+    const resultLabel = q || f !== 'Todos'
+      ? products.length + (products.length === 1 ? ' resultado' : ' resultados')
+      : products.length + ' productos';
+
+    const filterDefs = ['Todos', 'Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Adhesivos', 'Ofertas'];
+    const filters = filterDefs.map(label => {
+      const active = st.filter === label;
+      const style = 'display:flex;align-items:center;justify-content:space-between;gap:14px;width:100%;text-align:left;cursor:pointer;border:none;background:' +
+        (active ? 'rgba(233,121,50,.1)' : 'transparent') + ';color:' + (active ? '#E97932' : '#27324c') +
+        ';font-weight:' + (active ? '700' : '600') + ';font-size:14px;padding:11px 16px;border-radius:10px;font-family:Montserrat;transition:background .15s;';
+      return { label, style, active, set: () => this.setState({ filter: label, filterOpen: false }) };
+    });
+    const filterLabel = st.filter === 'Todos' ? 'Filtrar por rubro' : st.filter;
+    const fo = st.filterOpen;
+    const filterBtnStyle = 'display:inline-flex;align-items:center;gap:9px;height:50px;padding:0 18px;border-radius:13px;cursor:pointer;font-family:Montserrat;font-weight:700;font-size:14px;border:1.5px solid ' +
+      (fo || st.filter !== 'Todos' ? '#E97932' : 'rgba(255,255,255,.22)') + ';background:' + (st.filter !== 'Todos' ? '#E97932' : 'rgba(255,255,255,.08)') + ';color:#fff;white-space:nowrap;transition:all .2s;';
+    const filterCaretStyle = 'transition:transform .25s ease;transform:rotate(' + (fo ? '180deg' : '0deg') + ');';
+    const filterMenuStyle = 'position:absolute;top:58px;right:0;z-index:40;width:230px;background:#fff;border:1px solid #E7EAF0;border-radius:14px;padding:7px;box-shadow:0 24px 50px -20px rgba(2,18,54,.4);display:flex;flex-direction:column;gap:2px;transform-origin:top right;transition:opacity .22s ease,transform .22s ease;opacity:' +
+      (fo ? '1' : '0') + ';transform:scale(' + (fo ? '1' : '.94') + ');pointer-events:' + (fo ? 'auto' : 'none') + ';';
+
+    // Dropdown de Categorías en el header (filtra el catálogo por rubro)
+    const rubros = ['Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Adhesivos'];
+    const rubroIcons = {
+      'Herramientas': 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z',
+      'Electricidad': 'M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z',
+      'Plomería': 'M2 12h4 M18 12h4 M6 8.5h12v7H6z M12 8.5V5.5 M10 5.5h4',
+      'Pinturas': 'M3 4.5h13v5H3z M16 7h4V5 M10 9.5v2.2a1 1 0 0 1-1 1 1 1 0 0 0-1 1V20',
+      'Adhesivos': 'M9 4h6v3H9z M10 7h4v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1z M11 4V2.4h2V4 M10.5 11h3'
+    };
+    const cq = this.norm(st.catSearch).trim();
+    const catMenuItems = rubros
+      .filter(r => !cq || this.norm(r).includes(cq))
+      .map(r => ({ name: r, iconPath: rubroIcons[r], count: this.catalog().filter(p => p.cat === r).length + '', go: () => this.pickCat(r) }));
+    const catMenuEmpty = catMenuItems.length === 0;
+    const cmo = st.catMenuOpen;
+    const catCaretStyle = 'transition:transform .25s ease;transform:rotate(' + (cmo ? '180deg' : '0deg') + ');';
+    const catMenuStyle = 'position:absolute;top:34px;right:0;z-index:60;width:280px;background:#fff url(assets/catdd-bg.png) center center/cover no-repeat;border:1px solid #E7EAF0;border-radius:16px;padding:12px;box-shadow:0 28px 60px -22px rgba(2,18,54,.5);transform-origin:top right;transition:opacity .22s ease,transform .22s ease;opacity:' +
+      (cmo ? '1' : '0') + ';transform:scale(' + (cmo ? '1' : '.95') + ');pointer-events:' + (cmo ? 'auto' : 'none') + ';';
+
+    const dp = st.detail ? this.catalog().find(p => p.id === st.detail) : null;
+    let detail = null;
+    if (dp) {
+      const db = badgeMap[dp.badge];
+      detail = {
+        name: dp.name, cat: dp.cat, attr: dp.attr, desc: dp.desc,
+        priceLabel: fmt(dp.price), hasOld: !!dp.old, oldLabel: dp.old ? fmt(dp.old) : '',
+        savePct: dp.old ? '-' + Math.round((1 - dp.price / dp.old) * 100) + '%' : '',
+        img: 'assets/prod/' + dp.img + '.png', badgeText: db.text, badgeBg: db.bg, badgeFg: db.fg,
+        consult: waBase('Hola! Quiero consultar por: ' + dp.name + ' (' + dp.attr + ').')
+      };
+    }
+    const detailOpen = !!detail;
+    const detailWrapStyle = 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;transition:opacity .3s ease;opacity:' +
+      (detailOpen ? '1' : '0') + ';pointer-events:' + (detailOpen ? 'auto' : 'none') + ';';
+
+    return {
+      products, resultLabel, filters,
+      hasResults: products.length > 0, noResults: products.length === 0,
+      search: st.search, hasSearch: !!st.search,
+      onSearch: (e) => this.setState({ search: e.target.value }),
+      clearSearch: () => this.setState({ search: '' }),
+      toggleFilter: () => this.setState(s => ({ filterOpen: !s.filterOpen })),
+      filterLabel, filterBtnStyle, filterCaretStyle, filterMenuStyle,
+      catMenuItems, catMenuEmpty, catCaretStyle, catMenuStyle, catSearch: st.catSearch,
+      onCatSearch: (e) => this.setState({ catSearch: e.target.value }),
+      toggleCatMenu: () => this.setState(s => ({ catMenuOpen: !s.catMenuOpen })),
+      goOfertas: () => this.pickCat('Ofertas'),
+      detail, detailOpen, detailWrapStyle, closeDetail: () => this.closeDetail(),
+      waContact: waBase('Hola Ferretería República! Quiero hacer una consulta.')
+    };
+  }
+}
+</script>
+</body>
+</html>

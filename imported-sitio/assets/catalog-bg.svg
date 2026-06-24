@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <radialGradient id="gb1" cx="18%" cy="78%" r="48%">
+      <stop offset="0%" stop-color="#E97932" stop-opacity="0.13"/>
+      <stop offset="100%" stop-color="#E97932" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gb2" cx="88%" cy="14%" r="42%">
+      <stop offset="0%" stop-color="#7bb3d4" stop-opacity="0.22"/>
+      <stop offset="100%" stop-color="#7bb3d4" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gb3" cx="8%" cy="8%" r="36%">
+      <stop offset="0%" stop-color="#a0b8d0" stop-opacity="0.28"/>
+      <stop offset="100%" stop-color="#a0b8d0" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="gb4" cx="82%" cy="88%" r="40%">
+      <stop offset="0%" stop-color="#E97932" stop-opacity="0.11"/>
+      <stop offset="100%" stop-color="#E97932" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="center" cx="50%" cy="42%" r="50%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.92"/>
+      <stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Base -->
+  <rect width="1440" height="900" fill="#eef2f7"/>
+  <rect width="1440" height="900" fill="url(#gb3)"/>
+  <rect width="1440" height="900" fill="url(#gb1)"/>
+  <rect width="1440" height="900" fill="url(#gb2)"/>
+  <rect width="1440" height="900" fill="url(#gb4)"/>
+  <rect width="1440" height="900" fill="url(#center)"/>
+
+  <!-- Grid lines blueprint style -->
+  <g stroke="#6a9ab8" stroke-width="0.35" opacity="0.18">
+    <line x1="180" y1="0" x2="180" y2="900"/>
+    <line x1="360" y1="0" x2="360" y2="900"/>
+    <line x1="540" y1="0" x2="540" y2="900"/>
+    <line x1="1080" y1="0" x2="1080" y2="900"/>
+    <line x1="1260" y1="0" x2="1260" y2="900"/>
+    <line x1="0" y1="150" x2="1440" y2="150"/>
+    <line x1="0" y1="300" x2="1440" y2="300"/>
+    <line x1="0" y1="450" x2="1440" y2="450"/>
+    <line x1="0" y1="600" x2="1440" y2="600"/>
+    <line x1="0" y1="750" x2="1440" y2="750"/>
+  </g>
+
+  <!-- Orange + crosshairs -->
+  <g stroke="#E97932" stroke-width="1.4" opacity="0.55">
+    <line x1="317" y1="449" x2="323" y2="449"/><line x1="320" y1="446" x2="320" y2="452"/>
+    <line x1="74" y1="327" x2="80" y2="327"/><line x1="77" y1="324" x2="77" y2="330"/>
+    <line x1="1209" y1="527" x2="1215" y2="527"/><line x1="1212" y1="524" x2="1212" y2="530"/>
+    <line x1="519" y1="627" x2="525" y2="627"/><line x1="522" y1="624" x2="522" y2="630"/>
+  </g>
+
+  <!-- Blue + crosshairs -->
+  <g stroke="#4a7fab" stroke-width="1.2" opacity="0.38">
+    <line x1="1364" y1="449" x2="1370" y2="449"/><line x1="1367" y1="446" x2="1367" y2="452"/>
+    <line x1="200" y1="680" x2="206" y2="680"/><line x1="203" y1="677" x2="203" y2="683"/>
+  </g>
+
+  <!-- Wrench outline — left area -->
+  <g stroke="#7aafc8" stroke-width="0.9" fill="none" opacity="0.32" transform="translate(42,108) rotate(-38) scale(3.2)">
+    <path d="M14 7a4 4 0 00-5.5 5L3 17.5 6.5 21l5.5-5.5a4 4 0 005-5.5l-2.7 2.7-2-2z"/>
+  </g>
+
+  <!-- Nut/bolt — left lower -->
+  <g stroke="#7aafc8" stroke-width="0.9" fill="none" opacity="0.28" transform="translate(110,440) scale(3.4)">
+    <circle cx="12" cy="12" r="4"/>
+    <polygon points="12,3.8 19.5,8 19.5,16 12,20.2 4.5,16 4.5,8"/>
+  </g>
+
+  <!-- Screw head + shaft — lower left -->
+  <g stroke="#7aafc8" stroke-width="0.9" fill="none" opacity="0.26" transform="translate(205,330) rotate(22) scale(2.8)">
+    <rect x="9" y="2" width="6" height="7" rx="1"/>
+    <line x1="10" y1="5" x2="14" y2="5"/>
+    <path d="M10 9 L9 22 L12 19.5 L15 22 L14 9"/>
+  </g>
+
+  <!-- Circular gear — left -->
+  <g stroke="#7aafc8" stroke-width="0.9" fill="none" opacity="0.26" transform="translate(248,490) scale(3.2)">
+    <circle cx="12" cy="12" r="8"/>
+    <circle cx="12" cy="12" r="3"/>
+    <line x1="12" y1="4" x2="12" y2="1.5"/>
+    <line x1="12" y1="22.5" x2="12" y2="20"/>
+    <line x1="4" y1="12" x2="1.5" y2="12"/>
+    <line x1="22.5" y1="12" x2="20" y2="12"/>
+    <line x1="6.3" y1="6.3" x2="4.6" y2="4.6"/>
+    <line x1="17.7" y1="17.7" x2="19.4" y2="19.4"/>
+    <line x1="6.3" y1="17.7" x2="4.6" y2="19.4"/>
+    <line x1="17.7" y1="6.3" x2="19.4" y2="4.6"/>
+  </g>
+
+  <!-- Large circle — right side blueprint -->
+  <g stroke="#7aafc8" stroke-width="0.9" fill="none" opacity="0.26" transform="translate(1265,390) scale(3.8)">
+    <circle cx="12" cy="12" r="9"/>
+    <circle cx="12" cy="12" r="5"/>
+    <circle cx="12" cy="12" r="1.5" fill="#7aafc8" stroke="none" opacity="0.3"/>
+    <line x1="12" y1="3" x2="12" y2="7"/>
+    <line x1="12" y1="17" x2="12" y2="21"/>
+    <line x1="3" y1="12" x2="7" y2="12"/>
+    <line x1="17" y1="12" x2="21" y2="12"/>
+  </g>
+
+  <!-- Hex nut — right lower -->
+  <g stroke="#7aafc8" stroke-width="0.9" fill="none" opacity="0.24" transform="translate(1310,600) rotate(-15) scale(3)">
+    <circle cx="12" cy="12" r="4"/>
+    <polygon points="12,3.8 19.5,8 19.5,16 12,20.2 4.5,16 4.5,8"/>
+  </g>
+
+  <!-- Small bolt left -->
+  <g stroke="#7aafc8" stroke-width="0.8" fill="none" opacity="0.22" transform="translate(78,560) rotate(45) scale(2.4)">
+    <rect x="9" y="2" width="6" height="7" rx="1"/>
+    <line x1="10" y1="5" x2="14" y2="5"/>
+    <path d="M10 9 L9 22 L12 19.5 L15 22 L14 9"/>
+  </g>
+
+  <!-- Dot grid — bottom right -->
+  <g fill="#7aafc8" opacity="0.28">
+    <circle cx="1388" cy="558" r="1.8"/><circle cx="1400" cy="558" r="1.8"/><circle cx="1412" cy="558" r="1.8"/>
+    <circle cx="1388" cy="570" r="1.8"/><circle cx="1400" cy="570" r="1.8"/><circle cx="1412" cy="570" r="1.8"/>
+    <circle cx="1388" cy="582" r="1.8"/><circle cx="1400" cy="582" r="1.8"/><circle cx="1412" cy="582" r="1.8"/>
+  </g>
+
+  <!-- Dot grid — lower left -->
+  <g fill="#7aafc8" opacity="0.22">
+    <circle cx="52" cy="748" r="1.6"/><circle cx="63" cy="748" r="1.6"/><circle cx="74" cy="748" r="1.6"/>
+    <circle cx="52" cy="759" r="1.6"/><circle cx="63" cy="759" r="1.6"/><circle cx="74" cy="759" r="1.6"/>
+  </g>
+
+  <!-- Blueprint box — top right corner -->
+  <g stroke="#7aafc8" stroke-width="0.6" fill="none" opacity="0.22" transform="translate(1290, 28)">
+    <rect x="0" y="0" width="120" height="70" rx="2"/>
+    <rect x="8" y="8" width="104" height="54" rx="1"/>
+    <line x1="0" y1="35" x2="120" y2="35"/>
+    <line x1="60" y1="0" x2="60" y2="70"/>
+  </g>
+</svg>

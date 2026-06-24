@@ -1,0 +1,1489 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="icon" type="image/png" href="assets/republica-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap" rel="stylesheet">
+<script src="image-slot.js"></script>
+<style>
+  *{box-sizing:border-box;}
+  body{margin:0;font-family:'Montserrat',system-ui,sans-serif;color:#0E1B33;background:#fff;-webkit-font-smoothing:antialiased;}
+  ::selection{background:#E97932;color:#fff;}
+  button{font-family:'Montserrat',sans-serif;}
+  input{font-family:'Montserrat',sans-serif;}
+  @keyframes floaty{0%,100%{transform:translateY(0)}50%{transform:translateY(-16px)}}
+  @keyframes floaty2{0%,100%{transform:translateY(0)}50%{transform:translateY(12px)}}
+  @keyframes floaty3{0%,100%{transform:translateY(0) rotate(-3deg)}50%{transform:translateY(-10px) rotate(-3deg)}}
+  @keyframes pulseBadge{0%,100%{box-shadow:0 0 0 0 rgba(244,85,42,.5)}50%{box-shadow:0 0 0 9px rgba(244,85,42,0)}}
+  @keyframes spinSlow{to{transform:rotate(360deg)}}
+  @keyframes gridPan{from{background-position:0 0}to{background-position:64px 64px}}
+  @keyframes glowPulse{0%,100%{opacity:.42;transform:scale(1)}50%{opacity:.82;transform:scale(1.12)}}
+  @keyframes driftX{0%,100%{transform:translate(0,0)}50%{transform:translate(26px,-16px)}}
+  @keyframes driftX2{0%,100%{transform:translate(0,0)}50%{transform:translate(-22px,18px)}}
+  @keyframes sweepX{0%{transform:translateX(-140%) skewX(-16deg)}100%{transform:translateX(160%) skewX(-16deg)}}
+  @keyframes heroKen{0%{opacity:0;transform:scale(1.14)}5%{opacity:1}29%{opacity:1}34%{opacity:0}100%{opacity:0;transform:scale(1)}}
+  @keyframes lampGlow{0%,100%{opacity:.62}50%{opacity:1}}
+  @keyframes mote{0%{opacity:0;transform:translateY(0)}20%{opacity:.7}100%{opacity:0;transform:translateY(-120px)}}
+  @keyframes svcSway{0%,100%{transform:rotate(0deg)}50%{transform:rotate(2.2deg)}}
+  @keyframes heroUp{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+  image-slot{display:block;}
+  @keyframes revKf{from{opacity:0;transform:translateY(26px)}to{opacity:1;transform:none}}
+  @supports (animation-timeline: view()){
+    [data-reveal]{animation:revKf both;animation-timeline:view();animation-range:entry 2% cover 30%;}
+  }
+  .cat-poster{position:relative;flex:none;width:250px;height:366px;border-radius:16px;overflow:hidden;cursor:pointer;text-decoration:none;box-shadow:0 18px 44px -22px rgba(0,0,0,.75);transition:transform .45s cubic-bezier(.2,.7,.2,1),box-shadow .45s ease;}
+  .cat-poster:hover{transform:translateY(-7px);box-shadow:0 32px 64px -24px rgba(0,0,0,.85);}
+  .cat-poster:hover .cat-imgz{transform:scale(1.07);}
+  .cat-poster:hover .cat-ov{opacity:1;}
+  .cat-poster:hover .cat-cta{transform:translateY(0);opacity:1;}
+  .cat-imgz{transition:transform .6s cubic-bezier(.2,.7,.2,1);}
+  .cat-ov{transition:opacity .4s ease;}
+  .cat-cta{transition:transform .45s cubic-bezier(.2,.7,.2,1),opacity .4s ease;}
+  .cat-vp{overflow:hidden;-webkit-mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);mask-image:linear-gradient(90deg,transparent,#000 5%,#000 95%,transparent);}
+  .cat-track{display:flex;gap:20px;width:max-content;will-change:transform;}
+  .cat-nav{position:absolute;top:50%;transform:translateY(-50%);width:50px;height:50px;border-radius:50%;border:1px solid rgba(255,255,255,.28);background:rgba(2,18,54,.6);backdrop-filter:blur(8px);color:#fff;display:flex;align-items:center;justify-content:center;cursor:pointer;z-index:6;transition:background .25s ease,border-color .25s ease,transform .25s ease;}
+  .cat-nav:hover{background:#E97932;border-color:#E97932;}
+  .cat-nav:active{transform:translateY(-50%) scale(.92);}
+  .cat-nav.prev{left:-4px;} .cat-nav.next{right:-4px;}
+  @media(max-width:560px){.cat-nav{display:none;}}
+  .fan-layout{position:relative;height:540px;display:flex;justify-content:center;align-items:center;}
+  .fan-card{position:absolute;left:50%;top:50%;width:248px;height:372px;margin:-186px 0 0 -124px;border-radius:22px;overflow:hidden;cursor:pointer;background:#0a1f50;border:5px solid #fff;box-shadow:0 30px 60px -20px rgba(0,0,0,.5);transition:transform .55s cubic-bezier(.2,.7,.2,1),opacity .45s ease;transform-origin:center center;will-change:transform,opacity;-webkit-tap-highlight-color:transparent;}
+  .fan-card img{pointer-events:none;}
+  .fan-nav{position:relative;width:48px;height:48px;border-radius:50%;border:1.5px solid rgba(2,31,95,.18);background:rgba(2,31,95,.05);backdrop-filter:blur(10px);color:#021F5F;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .25s,border-color .25s,color .25s,transform .2s;box-shadow:0 4px 20px rgba(0,0,0,.08);}
+  .fan-nav:hover{background:#E97932;border-color:#E97932;color:#fff;}
+  .fan-nav:active{transform:scale(.92);}
+  .fan-dot{width:8px;height:8px;border-radius:50%;background:rgba(2,31,95,.18);transition:all .3s ease;cursor:pointer;}
+  .fan-dot.on{background:#E97932;transform:scale(1.4);}
+  @media(max-width:768px){.fan-layout{height:420px;}.fan-card{width:188px;height:282px;margin:-141px 0 0 -94px;}}
+  @media(max-width:480px){.fan-layout{height:360px;}.fan-card{width:158px;height:238px;margin:-119px 0 0 -79px;border-width:4px;}}
+  @media(max-width:640px){
+    .fr-detail{flex-direction:column!important;max-height:92vh!important;overflow-y:auto!important;background:#fff!important;-webkit-transform:translateZ(0);transform:translateZ(0);isolation:isolate;}
+    .fr-detail>div:first-child{width:100%!important;min-height:200px!important;height:220px!important;flex:none!important;}
+    .fr-detail>div:last-child{padding:22px 20px 24px!important;overflow:visible!important;}
+    .fr-detail .ddImgPan, .fr-detail [style*="ddImgPan"]{animation:none!important;}
+  }
+  .nav-link{position:relative;color:#fff;font-size:14px;font-weight:600;cursor:pointer;letter-spacing:.01em;padding:7px 2px;transition:color .25s ease;text-decoration:none;}
+  .nav-link::after{content:'';position:absolute;left:0;right:0;bottom:0;height:2px;border-radius:2px;background:linear-gradient(90deg,#E97932,#F4552A);transform:scaleX(0);transform-origin:left center;transition:transform .32s cubic-bezier(.2,.7,.2,1);}
+  .nav-link:hover{color:#ffb37a;}
+  .nav-link:hover::after{transform:scaleX(1);}
+  .icon-btn{transition:background .25s ease,border-color .25s ease,transform .25s cubic-bezier(.2,.7,.2,1),box-shadow .25s ease;}
+  .icon-btn:hover{transform:translateY(-2px);}
+  .icon-btn:active{transform:translateY(0) scale(.95);}
+  .wa-btn{transition:transform .25s cubic-bezier(.2,.7,.2,1),box-shadow .3s ease,filter .25s ease;}
+  .wa-btn:hover{transform:translateY(-2px);box-shadow:0 12px 24px -8px rgba(37,211,102,.75);filter:brightness(1.05);}
+  .wa-btn:active{transform:translateY(0) scale(.95);}
+  .wa-btn::after{content:'';position:absolute;inset:0;border-radius:inherit;border:2px solid #25D366;opacity:.55;animation:waRing 2.6s ease-out infinite;}
+  @keyframes waRing{0%{transform:scale(1);opacity:.5}70%{transform:scale(1.35);opacity:0}100%{opacity:0}}
+  @keyframes toastIn{from{opacity:0;transform:translateY(18px) scale(.96)}to{opacity:1;transform:translateY(0) scale(1)}}
+  @keyframes toastOut{from{opacity:1;transform:translateY(0) scale(1)}to{opacity:0;transform:translateY(10px) scale(.96)}}
+  .toast-wrap{position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:999;pointer-events:none;}
+  .toast-box{display:flex;align-items:center;gap:12px;background:#fff;color:#15213b;font-size:14px;font-weight:600;padding:14px 20px;border-radius:14px;box-shadow:0 16px 40px -12px rgba(0,0,0,.28);border:1px solid #e8ecf2;animation:toastIn .32s cubic-bezier(.2,.8,.25,1) both;white-space:nowrap;}
+  .toast-box.hiding{animation:toastOut .28s ease forwards;}
+  @keyframes ddPop{from{opacity:0;transform:translateY(26px) scale(.96);}to{opacity:1;transform:none;}}
+  @keyframes ddImgPan{0%{transform:scale(1.08) translateY(0);}100%{transform:scale(1.16) translateY(-8px);}}
+  .dd-card{transition:transform .35s cubic-bezier(.2,.8,.25,1);}
+  .dd-cta{transition:transform .22s cubic-bezier(.2,.7,.2,1),box-shadow .25s,background .22s;}
+  .dd-cta:hover{transform:translateY(-2px);box-shadow:0 18px 38px -14px rgba(233,121,50,.85);}
+  .dd-cta:active{transform:translateY(0) scale(.98);}
+  .dd-qbtn{transition:background .18s,color .18s;}
+  .dd-qbtn:hover{background:#E97932!important;color:#fff!important;}
+  .cat-prod{transition:transform .35s cubic-bezier(.2,.7,.2,1),box-shadow .35s,border-color .35s;}
+  .cat-prod:hover{transform:translateY(-6px);box-shadow:0 24px 50px -22px rgba(2,31,95,.38);border-color:#E97932;}
+  .cat-prod:hover .cat-prod-img{transform:scale(1.06);}
+  .cat-prod-img{transition:transform .5s cubic-bezier(.2,.7,.2,1);}
+  @keyframes catalogIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+  @keyframes catalogOut{from{transform:translateX(0)}to{transform:translateX(100%)}}
+  .search-field{transition:border-color .25s ease,background .25s ease,box-shadow .25s ease;}
+  .search-field:focus{border-color:#E97932!important;background:rgba(255,255,255,.16)!important;box-shadow:0 0 0 4px rgba(233,121,50,.16);}
+  .ben-item{transition:transform .4s cubic-bezier(.2,.7,.2,1);}
+  .ben-item:hover{transform:translateY(-4px);}
+  .ben-item:hover .ben-ico{border-color:#E97932;color:#E97932;box-shadow:0 12px 26px -14px rgba(233,121,50,.55);}
+  .ben-item:hover .ben-bar{width:34px;}
+  .ben-ico{transition:border-color .4s ease,color .4s ease,box-shadow .4s ease;}
+  .ben-bar{transition:width .4s cubic-bezier(.2,.7,.2,1);}
+  @media(max-width:880px){.ben-grid{grid-template-columns:repeat(2,1fr)!important;gap:8px!important;}.ben-div{display:none!important;}}
+  @media(max-width:520px){.ben-grid{grid-template-columns:1fr!important;}}
+  input::placeholder{color:#9aa3b2;}
+  .nav-links::-webkit-scrollbar{display:none;}
+  @media(max-width:960px){
+    .nav-links{display:none!important;}
+    .hamb{display:flex!important;}
+    .hd-actions{margin-left:auto!important;}
+    .hero-grid{grid-template-columns:1fr!important;min-height:0!important;padding-top:128px!important;padding-bottom:64px!important;}
+    .hero-ov{background:linear-gradient(180deg,rgba(2,18,54,.82) 0%,rgba(2,22,66,.52) 42%,rgba(2,28,84,.64) 100%)!important;}
+    #heroPhotos img{object-position:64% 24%!important;}
+    .header-search{display:none!important;}
+  }
+  @media(max-width:560px){
+    .hide-sm{display:none!important;}
+    .hero-title{font-size:38px!important;}
+    .sec-pad{padding-left:18px!important;padding-right:18px!important;}
+  }
+  /* ===== ADAPTIVE / MOBILE ===== */
+  @media(max-width:1100px){
+    .hero-title{font-size:48px!important;}
+    section h2{font-size:34px!important;}
+  }
+  @media(max-width:768px){
+    .hero-title{font-size:40px!important;line-height:1.06!important;}
+    .hero-grid{padding-top:120px!important;padding-bottom:54px!important;gap:26px!important;min-height:0!important;}
+    .hero-feats{grid-template-columns:1fr!important;gap:10px!important;max-width:none!important;}
+    .hero-feat{padding:12px 14px!important;}
+    section .sec-pad:not(.hero-grid){padding-top:54px!important;padding-bottom:58px!important;}section .sec-pad{padding-left:20px!important;padding-right:20px!important;}
+    section h2{font-size:28px!important;}
+    footer .sec-pad{padding-left:22px!important;padding-right:22px!important;}
+    footer .ft-grid{grid-template-columns:1fr 1fr!important;gap:30px 24px!important;}
+    footer .ft-grid > div:first-child{grid-column:1 / -1;}
+    .cat-poster{width:212px!important;height:312px!important;}
+    #fanName{font-size:18px!important;}
+    #fanPrice{font-size:21px!important;}
+    .offer-card{flex-direction:column!important;}
+    .offer-card-img{width:100%!important;height:170px!important;}
+    .offers-banner{padding:24px 22px!important;gap:18px!important;}
+    .offers-banner h2{font-size:24px!important;}
+    .offers-banner .cd-box{padding:9px 11px!important;min-width:54px!important;}
+    .offers-banner .cd-box > div:first-child{font-size:24px!important;}
+    .catalog-search-row{flex-direction:column!important;align-items:stretch!important;}
+    .catalog-search-row > div:first-child{max-width:none!important;}
+    .filter-btn-mob{width:100%!important;justify-content:center!important;}
+    .catalog-grid{grid-template-columns:repeat(auto-fill,minmax(170px,1fr))!important;gap:14px!important;}
+    .float-wa{right:16px!important;bottom:18px!important;width:54px!important;height:54px!important;}
+    header .sec-pad{gap:12px!important;padding:0 18px!important;}
+    header img[alt="Ferretería República"]{height:32px!important;}
+    header .icon-btn, header .wa-btn{width:40px!important;height:40px!important;border-radius:11px!important;}
+    .fan-card{cursor:grab;}
+  }
+  @media(max-width:560px){
+    .hero-title{font-size:34px!important;letter-spacing:-.015em!important;}
+    .hero-grid{padding-top:100px!important;padding-bottom:46px!important;}
+    header img[alt="Ferretería República"]{height:30px!important;}
+    header .icon-btn, header .wa-btn{width:38px!important;height:38px!important;border-radius:10px!important;}
+    section .sec-pad:not(.hero-grid){padding-top:46px!important;padding-bottom:50px!important;}section .sec-pad{padding-left:16px!important;padding-right:16px!important;}
+    section h2{font-size:24px!important;}
+    footer .ft-grid{grid-template-columns:1fr!important;gap:28px!important;}
+    footer .ft-grid > div:first-child{grid-column:auto!important;}
+    .ft-bottom{flex-direction:column!important;text-align:center!important;align-items:center!important;gap:8px!important;}
+    .hero-cta-row{flex-direction:column!important;width:100%;}
+    .hero-cta-row > button{width:100%!important;justify-content:center!important;}
+    .cat-poster{width:186px!important;height:274px!important;}
+    .offers-banner{padding:20px 18px!important;border-radius:18px!important;}
+    .offers-banner h2{font-size:22px!important;}
+    .catalog-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:12px!important;}
+    .catalog-grid .cat-prod > div:last-child{padding:12px 12px 14px!important;}
+    .toast-wrap{bottom:88px!important;left:14px!important;right:14px!important;transform:none!important;}
+    .toast-box{white-space:normal!important;}
+    .fr-detail{border-radius:18px!important;}
+    /* Hero feature icon shrink */
+    .hero-feat-ico{width:34px!important;height:34px!important;}
+  }
+  @media(max-width:360px){
+    .hero-title{font-size:30px!important;}
+    section h2{font-size:21px!important;}
+    header .sec-pad{padding:0 12px!important;gap:10px!important;}
+    .cat-poster{width:162px!important;height:240px!important;}
+    .catalog-grid{grid-template-columns:1fr!important;}
+  }
+</style>
+</helmet>
+
+<div style="overflow-x:hidden;">
+
+  <!-- ============ HEADER ============ -->
+  <header style="{{ headerStyle }}">
+    <div class="sec-pad" style="max-width:1240px;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:22px;">
+      <img onClick="{{ goInicio }}" src="assets/republica-logo.png" alt="Ferretería República" style="height:38px;width:auto;cursor:pointer;flex:none;"/>
+      <div class="header-search" style="flex:1;min-width:0;max-width:540px;position:relative;">
+        <input class="search-field" value="{{ search }}" onChange="{{ onSearch }}" onFocus="{{ onSearchFocus }}" onBlur="{{ onSearchBlur }}" placeholder="Buscá herramientas, materiales..." style="width:100%;height:42px;border-radius:11px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;padding:0 16px 0 42px;font-size:13.5px;outline:none;"/>
+        <svg style="position:absolute;left:14px;top:12px;pointer-events:none;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#aeb7c7" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+        <sc-if value="{{ searchDropOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:200;background:#fff;border-radius:16px;box-shadow:0 24px 60px -18px rgba(2,18,54,.38);border:1px solid #E7EAF0;overflow:hidden;">
+            <sc-for list="{{ searchResults }}" as="sr" hint-placeholder-count="4">
+              <div onClick="{{ sr.go }}" style="display:flex;align-items:center;gap:13px;padding:11px 14px;cursor:pointer;border-bottom:1px solid #F0F3F8;transition:background .15s;" style-hover="background:#F6F8FC;">
+                <div style="width:46px;height:46px;border-radius:10px;background:#eef2f7 url('{{ sr.img }}') center/cover no-repeat;flex:none;"></div>
+                <div style="flex:1;min-width:0;">
+                  <div style="font-size:13.5px;font-weight:700;color:#15213b;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">{{ sr.name }}</div>
+                  <div style="font-size:11.5px;color:#E97932;font-weight:700;letter-spacing:.04em;text-transform:uppercase;margin-top:1px;">{{ sr.cat }}</div>
+                </div>
+                <div style="font-size:14px;font-weight:700;color:#021F5F;font-family:'Oswald',sans-serif;white-space:nowrap;flex:none;">{{ sr.priceLabel }}</div>
+              </div>
+            </sc-for>
+            <div style="padding:10px 14px;font-size:12px;color:#9aa3b4;text-align:center;">Mostrando {{ searchResultCount }} resultado{{ searchResultCount === 1 ? '' : 's' }} — hacé clic para ver detalle</div>
+          </div>
+        </sc-if>
+      </div>
+      <nav class="nav-links" style="display:flex;align-items:center;gap:24px;margin-left:auto;">
+        <a onClick="{{ goInicio }}" class="nav-link">Inicio</a>
+        <a onClick="{{ openCatalog }}" class="nav-link" style="cursor:pointer;">Catálogo</a>
+        <a onClick="{{ goOfertasCatalog }}" class="nav-link">Ofertas</a>
+        <div class="cat-dd" style="position:relative;" data-catdd>
+          <a onClick="{{ toggleCatMenu }}" class="nav-link" style="display:inline-flex;align-items:center;gap:5px;">Categorías<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="{{ catCaretStyle }}"><path d="M6 9l6 6 6-6"/></svg></a>
+          <div style="{{ catMenuStyle }}">
+            <div style="position:relative;margin-bottom:10px;">
+              <input value="{{ catSearch }}" onInput="{{ onCatSearch }}" placeholder="Buscar categoría..." style="width:100%;height:40px;border-radius:10px;border:1.5px solid #E2E7EF;background:#F6F7FA;color:#15213b;padding:0 14px 0 38px;font-size:13.5px;outline:none;transition:border-color .2s;" style-focus="border-color:#E97932;"/>
+              <svg style="position:absolute;left:12px;top:11px;" width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#9aa3b2" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+            </div>
+            <div style="max-height:300px;overflow-y:auto;display:flex;flex-direction:column;gap:2px;">
+              <sc-for list="{{ catMenuItems }}" as="c" hint-placeholder-count="10">
+                <a onClick="{{ c.go }}" style="display:flex;align-items:center;gap:11px;padding:9px 11px;border-radius:10px;cursor:pointer;text-decoration:none;color:#27324c;transition:background .15s;" style-hover="background:rgba(233,121,50,.1);">
+                  <span style="flex:none;width:32px;height:32px;border-radius:9px;background:linear-gradient(140deg,#F4552A,#E97932);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.iconPath }}"/></svg></span>
+                  <span style="font-size:13.5px;font-weight:600;">{{ c.name }}</span>
+                </a>
+              </sc-for>
+              <sc-if value="{{ catMenuEmpty }}" hint-placeholder-val="{{ false }}"><div style="padding:16px 11px;text-align:center;font-size:13px;color:#9aa3b2;">Sin coincidencias</div></sc-if>
+            </div>
+          </div>
+        </div>
+        <a onClick="{{ goContacto }}" class="nav-link">Contacto</a>
+      </nav>
+      <div class="hd-actions" style="display:flex;align-items:center;gap:10px;flex:none;">
+        <a href="{{ waContact }}" target="_blank" class="wa-btn hide-sm" aria-label="Escribinos por WhatsApp" title="WhatsApp" style="position:relative;width:44px;height:44px;border-radius:12px;background:#25D366;color:#fff;display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none;">
+          <svg width="21" height="21" viewBox="0 0 24 24" fill="#fff" style="position:relative;z-index:1;"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2zm0 2a8 8 0 11-4.1 14.9l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 0112 4zm-3 4.3c-.2 0-.5.1-.6.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.7 2.8 4.3 3.8 2.1.8 2.6.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.6-2.2-1.4-.6-.6-1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.3 0-.5l-.7-1.7c-.2-.4-.4-.4-.6-.4z"/></svg>
+        </a>
+        <button onClick="{{ openCart }}" class="icon-btn" aria-label="Carrito" style="position:relative;width:44px;height:44px;border-radius:12px;border:1.5px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);cursor:pointer;display:flex;align-items:center;justify-content:center;" style-hover="background:rgba(255,255,255,.16);border-color:#E97932;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg>
+          <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#F4552A;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #021F5F;">{{ count }}</span></sc-if>
+        </button>
+        <button onClick="{{ toggleMenu }}" class="hamb icon-btn" style="display:none;width:44px;height:44px;border-radius:12px;border:1.5px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);cursor:pointer;align-items:center;justify-content:center;flex-direction:column;gap:4px;">
+          <span style="width:18px;height:2px;background:#fff;border-radius:2px;"></span>
+          <span style="width:18px;height:2px;background:#fff;border-radius:2px;"></span>
+          <span style="width:18px;height:2px;background:#fff;border-radius:2px;"></span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- ============ HOME VIEW ============ -->
+  <div id="home-view" style="{{ homeViewStyle }}">
+
+  <!-- ============ HERO ============ -->
+  <section id="inicio" style="background:#021F5F;color:#fff;position:relative;overflow:hidden;">
+    <!-- FONDO: escena de atención al cliente dentro de la ferretería (ilustración premium). Para usar una foto real, soltala en el slot de abajo. -->
+    <div id="heroPhotos" style="position:absolute;inset:0;overflow:hidden;will-change:transform;transform:scale(1.06);transform-origin:60% 40%;">
+      <img src="assets/hero-atencion2.png" alt="Atención al cliente en Ferretería República" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:72% 40%;"/>
+    </div>
+    <!-- overlay azul institucional: refuerza el lado del texto sin tapar la escena -->
+    <div class="hero-ov" style="position:absolute;inset:0;background:linear-gradient(95deg,rgba(2,18,54,.86) 0%,rgba(2,24,72,.62) 26%,rgba(2,31,95,.20) 46%,rgba(2,31,95,0) 62%);"></div>
+    <div style="position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,16,50,.42) 0%,transparent 30%);"></div>
+    <div style="position:absolute;top:0;left:0;right:0;height:160px;background:linear-gradient(180deg,rgba(2,16,50,.55),transparent);"></div>
+    <!-- acento de marca sutil -->
+    <div style="position:absolute;top:-120px;left:-60px;width:420px;height:420px;border-radius:50%;background:radial-gradient(circle,rgba(233,121,50,.16),transparent 68%);animation:glowPulse 8s ease-in-out infinite;pointer-events:none;"></div>
+    <div class="sec-pad hero-grid" style="max-width:1240px;margin:0 auto;padding:160px 28px 110px;display:grid;grid-template-columns:minmax(0,580px);gap:40px;align-items:center;min-height:600px;position:relative;z-index:2;">
+      <div>
+        <h1 data-reveal class="hero-title" style="font-size:54px;line-height:1.04;font-weight:800;margin:0 0 18px;letter-spacing:-.01em;text-shadow:0 2px 26px rgba(0,0,0,.4);">
+          Todo lo que necesitás,<br><span style="color:#E97932;">en República</span> lo encontrarás
+        </h1>
+        <p data-reveal style="font-size:17px;line-height:1.55;color:#d6deed;max-width:520px;margin:0 0 30px;text-shadow:0 1px 14px rgba(0,0,0,.35);">
+          Herramientas, materiales, electricidad, plomería, pintura y soluciones para tu casa, obra o negocio. Variedad, stock y atención cuando la necesitás.
+        </p>
+        <div data-reveal class="hero-cta-row" style="display:flex;gap:14px;flex-wrap:wrap;margin-bottom:34px;">
+          <button onClick="{{ goProductos }}" style="height:54px;padding:0 28px;border:none;border-radius:13px;background:#E97932;color:#fff;font-weight:700;font-size:16px;cursor:pointer;display:flex;align-items:center;gap:9px;transition:background .22s,transform .22s,box-shadow .22s;box-shadow:0 14px 30px -12px rgba(233,121,50,.7);" style-hover="background:#d76b27;transform:translateY(-2px);box-shadow:0 20px 38px -12px rgba(233,121,50,.8);">
+            Comprar ahora
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+          </button>
+          <button onClick="{{ goOfertas }}" style="height:54px;padding:0 26px;border:1.6px solid rgba(255,255,255,.28);border-radius:13px;background:transparent;color:#fff;font-weight:700;font-size:16px;cursor:pointer;transition:background .22s,border-color .22s;" style-hover="background:rgba(255,255,255,.1);border-color:#fff;">
+            Ver ofertas
+          </button>
+        </div>
+        <div data-reveal class="hero-feats" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;max-width:520px;">
+          <div class="hero-feat" style="position:relative;display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);overflow:hidden;">
+            <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#E97932;"></span>
+            <span class="hero-feat-ico" style="flex:none;width:38px;height:38px;border-radius:11px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="3"/><path d="M8 17l-1.5 3v-3"/><path d="M8 9h8M8 12h5"/></svg></span>
+            <div style="min-width:0;"><div style="font-size:13.5px;font-weight:700;color:#fff;line-height:1.2;">Atención personalizada</div><div style="font-size:11px;color:#aebbd4;margin-top:2px;">Te asesoramos siempre</div></div>
+          </div>
+          <div class="hero-feat" style="position:relative;display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);overflow:hidden;">
+            <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#E97932;"></span>
+            <span class="hero-feat-ico" style="flex:none;width:38px;height:38px;border-radius:11px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></span>
+            <div style="min-width:0;"><div style="font-size:13.5px;font-weight:700;color:#fff;line-height:1.2;">Productos confiables</div><div style="font-size:11px;color:#aebbd4;margin-top:2px;">Marcas que responden</div></div>
+          </div>
+          <div class="hero-feat" style="position:relative;display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);overflow:hidden;">
+            <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#E97932;"></span>
+            <span class="hero-feat-ico" style="flex:none;width:38px;height:38px;border-radius:11px;background:rgba(37,211,102,.2);color:#39d178;display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2zm0 2a8 8 0 11-4.1 14.9l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 0112 4zm-3 4.3c-.2 0-.5.1-.6.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.7 2.8 4.3 3.8 2.1.8 2.6.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.6-2.2-1.4-.6-.6-1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.3 0-.5l-.7-1.7c-.2-.4-.4-.4-.6-.4z"/></svg></span>
+            <div style="min-width:0;"><div style="font-size:13.5px;font-weight:700;color:#fff;line-height:1.2;">Compra por WhatsApp</div><div style="font-size:11px;color:#aebbd4;margin-top:2px;">Respuesta al instante</div></div>
+          </div>
+          <div class="hero-feat" style="position:relative;display:flex;align-items:center;gap:13px;padding:13px 15px;border-radius:14px;background:rgba(255,255,255,.07);border:1px solid rgba(255,255,255,.14);backdrop-filter:blur(8px);overflow:hidden;">
+            <span style="position:absolute;left:0;top:0;bottom:0;width:3px;background:#E97932;"></span>
+            <span class="hero-feat-ico" style="flex:none;width:38px;height:38px;border-radius:11px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg></span>
+            <div style="min-width:0;"><div style="font-size:13.5px;font-weight:700;color:#fff;line-height:1.2;">Variedad obra y hogar</div><div style="font-size:11px;color:#aebbd4;margin-top:2px;">Todo en un solo lugar</div></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ BENEFITS BAR ============ -->
+  <section style="background:#fff url('assets/productos-bg.png') center center/cover no-repeat;border-bottom:1px solid #eef1f6;">
+    <div data-reveal class="sec-pad ben-grid" style="max-width:1200px;margin:0 auto;padding:56px 28px;display:grid;grid-template-columns:repeat(5,1fr);gap:0;">
+      <div class="ben-item" style="position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;padding:6px 22px;">
+        <div class="ben-ico" style="width:60px;height:60px;border-radius:50%;border:1.5px solid #e4e8f0;color:#021F5F;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="13" rx="3"/><path d="M8 17l-1.5 3v-3"/><path d="M8 9h8M8 12h5"/></svg></div>
+        <div>
+          <div style="font-size:15px;font-weight:700;line-height:1.3;color:#15213b;">Asesoramiento personalizado</div>
+          <div style="font-size:12.5px;color:#9098ab;margin-top:5px;line-height:1.4;">Te guiamos en cada compra</div>
+          <span class="ben-bar" style="display:block;height:2.5px;width:18px;border-radius:2px;background:#E97932;margin:13px auto 0;"></span>
+        </div>
+        <span class="ben-div" style="position:absolute;right:0;top:18%;height:64%;width:1px;background:#eef1f6;"></span>
+      </div>
+      <div class="ben-item" style="position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;padding:6px 22px;">
+        <div class="ben-ico" style="width:60px;height:60px;border-radius:50%;border:1.5px solid #e4e8f0;color:#021F5F;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg></div>
+        <div>
+          <div style="font-size:15px;font-weight:700;line-height:1.3;color:#15213b;">Productos para hogar y obra</div>
+          <div style="font-size:12.5px;color:#9098ab;margin-top:5px;line-height:1.4;">Variedad para cada proyecto</div>
+          <span class="ben-bar" style="display:block;height:2.5px;width:18px;border-radius:2px;background:#E97932;margin:13px auto 0;"></span>
+        </div>
+        <span class="ben-div" style="position:absolute;right:0;top:18%;height:64%;width:1px;background:#eef1f6;"></span>
+      </div>
+      <div class="ben-item" style="position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;padding:6px 22px;">
+        <div class="ben-ico" style="width:60px;height:60px;border-radius:50%;border:1.5px solid #e4e8f0;color:#021F5F;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2zm0 2a8 8 0 11-4.1 14.9l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 0112 4zm-3 4.3c-.2 0-.5.1-.6.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.7 2.8 4.3 3.8 2.1.8 2.6.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.6-2.2-1.4-.6-.6-1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.3 0-.5l-.7-1.7c-.2-.4-.4-.4-.6-.4z"/></svg></div>
+        <div>
+          <div style="font-size:15px;font-weight:700;line-height:1.3;color:#15213b;">Atención rápida por WhatsApp</div>
+          <div style="font-size:12.5px;color:#9098ab;margin-top:5px;line-height:1.4;">Respondemos al instante</div>
+          <span class="ben-bar" style="display:block;height:2.5px;width:18px;border-radius:2px;background:#E97932;margin:13px auto 0;"></span>
+        </div>
+        <span class="ben-div" style="position:absolute;right:0;top:18%;height:64%;width:1px;background:#eef1f6;"></span>
+      </div>
+      <div class="ben-item" style="position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;padding:6px 22px;">
+        <div class="ben-ico" style="width:60px;height:60px;border-radius:50%;border:1.5px solid #e4e8f0;color:#021F5F;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12l9-9 8 8-9 9z"/><circle cx="8" cy="8" r="1.4"/></svg></div>
+        <div>
+          <div style="font-size:15px;font-weight:700;line-height:1.3;color:#15213b;">Precios claros</div>
+          <div style="font-size:12.5px;color:#9098ab;margin-top:5px;line-height:1.4;">Sin sorpresas ni vueltas</div>
+          <span class="ben-bar" style="display:block;height:2.5px;width:18px;border-radius:2px;background:#E97932;margin:13px auto 0;"></span>
+        </div>
+        <span class="ben-div" style="position:absolute;right:0;top:18%;height:64%;width:1px;background:#eef1f6;"></span>
+      </div>
+      <div class="ben-item" style="position:relative;display:flex;flex-direction:column;align-items:center;text-align:center;gap:16px;padding:6px 22px;">
+        <div class="ben-ico" style="width:60px;height:60px;border-radius:50%;border:1.5px solid #e4e8f0;color:#021F5F;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 3v6c0 5-4 8-8 9-4-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg></div>
+        <div>
+          <div style="font-size:15px;font-weight:700;line-height:1.3;color:#15213b;">Herramientas confiables</div>
+          <div style="font-size:12.5px;color:#9098ab;margin-top:5px;line-height:1.4;">Marcas que responden</div>
+          <span class="ben-bar" style="display:block;height:2.5px;width:18px;border-radius:2px;background:#E97932;margin:13px auto 0;"></span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CATEGORIES ============ -->
+  <section id="categorias" style="position:relative;background:#021F5F;overflow:hidden;">
+    <div style="position:absolute;inset:0;background-image:url('assets/cat-pasillo.png');background-size:cover;background-position:center;"></div>
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,21,63,.93) 0%,rgba(2,26,76,.74) 32%,rgba(2,26,76,.72) 62%,rgba(2,18,56,.95) 100%);"></div>
+    <div style="position:absolute;inset:0;background:radial-gradient(120% 70% at 50% -5%,rgba(233,121,50,.14),transparent 55%);pointer-events:none;"></div>
+    <div class="sec-pad" style="position:relative;max-width:1240px;margin:0 auto;padding:92px 28px 100px;">
+      <div data-reveal style="text-align:center;margin-bottom:50px;">
+        <h2 style="font-size:42px;font-weight:800;margin:0 0 14px;letter-spacing:-.015em;color:#fff;text-shadow:0 3px 22px rgba(0,0,0,.45);">Categorías destacadas</h2>
+        <p style="font-size:16px;color:rgba(255,255,255,.84);max-width:580px;margin:0 auto;line-height:1.55;text-shadow:0 1px 10px rgba(0,0,0,.4);">Todo organizado para que encuentres rápido lo que buscás, sin vueltas. Variedad, stock y orden de ferretería profesional.</p>
+      </div>
+      <div data-reveal class="cat-carousel" style="position:relative;">
+        <button onClick="{{ catPrev }}" class="cat-nav prev" aria-label="Anterior"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M15 6l-6 6 6 6"/></svg></button>
+        <button onClick="{{ catNext }}" class="cat-nav next" aria-label="Siguiente"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M9 6l6 6-6 6"/></svg></button>
+        <div class="cat-vp">
+          <div class="cat-track">
+            <sc-for list="{{ categories }}" as="c" hint-placeholder-count="10">
+              <a onClick="{{ c.go }}" class="cat-poster">
+                <div class="cat-imgz" style="position:absolute;inset:0;background-image:url('{{ c.img }}');background-size:cover;background-position:center;"></div>
+                <div style="position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,8,30,.88) 0%,rgba(2,8,30,.45) 45%,transparent 70%);"></div>
+                <div style="position:absolute;bottom:0;left:0;right:0;padding:18px 16px;">
+                  <span style="display:inline-block;background:#E97932;color:#fff;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;border-radius:999px;margin-bottom:7px;">{{ c.tag }}</span>
+                  <div style="font-size:20px;font-weight:800;color:#fff;line-height:1.15;text-shadow:0 2px 10px rgba(0,0,0,.5);">{{ c.name }}</div>
+                  <div style="width:24px;height:2.5px;background:#E97932;border-radius:2px;margin-top:8px;"></div>
+                </div>
+                <div class="cat-ov" style="position:absolute;inset:0;opacity:0;background:linear-gradient(0deg,rgba(2,12,40,.82),rgba(2,12,40,.25) 55%,rgba(2,12,40,.45));display:flex;align-items:center;justify-content:center;">
+                  <span class="cat-cta" style="transform:translateY(14px);opacity:0;display:inline-flex;align-items:center;gap:9px;background:#E97932;color:#fff;font-weight:700;font-size:14px;padding:13px 22px;border-radius:12px;box-shadow:0 14px 30px -10px rgba(233,121,50,.8);">Ver productos <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+                </div>
+              </a>
+            </sc-for>
+            <sc-for list="{{ categories }}" as="c" hint-placeholder-count="10">
+              <a onClick="{{ c.go }}" class="cat-poster" aria-hidden="true">
+                <div class="cat-imgz" style="position:absolute;inset:0;background-image:url('{{ c.img }}');background-size:cover;background-position:center;"></div>
+                <div style="position:absolute;inset:0;background:linear-gradient(0deg,rgba(2,8,30,.88) 0%,rgba(2,8,30,.45) 45%,transparent 70%);"></div>
+                <div style="position:absolute;bottom:0;left:0;right:0;padding:18px 16px;">
+                  <span style="display:inline-block;background:#E97932;color:#fff;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;padding:3px 9px;border-radius:999px;margin-bottom:7px;">{{ c.tag }}</span>
+                  <div style="font-size:20px;font-weight:800;color:#fff;line-height:1.15;text-shadow:0 2px 10px rgba(0,0,0,.5);">{{ c.name }}</div>
+                  <div style="width:24px;height:2.5px;background:#E97932;border-radius:2px;margin-top:8px;"></div>
+                </div>
+                <div class="cat-ov" style="position:absolute;inset:0;opacity:0;background:linear-gradient(0deg,rgba(2,12,40,.82),rgba(2,12,40,.25) 55%,rgba(2,12,40,.45));display:flex;align-items:center;justify-content:center;">
+                  <span class="cat-cta" style="transform:translateY(14px);opacity:0;display:inline-flex;align-items:center;gap:9px;background:#E97932;color:#fff;font-weight:700;font-size:14px;padding:13px 22px;border-radius:12px;box-shadow:0 14px 30px -10px rgba(233,121,50,.8);">Ver productos <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></span>
+                </div>
+              </a>
+            </sc-for>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FEATURED PRODUCTS ============ -->
+  <section id="masvendidos" style="background:#fff url('assets/productos-bg.png') center top/cover no-repeat;">
+    <div class="sec-pad" style="max-width:1240px;margin:0 auto;padding:74px 28px 80px;">
+      <div style="display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:28px;flex-wrap:wrap;">
+        <div>
+          <div style="font-size:13px;font-weight:700;letter-spacing:.14em;color:#E97932;text-transform:uppercase;margin-bottom:8px;">Lo más elegido</div>
+          <h2 style="font-size:34px;font-weight:800;margin:0;letter-spacing:-.01em;">Productos destacados</h2>
+        </div>
+        <span style="font-size:13.5px;color:#697287;font-weight:600;">{{ resultLabel }}</span>
+      </div>
+      <div data-reveal class="fan-wrap" style="position:relative;">
+        <div class="fan-layout" id="fanLayout">
+          <sc-for list="{{ fanItems }}" as="it" hint-placeholder-count="8">
+            <a onClick="{{ it.open }}" class="fan-card" aria-label="{{ it.name }}">
+              <div class="fan-imgz" style="position:absolute;inset:0;background-image:url('{{ it.img }}');background-size:cover;background-position:center;"></div>
+            </a>
+          </sc-for>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:center;gap:18px;margin-top:10px;">
+          <div id="fanCap" style="text-align:center;min-height:58px;">
+            <div style="display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">
+              <span id="fanName" style="font-size:20px;font-weight:800;color:#15213b;">Taladro percutor</span>
+              <span id="fanPrice" style="font-family:'Oswald',sans-serif;font-weight:600;font-size:24px;color:#E97932;">Gs. 485.000</span>
+            </div>
+            <div id="fanAttr" style="font-size:13px;color:#697287;margin-top:3px;">650W · mandril 13mm</div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:center;gap:18px;">
+            <button onClick="{{ fanPrev }}" class="fan-nav" aria-label="Anterior"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg></button>
+            <div id="fanDots" style="display:flex;align-items:center;gap:8px;"></div>
+            <button onClick="{{ fanNext }}" class="fan-nav" aria-label="Siguiente"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></button>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;">
+            <button id="fanAdd" style="display:inline-flex;align-items:center;gap:9px;height:48px;padding:0 26px;border:none;border-radius:13px;background:#E97932;color:#fff;font-weight:700;font-size:15px;cursor:pointer;box-shadow:0 14px 30px -12px rgba(233,121,50,.7);transition:background .22s,transform .22s;" style-hover="background:#d76b27;transform:translateY(-2px);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg>Agregar al carrito</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ PARA CADA NECESIDAD ============ -->
+  <section style="background:#021F5F url('assets/necesidad-bg.png') center center/cover no-repeat;color:#fff;position:relative;overflow:hidden;">
+    <div style="position:absolute;inset:0;background:linear-gradient(180deg,rgba(2,31,95,.5),rgba(2,21,63,.72));pointer-events:none;"></div>
+    <div data-reveal class="sec-pad" style="max-width:1240px;margin:0 auto;padding:74px 28px 78px;position:relative;">
+      <div style="text-align:center;margin-bottom:40px;">
+        <div style="font-size:13px;font-weight:700;letter-spacing:.14em;color:#E97932;text-transform:uppercase;margin-bottom:10px;">Comprá según lo que hacés</div>
+        <h2 style="font-size:36px;font-weight:800;margin:0;letter-spacing:-.01em;">Para cada necesidad</h2>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:18px;">
+        <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:24px 22px;display:flex;flex-direction:column;gap:14px;">
+          <div style="width:50px;height:50px;border-radius:14px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 11l8-6 8 6"/><path d="M6 10v9h12v-9"/><path d="M10 19v-5h4v5"/></svg></div>
+          <div style="font-size:18px;font-weight:700;">Para tu casa</div>
+          <div style="font-size:13px;color:#b9c3d8;line-height:1.5;flex:1;">Arreglos, mejoras y mantenimiento del hogar con todo a mano.</div>
+        </div>
+        <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:24px 22px;display:flex;flex-direction:column;gap:14px;">
+          <div style="width:50px;height:50px;border-radius:14px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 7a4 4 0 00-5.5 5L3 17.5 6.5 21l5.5-5.5a4 4 0 005-5.5l-2.7 2.7-2-2z"/></svg></div>
+          <div style="font-size:18px;font-weight:700;">Para técnicos</div>
+          <div style="font-size:13px;color:#b9c3d8;line-height:1.5;flex:1;">Electricistas, plomeros e instaladores: herramientas confiables.</div>
+        </div>
+        <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:24px 22px;display:flex;flex-direction:column;gap:14px;">
+          <div style="width:50px;height:50px;border-radius:14px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 18h18"/><path d="M5 18v-3a7 7 0 0114 0v3"/><path d="M12 4v3"/></svg></div>
+          <div style="font-size:18px;font-weight:700;">Para obras</div>
+          <div style="font-size:13px;color:#b9c3d8;line-height:1.5;flex:1;">Materiales de construcción y volumen para tu obra en marcha.</div>
+        </div>
+        <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:24px 22px;display:flex;flex-direction:column;gap:14px;">
+          <div style="width:50px;height:50px;border-radius:14px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 7h2M13 7h2M9 11h2M13 11h2M9 15h2M13 15h2"/></svg></div>
+          <div style="font-size:18px;font-weight:700;">Para empresas</div>
+          <div style="font-size:13px;color:#b9c3d8;line-height:1.5;flex:1;">Comercios y constructoras: insumos con stock y atención ágil.</div>
+        </div>
+        <div style="background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);border-radius:18px;padding:24px 22px;display:flex;flex-direction:column;gap:14px;">
+          <div style="width:50px;height:50px;border-radius:14px;background:rgba(233,121,50,.18);color:#E97932;display:flex;align-items:center;justify-content:center;"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3.2"/><path d="M12 4v2M12 18v2M4 12h2M18 12h2M6 6l1.4 1.4M16.6 16.6L18 18M18 6l-1.4 1.4M7.4 16.6L6 18"/></svg></div>
+          <div style="font-size:18px;font-weight:700;">Para mantenimiento</div>
+          <div style="font-size:13px;color:#b9c3d8;line-height:1.5;flex:1;">Repuestos e insumos para resolver el día a día sin frenar.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ OFERTAS ============ -->
+  <sc-if value="{{ ofertasOn }}" hint-placeholder-val="{{ true }}">
+  <section id="ofertas" style="background:#F6F7FA url('assets/confianza-bg.png') center center/cover no-repeat;">
+    <div data-reveal class="sec-pad" style="max-width:1240px;margin:0 auto;padding:74px 28px 80px;">
+      <div class="offers-banner" style="background:linear-gradient(110deg,#F4552A,#E97932);border-radius:24px;padding:30px 30px;color:#fff;display:flex;align-items:center;justify-content:space-between;gap:24px;flex-wrap:wrap;margin-bottom:30px;position:relative;overflow:hidden;box-shadow:0 26px 50px -24px rgba(244,85,42,.6);">
+        <div style="position:relative;">
+          <div style="display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.2);padding:6px 12px;border-radius:999px;font-size:12px;font-weight:700;letter-spacing:.06em;margin-bottom:12px;animation:pulseBadge 2.4s infinite;">🔥 OFERTAS DE LA SEMANA</div>
+          <h2 style="font-size:32px;font-weight:800;margin:0;line-height:1.1;">Descuentos por tiempo limitado</h2>
+          <p style="font-size:14.5px;margin:8px 0 0;color:#ffe9df;">Aprovechá antes de que se terminen. Stock sujeto a disponibilidad.</p>
+        </div>
+        <sc-if value="{{ countdownOn }}" hint-placeholder-val="{{ true }}">
+        <div style="display:flex;gap:10px;position:relative;">
+          <div class="cd-box" style="background:rgba(255,255,255,.16);border-radius:14px;padding:12px 14px;text-align:center;min-width:64px;"><div style="font-family:'Oswald',sans-serif;font-size:30px;font-weight:700;line-height:1;" id="cd-d">00</div><div style="font-size:10.5px;letter-spacing:.1em;margin-top:4px;opacity:.9;">DÍAS</div></div>
+          <div class="cd-box" style="background:rgba(255,255,255,.16);border-radius:14px;padding:12px 14px;text-align:center;min-width:64px;"><div style="font-family:'Oswald',sans-serif;font-size:30px;font-weight:700;line-height:1;" id="cd-h">00</div><div style="font-size:10.5px;letter-spacing:.1em;margin-top:4px;opacity:.9;">HS</div></div>
+          <div class="cd-box" style="background:rgba(255,255,255,.16);border-radius:14px;padding:12px 14px;text-align:center;min-width:64px;"><div style="font-family:'Oswald',sans-serif;font-size:30px;font-weight:700;line-height:1;" id="cd-m">00</div><div style="font-size:10.5px;letter-spacing:.1em;margin-top:4px;opacity:.9;">MIN</div></div>
+          <div class="cd-box" style="background:rgba(255,255,255,.16);border-radius:14px;padding:12px 14px;text-align:center;min-width:64px;"><div style="font-family:'Oswald',sans-serif;font-size:30px;font-weight:700;line-height:1;" id="cd-s">00</div><div style="font-size:10.5px;letter-spacing:.1em;margin-top:4px;opacity:.9;">SEG</div></div>
+        </div>
+        </sc-if>
+      </div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px;margin-bottom:30px;">
+        <sc-for list="{{ offers }}" as="o" hint-placeholder-count="3">
+          <div onClick="{{ o.open }}" class="offer-card" style="background:#fff;border:1px solid #E7EAF0;border-radius:18px;overflow:hidden;display:flex;cursor:pointer;transition:transform .35s,box-shadow .35s,border-color .35s;" style-hover="transform:translateY(-5px);box-shadow:0 22px 44px -22px rgba(244,85,42,.4);border-color:#F4552A;">
+            <div class="offer-card-img" style="width:130px;flex:none;position:relative;overflow:hidden;background:#eef2f7;">
+              <div style="position:absolute;inset:0;background:url('{{ o.img }}') center/cover no-repeat;"></div>
+              <span style="position:absolute;top:10px;left:10px;background:#F4552A;color:#fff;font-family:'Oswald',sans-serif;font-weight:700;font-size:14px;padding:4px 9px;border-radius:8px;z-index:1;">-{{ o.pct }}%</span>
+            </div>
+            <div style="padding:15px 16px;display:flex;flex-direction:column;flex:1;gap:3px;">
+              <div style="font-size:10.5px;font-weight:700;color:#E97932;letter-spacing:.09em;text-transform:uppercase;">{{ o.cat }}</div>
+              <div style="font-size:15.5px;font-weight:700;line-height:1.2;">{{ o.name }}</div>
+              <div style="font-size:12px;color:#697287;">{{ o.attr }}</div>
+              <div style="display:flex;align-items:baseline;gap:8px;margin-top:6px;">
+                <span style="font-family:'Oswald',sans-serif;font-weight:600;font-size:24px;color:#F4552A;line-height:1;">{{ o.priceLabel }}</span>
+                <span style="font-family:'Oswald',sans-serif;font-size:14px;color:#A4ACBA;text-decoration:line-through;">{{ o.oldLabel }}</span>
+              </div>
+              <button onClick="{{ o.add }}" style="margin-top:11px;height:38px;border:none;border-radius:10px;background:#021F5F;color:#fff;font-weight:700;font-size:13.5px;cursor:pointer;transition:background .22s;" style-hover="background:#E97932;">Agregar al carrito</button>
+            </div>
+          </div>
+        </sc-for>
+      </div>
+      <div style="text-align:center;">
+        <button onClick="{{ goOfertasCatalog }}" style="height:50px;padding:0 30px;border:1.6px solid #E97932;border-radius:13px;background:transparent;color:#E97932;font-weight:700;font-size:15px;cursor:pointer;transition:background .22s,color .22s;" style-hover="background:#E97932;color:#fff;">Ver todas las ofertas</button>
+      </div>
+    </div>
+  </section>
+  </sc-if>
+
+  <!-- ============ CONFIANZA ============ -->
+  <section style="background:#fff url('assets/confianza-bg.png') center center/cover no-repeat;">
+    <div data-reveal class="sec-pad" style="max-width:1100px;margin:0 auto;padding:78px 28px;text-align:center;">
+      <div style="font-size:13px;font-weight:700;letter-spacing:.14em;color:#E97932;text-transform:uppercase;margin-bottom:14px;">Por qué elegirnos</div>
+      <h2 style="font-size:34px;font-weight:800;margin:0 auto 16px;max-width:760px;line-height:1.18;letter-spacing:-.01em;">En Ferretería República comprás con seguridad</h2>
+      <p style="font-size:16px;color:#697287;line-height:1.6;max-width:680px;margin:0 auto 44px;">Encontrás productos para resolver, construir, reparar y mejorar. Te acompañamos con atención cercana, asesoramiento y variedad para que compres tranquilo.</p>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:18px;">
+        <div style="background:#F6F7FA;border:1px solid #EAEDF2;border-radius:18px;padding:28px 22px;transition:transform .3s,box-shadow .3s;" style-hover="transform:translateY(-5px);box-shadow:0 18px 38px -20px rgba(2,31,95,.25);">
+          <div style="width:56px;height:56px;border-radius:16px;background:rgba(233,121,50,.12);color:#E97932;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Atención personalizada</div>
+          <div style="font-size:13px;color:#697287;line-height:1.5;">Te asesoramos para que lleves lo que de verdad necesitás.</div>
+        </div>
+        <div style="background:#F6F7FA;border:1px solid #EAEDF2;border-radius:18px;padding:28px 22px;transition:transform .3s,box-shadow .3s;" style-hover="transform:translateY(-5px);box-shadow:0 18px 38px -20px rgba(2,31,95,.25);">
+          <div style="width:56px;height:56px;border-radius:16px;background:rgba(2,31,95,.08);color:#021F5F;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 8l9-5 9 5-9 5z"/><path d="M3 8v8l9 5 9-5V8"/></svg></div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Soluciones para obra y hogar</div>
+          <div style="font-size:13px;color:#697287;line-height:1.5;">Variedad amplia para cada proyecto, grande o chico.</div>
+        </div>
+        <div style="background:#F6F7FA;border:1px solid #EAEDF2;border-radius:18px;padding:28px 22px;transition:transform .3s,box-shadow .3s;" style-hover="transform:translateY(-5px);box-shadow:0 18px 38px -20px rgba(2,31,95,.25);">
+          <div style="width:56px;height:56px;border-radius:16px;background:rgba(233,121,50,.12);color:#E97932;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg></div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Productos confiables</div>
+          <div style="font-size:13px;color:#697287;line-height:1.5;">Marcas y materiales que responden cuando los usás.</div>
+        </div>
+        <div style="background:#F6F7FA;border:1px solid #EAEDF2;border-radius:18px;padding:28px 22px;transition:transform .3s,box-shadow .3s;" style-hover="transform:translateY(-5px);box-shadow:0 18px 38px -20px rgba(2,31,95,.25);">
+          <div style="width:56px;height:56px;border-radius:16px;background:rgba(2,31,95,.08);color:#021F5F;display:flex;align-items:center;justify-content:center;margin:0 auto 16px;"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg></div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Compra simple y rápida</div>
+          <div style="font-size:13px;color:#697287;line-height:1.5;">Elegís, agregás al carrito y enviás tu pedido por WhatsApp.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ FOOTER ============ -->
+  <footer id="contacto" style="background:#02153f url('assets/header-bg.png') center center/cover no-repeat;color:#cdd6e6;">
+    <div class="sec-pad ft-grid" style="max-width:1240px;margin:0 auto;padding:58px 28px 26px;display:grid;grid-template-columns:1.4fr 1fr 1fr 1.2fr;gap:36px;">
+      <div>
+        <img src="assets/republica-logo.png" alt="Ferretería República" style="height:40px;width:auto;margin-bottom:16px;"/>
+        <p style="font-size:14px;color:#9fb0cb;line-height:1.55;max-width:280px;margin:0 0 18px;font-weight:600;">Todo lo que necesitás, en República lo encontrarás.</p>
+        <p style="font-size:13px;color:#8294b3;line-height:1.6;max-width:300px;margin:0;">Tu ferretería de confianza para casa, obra y negocio. Atención cercana, variedad y stock.</p>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#fff;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;">Enlaces</div>
+        <div style="display:flex;flex-direction:column;gap:11px;">
+          <a onClick="{{ goInicio }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Inicio</a>
+          <a onClick="{{ goCategorias }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Categorías</a>
+          <a onClick="{{ goOfertas }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Ofertas</a>
+          <a onClick="{{ openCatalog }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Catálogo</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#fff;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;">Rubros</div>
+        <div style="display:flex;flex-direction:column;gap:11px;">
+          <a onClick="{{ goCategorias }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Herramientas</a>
+          <a onClick="{{ goCategorias }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Electricidad</a>
+          <a onClick="{{ goCategorias }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Plomería</a>
+          <a onClick="{{ goCategorias }}" style="font-size:14px;color:#aebbd4;cursor:pointer;text-decoration:none;transition:color .2s;" style-hover="color:#E97932;">Pinturas y más</a>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:13px;font-weight:700;color:#fff;letter-spacing:.08em;text-transform:uppercase;margin-bottom:16px;">Contacto</div>
+        <a href="{{ waContact }}" target="_blank" style="display:inline-flex;align-items:center;gap:9px;height:44px;padding:0 16px;border-radius:11px;background:#E97932;color:#fff;font-weight:700;font-size:13.5px;text-decoration:none;margin-bottom:16px;transition:background .22s;" style-hover="background:#d76b27;">
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2zm-3 6.3c-.2 0-.5.1-.6.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.7 2.8 4.3 3.8 2.1.8 2.6.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.6-2.2-1.4-.6-.6-1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.2-.2.2-.4.3-.6 0-.2 0-.3 0-.5l-.7-1.6c-.2-.4-.4-.4-.6-.4z"/></svg>
+          Escribinos por WhatsApp
+        </a>
+        <div style="font-size:13.5px;color:#aebbd4;line-height:1.7;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E97932" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg> Lun a Vie 7:30–18:00 · Sáb 7:30–13:00</div>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#E97932" stroke-width="2"><path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg> Asunción, Paraguay</div>
+        </div>
+        <div style="display:flex;gap:10px;">
+          <a href="{{ waContact }}" target="_blank" style="width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;transition:background .2s;" style-hover="background:#E97932;"><svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2z"/></svg></a>
+          <a style="width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;" style-hover="background:#E97932;"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle cx="17.5" cy="6.5" r="1" fill="#fff"/></svg></a>
+          <a style="width:38px;height:38px;border-radius:11px;background:rgba(255,255,255,.08);display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;" style-hover="background:#E97932;"><svg width="17" height="17" viewBox="0 0 24 24" fill="#fff"><path d="M13 9h3V6h-3a4 4 0 00-4 4v2H7v3h2v6h3v-6h2.5l.5-3H12v-2a1 1 0 011-1z"/></svg></a>
+        </div>
+      </div>
+    </div>
+    <div class="sec-pad ft-bottom" style="max-width:1240px;margin:0 auto;padding:20px 28px 0;border-top:1px solid rgba(255,255,255,.08);display:flex;justify-content:space-between;gap:14px;flex-wrap:wrap;">
+      <span style="font-size:12.5px;color:#7689a8;">© 2025 Ferretería República. Todos los derechos reservados.</span>
+      <span style="font-size:12.5px;color:#7689a8;">Hecho para resolver, construir y mejorar.</span>
+    </div>
+  </footer>
+
+  <!-- ============ FLOATING WHATSAPP ============ -->
+  <a href="{{ waContact }}" target="_blank" class="float-wa" style="position:fixed;right:22px;bottom:24px;z-index:90;width:58px;height:58px;border-radius:50%;background:#25D366;display:flex;align-items:center;justify-content:center;box-shadow:0 14px 30px -8px rgba(37,211,102,.6);transition:transform .25s;" style-hover="transform:scale(1.08);">
+    <svg width="30" height="30" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2zm0 2a8 8 0 11-4.1 14.9l-.3-.2-2.9.8.8-2.8-.2-.3A8 8 0 0112 4zm-3 4.3c-.2 0-.5.1-.6.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.7 2.8 4.3 3.8 2.1.8 2.6.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.6-2.2-1.4-.6-.6-1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.1-.2.2-.3.3-.5.1-.2 0-.3 0-.5l-.7-1.7c-.2-.4-.4-.4-.6-.4z"/></svg>
+  </a>
+
+  </div><!-- END HOME VIEW -->
+
+  <!-- ============ CATALOG VIEW ============ -->
+  <div id="catalog-view" style="{{ catalogViewStyle }}">
+    <!-- Banner with search + filters -->
+    <div style="background:#021F5F url('assets/header-bg.png') center center/cover no-repeat;padding:48px 28px 28px;color:#fff;">
+      <div style="max-width:1240px;margin:0 auto;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:18px;">
+          <button onClick="{{ closeCatalog }}" style="flex:none;width:38px;height:38px;border-radius:11px;border:1.5px solid rgba(255,255,255,.25);background:rgba(255,255,255,.08);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s;" style-hover="background:rgba(255,255,255,.18);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+          </button>
+          <div style="font-size:11px;font-weight:700;color:#E97932;letter-spacing:.15em;text-transform:uppercase;">Nuestro catálogo</div>
+        </div>
+        <h1 style="font-size:clamp(24px,3.5vw,36px);font-weight:800;margin:0 0 6px;letter-spacing:-.01em;">Todo para tu casa, obra y negocio</h1>
+        <p style="font-size:14px;color:#c4cde0;margin:0 0 22px;max-width:480px;line-height:1.5;">Explorá nuestra selección completa. Tocá un producto para ver el detalle.</p>
+        <div class="catalog-search-row" style="display:flex;align-items:center;gap:10px;">
+          <div style="position:relative;flex:1;max-width:540px;">
+            <input value="{{ catalogSearch }}" onInput="{{ onCatalogSearch }}" placeholder="Buscá: taladro, cable, pintura..." class="search-field" style="width:100%;height:50px;border-radius:13px;border:1.5px solid rgba(255,255,255,.2);background:rgba(255,255,255,.1);color:#fff;padding:0 16px 0 50px;font-size:14.5px;outline:none;font-family:Montserrat;" />
+            <svg style="position:absolute;left:17px;top:15px;pointer-events:none;" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#aeb7c7" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+            <sc-if value="{{ hasCatalogSearch }}" hint-placeholder-val="{{ false }}">
+              <button onClick="{{ clearCatalogSearch }}" style="position:absolute;right:13px;top:13px;width:26px;height:26px;border:none;border-radius:8px;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;">✕</button>
+            </sc-if>
+          </div>
+          <button onClick="{{ toggleFilters }}" class="filter-btn-mob" style="{{ filterBtnStyle }}">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><line x1="4" y1="6" x2="20" y2="6"/><line x1="8" y1="12" x2="16" y2="12"/><line x1="11" y1="18" x2="13" y2="18"/></svg>
+            {{ filterBtnLabel }}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="{{ filterCaretStyle }}"><path d="M6 9l6 6 6-6"/></svg>
+          </button>
+        </div>
+        <sc-if value="{{ filtersOpen }}" hint-placeholder-val="{{ false }}">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px;">
+            <sc-for list="{{ catalogFilters }}" as="f" hint-placeholder-count="6">
+              <button onClick="{{ f.set }}" style="{{ f.style }}">{{ f.label }}</button>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    <!-- Products grid -->
+    <div style="background:#eef2f7 url('assets/catalog-bg.svg') center top/cover no-repeat;min-height:60vh;">
+      <div style="max-width:1240px;margin:0 auto;padding:36px 28px 80px;">
+        <div style="font-size:13.5px;color:#697287;font-weight:600;margin-bottom:24px;">{{ catalogResultLabel }}</div>
+        <sc-if value="{{ catalogNoResults }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:80px 20px;background:#fff;border-radius:18px;border:1px solid #E7EAF0;">
+            <div style="font-size:48px;margin-bottom:16px;">🔍</div>
+            <div style="font-size:18px;font-weight:700;color:#15213b;margin-bottom:7px;">Sin resultados</div>
+            <div style="font-size:14px;color:#7a849a;">Probá con otra palabra o cambiá el filtro.</div>
+          </div>
+        </sc-if>
+        <sc-if value="{{ catalogHasResults }}" hint-placeholder-val="{{ true }}">
+          <div class="catalog-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;">
+            <sc-for list="{{ catalogProducts }}" as="p" hint-placeholder-count="8">
+              <div onClick="{{ p.open }}" class="cat-prod" style="cursor:pointer;background:#fff;border:1px solid #E7EAF0;border-radius:18px;overflow:hidden;display:flex;flex-direction:column;">
+                <div style="position:relative;aspect-ratio:4/3;overflow:hidden;background:#0a1f50;">
+                  <div class="cat-prod-img" style="position:absolute;inset:0;background-image:url('{{ p.img }}');background-size:cover;background-position:center;"></div>
+                  <span style="position:absolute;top:12px;left:12px;background:{{ p.badgeBg }};color:{{ p.badgeFg }};font-size:11px;font-weight:700;padding:5px 12px;border-radius:999px;">{{ p.badgeText }}</span>
+                </div>
+                <div style="padding:16px 17px 18px;display:flex;flex-direction:column;flex:1;">
+                  <div style="font-size:10px;font-weight:700;color:#E97932;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">{{ p.cat }}</div>
+                  <div style="font-size:16px;font-weight:700;color:#15213b;line-height:1.25;margin-bottom:3px;">{{ p.name }}</div>
+                  <div style="font-size:12.5px;color:#7a849a;margin-bottom:12px;">{{ p.attr }}</div>
+                  <div style="margin-top:auto;display:flex;align-items:baseline;gap:8px;">
+                    <span style="font-family:'Oswald',sans-serif;font-weight:600;font-size:24px;color:#021F5F;line-height:1;">{{ p.priceLabel }}</span>
+                    <sc-if value="{{ p.hasOld }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Oswald',sans-serif;font-size:14px;color:#A4ACBA;text-decoration:line-through;">{{ p.oldLabel }}</span></sc-if>
+                  </div>
+                  <div style="margin-top:12px;display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#E97932;">Ver detalle <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
+                </div>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+      </div>
+    </div>
+    <!-- Catalog footer -->
+    <div style="background:#02153f;color:#9fb0cb;padding:20px 28px;text-align:center;font-size:12.5px;">© 2025 Ferretería República. Todos los derechos reservados.</div>
+  </div><!-- END CATALOG VIEW -->
+
+  <!-- ============ OVERLAY + DRAWERS ============ -->
+  <div onClick="{{ closeAll }}" style="{{ overlayStyle }}"></div>
+
+  <!-- MOBILE MENU -->
+  <div style="{{ menuStyle }}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;">
+      <img src="assets/republica-logo.png" alt="República" style="height:32px;width:auto;"/>
+      <button onClick="{{ closeAll }}" style="width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.18);background:transparent;color:#fff;font-size:20px;cursor:pointer;">✕</button>
+    </div>
+    <div style="position:relative;margin-bottom:18px;">
+      <input value="{{ search }}" onChange="{{ onSearch }}" placeholder="Buscar..." style="width:100%;height:46px;border-radius:11px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;padding:0 14px 0 40px;font-size:14px;outline:none;" style-focus="border-color:#E97932;"/>
+      <svg style="position:absolute;left:13px;top:14px;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#aeb7c7" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
+    </div>
+    <a onClick="{{ goInicio }}" style="padding:13px 12px;border-radius:11px;color:#fff;font-size:15.5px;font-weight:600;cursor:pointer;transition:background .2s;" style-hover="background:rgba(255,255,255,.08);">Inicio</a>
+    <a onClick="{{ toggleMobileCats }}" style="padding:13px 12px;border-radius:11px;color:#fff;font-size:15.5px;font-weight:600;cursor:pointer;transition:background .2s;display:flex;align-items:center;justify-content:space-between;" style-hover="background:rgba(255,255,255,.08);">
+      Categorías
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" style="{{ mobileCatCaretStyle }}"><path d="M6 9l6 6 6-6"/></svg>
+    </a>
+    <sc-if value="{{ mobileCatOpen }}" hint-placeholder-val="{{ false }}">
+      <div style="display:flex;flex-direction:column;gap:2px;margin:2px 0 6px 8px;padding:6px 4px;border-left:1.5px solid rgba(255,255,255,.12);">
+        <sc-for list="{{ catMenuItems }}" as="c" hint-placeholder-count="6">
+          <a onClick="{{ c.go }}" style="display:flex;align-items:center;gap:10px;padding:10px 12px;border-radius:10px;color:#cdd6e6;font-size:14px;font-weight:600;cursor:pointer;text-decoration:none;transition:background .15s,color .15s;" style-hover="background:rgba(233,121,50,.14);color:#fff;">
+            <span style="flex:none;width:26px;height:26px;border-radius:8px;background:linear-gradient(140deg,#F4552A,#E97932);display:flex;align-items:center;justify-content:center;"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="#fff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="{{ c.iconPath }}"/></svg></span>
+            {{ c.name }}
+          </a>
+        </sc-for>
+      </div>
+    </sc-if>
+    <a onClick="{{ goOfertasCatalog }}" style="padding:13px 12px;border-radius:11px;color:#fff;font-size:15.5px;font-weight:600;cursor:pointer;transition:background .2s;" style-hover="background:rgba(255,255,255,.08);">Ofertas</a>
+    <a onClick="{{ openCatalog }}" style="padding:13px 12px;border-radius:11px;color:#fff;font-size:15.5px;font-weight:600;cursor:pointer;text-decoration:none;transition:background .2s;" style-hover="background:rgba(255,255,255,.08);">Catálogo</a>
+    <a onClick="{{ goContacto }}" style="padding:13px 12px;border-radius:11px;color:#fff;font-size:15.5px;font-weight:600;cursor:pointer;transition:background .2s;" style-hover="background:rgba(255,255,255,.08);">Contacto</a>
+    <a href="{{ waContact }}" target="_blank" style="margin-top:14px;height:50px;border-radius:12px;background:#E97932;color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:9px;text-decoration:none;">WhatsApp</a>
+  </div>
+
+  <!-- CART DRAWER -->
+  <div style="{{ drawerStyle }}">
+    <div style="padding:22px 22px 18px;border-bottom:1px solid #EDEFF3;display:flex;align-items:center;justify-content:space-between;background:#021F5F;color:#fff;">
+      <div style="display:flex;align-items:center;gap:11px;">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg>
+        <span style="font-size:18px;font-weight:700;">Tu carrito</span>
+        <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}"><span style="background:#E97932;color:#fff;font-size:12px;font-weight:700;padding:2px 9px;border-radius:999px;">{{ count }}</span></sc-if>
+      </div>
+      <button onClick="{{ closeAll }}" style="width:38px;height:38px;border-radius:10px;border:1px solid rgba(255,255,255,.2);background:transparent;color:#fff;font-size:19px;cursor:pointer;">✕</button>
+    </div>
+
+    <div style="flex:1;overflow-y:auto;padding:18px 22px;">
+      <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}">
+        <div style="background:rgba(233,121,50,.1);border:1px solid rgba(233,121,50,.25);border-radius:11px;padding:11px 14px;font-size:12.5px;color:#b25a23;font-weight:600;margin-bottom:16px;display:flex;align-items:center;gap:8px;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#E97932" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 8v5M12 16h.01"/></svg>
+          Revisá tu pedido antes de enviarlo
+        </div>
+        <div style="display:flex;flex-direction:column;gap:12px;">
+          <sc-for list="{{ cartItems }}" as="c" hint-placeholder-count="2">
+            <div style="display:flex;gap:12px;align-items:center;border:1px solid #ECEFF3;border-radius:14px;padding:11px;">
+              <div style="width:56px;height:56px;flex:none;border-radius:11px;overflow:hidden;background:#f0f3f8 url('{{ c.img }}') center center/cover no-repeat;"></div>
+              <div style="flex:1;min-width:0;">
+                <div style="font-size:14px;font-weight:700;line-height:1.2;">{{ c.name }}</div>
+                <div style="font-size:11.5px;color:#8893a6;margin:2px 0 6px;">{{ c.attr }}</div>
+                <div style="display:flex;align-items:center;gap:10px;">
+                  <div style="display:flex;align-items:center;border:1px solid #E2E6EC;border-radius:9px;overflow:hidden;">
+                    <button onClick="{{ c.dec }}" style="width:28px;height:30px;border:none;background:#F2F5F9;color:#021F5F;font-size:16px;cursor:pointer;">−</button>
+                    <span style="min-width:26px;text-align:center;font-weight:700;font-size:13px;">{{ c.qty }}</span>
+                    <button onClick="{{ c.inc }}" style="width:28px;height:30px;border:none;background:#F2F5F9;color:#021F5F;font-size:16px;cursor:pointer;">+</button>
+                  </div>
+                  <span style="font-family:'Oswald',sans-serif;font-weight:600;font-size:16px;color:#021F5F;">{{ c.lineLabel }}</span>
+                </div>
+              </div>
+              <button onClick="{{ c.remove }}" style="width:30px;height:30px;border:none;background:transparent;color:#b6bdc9;cursor:pointer;flex:none;transition:color .2s;" style-hover="color:#F4552A;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M5 7h14M9 7V5h6v2M7 7l1 12h8l1-12"/></svg></button>
+            </div>
+          </sc-for>
+        </div>
+      </sc-if>
+      <sc-if value="{{ cartEmpty }}" hint-placeholder-val="{{ false }}">
+        <div style="text-align:center;padding:50px 20px;">
+          <div style="width:74px;height:74px;border-radius:20px;background:#F2F5F9;display:flex;align-items:center;justify-content:center;margin:0 auto 18px;"><svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="#b6bdc9" stroke-width="1.6"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg></div>
+          <div style="font-size:16px;font-weight:700;margin-bottom:6px;">Tu carrito está vacío</div>
+          <div style="font-size:13.5px;color:#8893a6;line-height:1.5;margin-bottom:20px;">Agregá productos del catálogo para empezar tu pedido.</div>
+          <button onClick="{{ closeAndProducts }}" style="height:46px;padding:0 22px;border:none;border-radius:11px;background:#021F5F;color:#fff;font-weight:700;font-size:14px;cursor:pointer;" style-hover="background:#E97932;">Ver productos</button>
+        </div>
+      </sc-if>
+    </div>
+
+    <sc-if value="{{ hasItems }}" hint-placeholder-val="{{ true }}">
+      <div style="border-top:1px solid #EDEFF3;padding:18px 22px 22px;background:#fff;">
+        <div style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:16px;">
+          <span style="font-size:15px;font-weight:600;color:#697287;">Subtotal</span>
+          <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:30px;color:#021F5F;line-height:1;">{{ subtotalLabel }}</span>
+        </div>
+        <a href="{{ waOrderHref }}" target="_blank" style="width:100%;height:52px;border-radius:13px;background:#021F5F;color:#fff;font-weight:700;font-size:15.5px;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;transition:background .22s;" style-hover="background:#E97932;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2zm-3 6.3c-.2 0-.5.1-.6.3-.3.3-.9.9-.9 2.1s.9 2.4 1 2.6c.1.2 1.7 2.8 4.3 3.8 2.1.8 2.6.7 3 .6.5-.1 1.5-.6 1.7-1.2.2-.6.2-1.1.1-1.2 0-.1-.2-.2-.5-.3l-1.7-.8c-.2-.1-.4-.1-.6.1l-.7.9c-.1.2-.3.2-.5.1-.6-.2-1.4-.6-2.2-1.4-.6-.6-1-1.3-1.2-1.5-.1-.2 0-.4.1-.5l.4-.5c.2-.2.2-.4.3-.6 0-.2 0-.3 0-.5l-.7-1.6c-.2-.4-.4-.4-.6-.4z"/></svg>
+          Finalizar compra
+        </a>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- PRODUCT DETAIL MODAL -->
+  <div style="{{ detailWrapStyle }}">
+    <div onClick="{{ closeDetail }}" style="position:absolute;inset:0;background:rgba(2,12,35,.6);backdrop-filter:blur(3px);"></div>
+    <sc-if value="{{ detailOpen }}" hint-placeholder-val="{{ false }}">
+      <div class="fr-detail dd-card" style="position:relative;background:#fff;border-radius:24px;max-width:820px;width:100%;display:flex;overflow:hidden;box-shadow:0 50px 110px -34px rgba(0,0,0,.7);max-height:90vh;">
+        <div style="width:44%;min-height:460px;position:relative;flex:none;overflow:hidden;background:#0a1f50;">
+          <div style="position:absolute;inset:0;background:#0a1f50 url('{{ detail.img }}') center center/cover no-repeat;animation:ddImgPan 9s ease-in-out infinite alternate;"></div>
+          <div style="position:absolute;inset:0;background:linear-gradient(155deg,rgba(2,18,54,.15) 0%,rgba(2,18,54,0) 40%,rgba(2,18,54,.55) 100%);"></div>
+          <span style="position:absolute;top:18px;left:18px;display:inline-flex;align-items:center;gap:6px;background:{{ detail.badgeBg }};color:{{ detail.badgeFg }};font-size:11px;font-weight:700;letter-spacing:.04em;padding:6px 13px;border-radius:999px;box-shadow:0 8px 18px -6px rgba(0,0,0,.4);">{{ detail.badgeText }}</span>
+          <sc-if value="{{ detail.hasOld }}" hint-placeholder-val="{{ false }}"><span style="position:absolute;bottom:18px;left:18px;display:inline-flex;align-items:center;font-family:'Oswald',sans-serif;font-weight:700;font-size:18px;letter-spacing:.02em;color:#fff;background:#F4552A;padding:7px 14px;border-radius:12px;box-shadow:0 10px 22px -8px rgba(244,85,42,.7);">{{ detail.savePct }}</span></sc-if>
+        </div>
+        <div style="flex:1;padding:34px 36px;display:flex;flex-direction:column;overflow-y:auto;">
+          <button onClick="{{ closeDetail }}" aria-label="Cerrar" style="position:absolute;top:18px;right:18px;width:40px;height:40px;border-radius:11px;border:none;background:#F2F5F9;color:#54607a;font-size:18px;cursor:pointer;display:flex;align-items:center;justify-content:center;transition:background .2s,color .2s,transform .2s;z-index:2;" style-hover="background:#F4552A;color:#fff;transform:rotate(90deg);">✕</button>
+          <div style="display:inline-flex;align-items:center;gap:7px;font-size:11px;font-weight:700;letter-spacing:.13em;text-transform:uppercase;color:#E97932;margin-bottom:11px;"><span style="width:18px;height:2px;background:#E97932;border-radius:2px;"></span>{{ detail.cat }}</div>
+          <h3 style="font-size:27px;font-weight:800;color:#15213b;line-height:1.12;margin:0 0 7px;letter-spacing:-.01em;">{{ detail.name }}</h3>
+          <div style="font-size:13.5px;color:#7a849a;font-weight:600;margin-bottom:18px;">{{ detail.attr }}</div>
+          <p style="font-size:14px;color:#56607a;line-height:1.65;margin:0 0 20px;">{{ detail.desc }}</p>
+          <div style="background:#F6F8FB;border:1px solid #EAEEF4;border-radius:16px;padding:16px 18px;margin-bottom:20px;">
+            <div style="display:flex;align-items:baseline;gap:11px;flex-wrap:wrap;">
+              <span style="font-family:'Oswald',sans-serif;font-weight:700;font-size:36px;color:#021F5F;line-height:1;">{{ detail.priceLabel }}</span>
+              <sc-if value="{{ detail.hasOld }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Oswald',sans-serif;font-size:18px;color:#A4ACBA;text-decoration:line-through;">{{ detail.oldLabel }}</span></sc-if>
+            </div>
+            <div style="display:flex;align-items:center;gap:16px;margin-top:11px;flex-wrap:wrap;">
+              <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#1f8a5b;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1f8a5b" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>Stock disponible</span>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:center;margin-top:auto;flex-wrap:wrap;">
+            <div style="display:flex;align-items:center;border:1.5px solid #E2E6EC;border-radius:12px;overflow:hidden;">
+              <button onClick="{{ detail.dec }}" class="dd-qbtn" style="width:44px;height:50px;border:none;background:#F2F5F9;color:#021F5F;font-size:20px;cursor:pointer;">−</button>
+              <span id="dd-qty" style="min-width:40px;text-align:center;font-weight:700;font-size:16px;">{{ detail.qty }}</span>
+              <button onClick="{{ detail.inc }}" class="dd-qbtn" style="width:44px;height:50px;border:none;background:#F2F5F9;color:#021F5F;font-size:20px;cursor:pointer;">+</button>
+            </div>
+            <button onClick="{{ detail.add }}" class="dd-cta" style="flex:1;min-width:180px;height:50px;border:none;border-radius:13px;background:linear-gradient(135deg,#F4552A,#E97932);color:#fff;font-weight:700;font-size:15px;cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:9px;box-shadow:0 14px 30px -12px rgba(233,121,50,.8);"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.9"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg>Agregar — <span id="dd-add-amt">{{ detail.lineTotal }}</span></button>
+          </div>
+          <a href="{{ detail.consult }}" target="_blank" style="margin-top:15px;display:inline-flex;align-items:center;justify-content:center;gap:8px;font-size:13px;font-weight:700;color:#25D366;text-decoration:none;" style-hover="color:#1aa34f;"><svg width="16" height="16" viewBox="0 0 24 24" fill="#25D366"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2z"/></svg>Consultar disponibilidad por WhatsApp</a>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <!-- ============ TOAST ============ -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div class="toast-wrap">
+      <div class="toast-box">
+        <span style="width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,#E97932,#F4552A);display:flex;align-items:center;justify-content:center;flex:none;">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+        </span>
+        <div>
+          <div style="font-size:13px;font-weight:700;color:#15213b;">¡Añadido al carrito!</div>
+          <div style="font-size:12px;color:#697287;font-weight:500;margin-top:1px;">{{ toastName }}</div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script>
+class Component extends DCLogic {
+  state = {
+    scrolled: false, cartOpen: false, menuOpen: false,
+    activeFilter: 'Todos', cart: {}, qtys: {}, search: '', note: false, detail: null, catMenuOpen: false, catSearch: '',
+    toast: false, toastName: '',
+    view: 'home', catalogFilter: 'Todos', catalogSearch: '',
+    searchDrop: false, filtersOpen: false, mobileCatOpen: false
+  };
+
+  get wa() { return (this.props.numeroWhatsapp || '595981000000').replace(/[^0-9]/g, ''); }
+
+  componentDidMount() {
+    this._onScroll = () => {
+      const y = window.scrollY;
+      const s = y > 36;
+      if (s !== this.state.scrolled) this.setState({ scrolled: s });
+      const hp = document.getElementById('heroPhotos');
+      if (hp && y < 900) hp.style.transform = 'translateY(' + Math.min(y * 0.22, 150) + 'px) scale(1.06)';
+    };
+    window.addEventListener('scroll', this._onScroll, { passive: true });
+    this._onDocClick = (e) => { if (this.state.catMenuOpen && !e.target.closest('[data-catdd]')) this.setState({ catMenuOpen: false }); };
+    document.addEventListener('click', this._onDocClick);
+
+    this._end = Date.now() + 1000 * 60 * 60 * 35 + 1000 * 47;
+    const p = n => String(n).padStart(2, '0');
+    this._tick = () => {
+      let diff = Math.max(0, this._end - Date.now());
+      const d = Math.floor(diff / 86400000); diff -= d * 86400000;
+      const h = Math.floor(diff / 3600000); diff -= h * 3600000;
+      const m = Math.floor(diff / 60000); diff -= m * 60000;
+      const s = Math.floor(diff / 1000);
+      const set = (id, v) => { const el = document.getElementById(id); if (el) el.textContent = v; };
+      set('cd-d', p(d)); set('cd-h', p(h)); set('cd-m', p(m)); set('cd-s', p(s));
+    };
+    this._tick();
+    this._timer = setInterval(this._tick, 1000);
+
+    // Carrusel de categorías (auto-scroll por JS, pausa al hover, flechas)
+    this._cx = 0;
+    this._cPaused = false;
+    this._cLast = 0;
+    this._cNudge = 0;
+    const cspeed = 38; // px/s
+    this._cLoop = (ts) => {
+      const track = document.querySelector('.cat-track');
+      if (track) {
+        if (!this._cLast) this._cLast = ts;
+        const dt = Math.min(0.05, (ts - this._cLast) / 1000);
+        this._cLast = ts;
+        const half = track.scrollWidth / 2;
+        if (!this._cPaused) this._cx -= cspeed * dt;
+        if (this._cNudge) { this._cx += this._cNudge; this._cNudge = 0; }
+        if (half > 0) { while (-this._cx >= half) this._cx += half; while (this._cx > 0) this._cx -= half; }
+        track.style.transform = 'translateX(' + this._cx + 'px)';
+      } else { this._cLast = ts; }
+      this._cRaf = requestAnimationFrame(this._cLoop);
+    };
+    this._cRaf = requestAnimationFrame(this._cLoop);
+    requestAnimationFrame(() => {
+      const vp = document.querySelector('.cat-carousel');
+      if (vp) {
+        this._cEnter = () => { this._cPaused = true; };
+        this._cLeave = () => { this._cPaused = false; };
+        vp.addEventListener('mouseenter', this._cEnter);
+        vp.addEventListener('mouseleave', this._cLeave);
+      }
+    });
+
+    // Fan carousel de productos destacados
+    this._fanCenter = 3;
+    requestAnimationFrame(() => this.fanInit());
+  }
+  componentDidUpdate() {
+    if (document.getElementById('fanLayout')) this.fanInit();
+  }
+  componentWillUnmount() {
+    window.removeEventListener('scroll', this._onScroll);
+    if (this._onDocClick) document.removeEventListener('click', this._onDocClick);
+    clearInterval(this._timer);
+    if (this._cRaf) cancelAnimationFrame(this._cRaf);
+    const vp = document.querySelector('.cat-carousel');
+    if (vp && this._cEnter) { vp.removeEventListener('mouseenter', this._cEnter); vp.removeEventListener('mouseleave', this._cLeave); }
+  }
+
+  _FAN() {
+    return [
+      { rot: -21, scale: 0.7756, x: -30, y: 7.3, zIndex: 1 },
+      { rot: -14, scale: 0.8498, x: -22, y: 4.0, zIndex: 2 },
+      { rot: -7, scale: 0.9346, x: -11, y: 1.3, zIndex: 3 },
+      { rot: 0, scale: 1.0, x: 0, y: 0.0, zIndex: 10 },
+      { rot: 7, scale: 0.9346, x: 11, y: 1.3, zIndex: 3 },
+      { rot: 14, scale: 0.8498, x: 22, y: 4.0, zIndex: 2 },
+      { rot: 21, scale: 0.7756, x: 30, y: 7.3, zIndex: 1 }
+    ];
+  }
+  fanMult() { const w = window.innerWidth; if (w < 480) return 0.42; if (w < 640) return 0.52; if (w < 768) return 0.64; if (w < 1024) return 0.82; return 1; }
+  fanSlot(total, slot, FAN) {
+    if (total >= 7) return FAN[slot];
+    const center = total >> 1;
+    const d = total > 1 ? (slot - center) / center : 0;
+    const a = Math.abs(d);
+    return { rot: d * 21, scale: 1 - 0.2244 * a * a, x: d * 30, y: a * a * 7.3, zIndex: 10 - Math.abs(slot - center) };
+  }
+  fanInit() {
+    const layout = document.getElementById('fanLayout');
+    if (!layout) return;
+    this._fanCards = Array.from(layout.querySelectorAll('.fan-card'));
+    const total = this._fanCards.length;
+    if (!total) return;
+    if (this._fanCenter == null) this._fanCenter = total > 7 ? 3 : (total >> 1);
+    if (this._fanCenter > total - 1) this._fanCenter = total - 1;
+    const dotsEl = document.getElementById('fanDots');
+    if (dotsEl && dotsEl.children.length !== total) {
+      dotsEl.innerHTML = '';
+      for (let i = 0; i < total; i++) {
+        const d = document.createElement('span');
+        d.className = 'fan-dot';
+        d.addEventListener('click', () => { this._fanCenter = i; this.fanLayout(); });
+        dotsEl.appendChild(d);
+      }
+    }
+    this._fanCards.forEach((el, i) => {
+      if (el._fanBound) return; el._fanBound = true;
+      el.addEventListener('mouseenter', () => { if (this._fanVisible && this._fanVisible.has(i)) this.fanHover(this._fanVisible.get(i)); });
+    });
+    if (!layout._leaveBound) { layout._leaveBound = true; layout.addEventListener('mouseleave', () => this.fanHover(null)); }
+    if (!layout._touchBound) {
+      layout._touchBound = true;
+      let sx = 0, sy = 0, st = 0, locked = false;
+      layout.addEventListener('touchstart', (e) => {
+        const t = e.touches[0]; sx = t.clientX; sy = t.clientY; st = Date.now(); locked = false; this._fanSwiped = false;
+      }, { passive: true });
+      layout.addEventListener('touchmove', (e) => {
+        const t = e.touches[0]; const dx = t.clientX - sx; const dy = t.clientY - sy;
+        if (!locked && Math.abs(dx) > 8 && Math.abs(dx) > Math.abs(dy)) locked = true;
+        if (locked) { e.preventDefault(); this._fanSwiped = true; }
+      }, { passive: false });
+      layout.addEventListener('touchend', (e) => {
+        if (!locked) return;
+        const dx = e.changedTouches[0].clientX - sx;
+        const dt = Date.now() - st;
+        if (Math.abs(dx) > 36 || (Math.abs(dx) > 18 && dt < 250)) this.fanCycle(dx < 0 ? 1 : -1);
+      }, { passive: true });
+      this._fanCards.forEach(el => {
+        if (el._tapBound) return; el._tapBound = true;
+        el.addEventListener('click', (ev) => { if (this._fanSwiped) { ev.preventDefault(); ev.stopPropagation(); } }, true);
+      });
+    }
+    if (!this._fanResize) { this._fanResize = () => this.fanLayout(); window.addEventListener('resize', this._fanResize); }
+    this.fanLayout();
+  }
+  fanLayout() {
+    const cards = this._fanCards; if (!cards || !cards.length) return;
+    const total = cards.length, MAX = 7, HALF = 3, needs = total > MAX;
+    const FAN = this._FAN(); const mult = this.fanMult(); const slotCount = needs ? MAX : total;
+    const visible = new Map();
+    if (!needs) cards.forEach((_, i) => visible.set(i, i));
+    else for (let s = 0; s < MAX; s++) visible.set(((this._fanCenter + s - HALF) % total + total) % total, s);
+    this._fanVisible = visible;
+    cards.forEach((el, i) => {
+      const slot = visible.get(i);
+      if (slot !== undefined) {
+        const p = this.fanSlot(slotCount, slot, FAN);
+        el.style.opacity = '1'; el.style.zIndex = p.zIndex; el.style.pointerEvents = 'auto';
+        el.style.transform = 'translate(' + (p.x * mult) + 'rem,' + p.y + 'rem) rotate(' + p.rot + 'deg) scale(' + p.scale + ')';
+      } else {
+        el.style.opacity = '0'; el.style.zIndex = '0'; el.style.pointerEvents = 'none';
+        el.style.transform = 'translate(0,4rem) scale(.5)';
+      }
+    });
+    const it = this._fanData && this._fanData[this._fanCenter];
+    if (it) {
+      const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+      set('fanName', it.name); set('fanPrice', it.priceLabel); set('fanAttr', it.attr);
+      const addb = document.getElementById('fanAdd'); if (addb) addb.onclick = it.add;
+    }
+    const dots = document.getElementById('fanDots');
+    if (dots) Array.from(dots.children).forEach((d, i) => d.classList.toggle('on', i === this._fanCenter));
+  }
+  fanCycle(dir) {
+    const total = (this._fanCards || []).length; if (!total) return;
+    this._fanCenter = (this._fanCenter + dir + total) % total;
+    this.fanLayout();
+  }
+  fanHover(hoveredSlot) {
+    const cards = this._fanCards, visible = this._fanVisible; if (!cards || !visible) return;
+    const total = cards.length, needs = total > 7, slotCount = needs ? 7 : total;
+    const FAN = this._FAN(), mult = this.fanMult();
+    const entries = []; cards.forEach((el, i) => { const s = visible.get(i); if (s !== undefined) entries.push({ el, slot: s }); });
+    const centerSlot = entries.length >> 1;
+    entries.forEach(({ el, slot }) => {
+      const base = this.fanSlot(slotCount, slot, FAN);
+      let x = base.x * mult, y = base.y, rot = base.rot, scale = base.scale;
+      if (hoveredSlot !== null) {
+        const dist = Math.abs(slot - hoveredSlot);
+        if (slot === hoveredSlot) { y -= 2.5; scale *= 1.08; }
+        else {
+          const norm = centerSlot > 0 ? (slot - centerSlot) / centerSlot : 0;
+          const push = 8 * (1 - Math.abs(norm)) * (1 + 0.2 * Math.max(0, 3 - dist));
+          if (slot < hoveredSlot) { x -= push * mult; rot -= 3 / (dist + 1); } else { x += push * mult; rot += 3 / (dist + 1); }
+        }
+      }
+      el.style.transform = 'translate(' + x + 'rem,' + y + 'rem) rotate(' + rot + 'deg) scale(' + scale + ')';
+    });
+  }
+
+  fmt(n) { return 'Gs. ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
+  normTxt(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
+  get norm() { return (s) => this.normTxt(s); }
+
+  iconName(id) {
+    const m = { taladro: 'drill', destor: 'screwdriver', latex: 'paint', cinta: 'tape', llave: 'wrench', cable: 'cable', pvc: 'pipe', silicona: 'sealant', oferta0: 'drill', oferta1: 'paint', oferta2: 'wrench' };
+    return m[id] || 'wrench';
+  }
+  iconPath(name) {
+    const P = {
+      drill: 'M3 7.5h8.5v5.5H3z M3 10.2H1.4 M11.5 8.3l3.2-1.1v7.6l-3.2-1.1 M14.7 9.2h5.4l1.4-1.5v4.6l-1.4-1.5h-5.4 M4.8 13v4h3l-.6-4',
+      screwdriver: 'M14.5 3.5l6 6-3 3-6-6z M11.5 6.5l3 3 M11 7l-7.5 7.5L3 18l3.5-.5L14 10',
+      paint: 'M6.5 7.5h11v11a2 2 0 01-2 2H8.5a2 2 0 01-2-2z M6.5 7.5l1.8-3h7.4l1.8 3 M10 12.5h4',
+      roller: 'M3 4.5h13v5H3z M16 7h4V5 M10 9.5v2.2a1 1 0 0 1-1 1 1 1 0 0 0-1 1V20',
+      tape: 'M12 4a8 8 0 100 16 8 8 0 000-16z M12 9.2a2.8 2.8 0 100 5.6 2.8 2.8 0 000-5.6z',
+      wrench: 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z',
+      cable: 'M3 8c4 0 4 8 8 8s4-8 8-8 M1.6 7.4h2v1.6h-2z M20.4 15h2v1.6h-2z',
+      pipe: 'M2 12h4 M18 12h4 M6 8.5h12v7H6z M12 8.5V5.5 M10 5.5h4',
+      sealant: 'M3.5 10h9.5v3.2H3.5z M13 10.6h4.5l2.2-1.8 M19.7 8.8l1.3-.6 M5.5 13.2v3.5 M9 13.2l1.2 3.5 M2 10.4l1.5-.7v3.4L2 12.4z',
+      bolt: 'M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z',
+      helmet: 'M2 18a1 1 0 0 0 1 1h18a1 1 0 0 0 1-1v-1.5a1 1 0 0 0-1-1H3a1 1 0 0 0-1 1z M10 9.5V5a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v4.5 M4 15v-3a6 6 0 0 1 6-6 M14 6a6 6 0 0 1 6 6v3',
+      plant: 'M7 20h10 M10 20c5.5-2.5.8-6.4 3-10 M9.5 9.4c1.1.8 1.8 2.2 2.3 3.7-2 .4-3.5.4-4.8-.3-1.2-.6-2.3-1.9-3-4.2 2.8-.5 4.4 0 5.5.8z M14.1 6a7 7 0 0 0-1.1 4c1.9-.1 3.3-.6 4.3-1.4 1-1 1.6-2.3 1.7-4.6-2.7.1-4 1-4.9 2z',
+      shield: 'M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z M9 12l2 2 4-4',
+      spray: 'M4 4h.01 M8 4h.01 M6 6h.01 M4 8h.01 M8 8h.01 M10 8h5a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1h-5a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1z M12 8V4h3',
+      screw: 'M12 2.6l8 4.6v9.2l-8 4.6-8-4.6V7.2z M12 8.5a3.5 3.5 0 1 0 0 7 3.5 3.5 0 0 0 0-7z',
+      glue: 'M9 4h6v3H9z M10 7h4v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1z M11 4V2.4h2V4 M10.5 11h3'
+    };
+    return P[name] || P.wrench;
+  }
+  tileBg(i) {
+    return (i % 2 === 0) ? 'linear-gradient(150deg,#0a3a8f 0%,#021F5F 72%)' : 'linear-gradient(150deg,#ef8438 0%,#c2531c 78%)';
+  }
+
+  openCatalog(filter) {
+    const f = (typeof filter === 'string') ? filter : 'Todos';
+    this.setState({ view: 'catalog', catalogFilter: f, catalogSearch: '', menuOpen: false, catMenuOpen: false });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  closeCatalog() {
+    this.setState({ view: 'home' });
+    window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+
+  goTo(id) {
+    const wasInCatalog = this.state.view === 'catalog';
+    this.setState({ menuOpen: false, cartOpen: false, catMenuOpen: false, view: 'home' });
+    setTimeout(() => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const y = el.getBoundingClientRect().top + window.scrollY - 68;
+      window.scrollTo({ top: y, behavior: 'smooth' });
+    }, wasInCatalog ? 50 : 220);
+  }
+
+  setQty(id, n) { this.setState(s => ({ qtys: { ...s.qtys, [id]: n } })); }
+
+  addToCart(prod, qty) {
+    this.setState(s => {
+      const cur = s.cart[prod.id];
+      const newQty = (cur ? cur.qty : 0) + qty;
+      return {
+        cart: { ...s.cart, [prod.id]: { id: prod.id, name: prod.name, attr: prod.attr, price: prod.price, qty: newQty, img: prod.img || '' } },
+        toast: true, toastName: prod.name, note: false
+      };
+    });
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => this.setState({ toast: false }), 2500);
+  }
+  cartInc(id, d) {
+    this.setState(s => {
+      const it = s.cart[id]; if (!it) return {};
+      const q = it.qty + d;
+      const cart = { ...s.cart };
+      if (q <= 0) delete cart[id]; else cart[id] = { ...it, qty: q };
+      return { cart };
+    });
+  }
+  cartRemove(id) { this.setState(s => { const cart = { ...s.cart }; delete cart[id]; return { cart }; }); }
+  openDetail(id) { this._detailQty = this.state.qtys[id] || 1; this.setState({ detail: id, menuOpen: false }); }
+  closeDetail() { this.setState({ detail: null }); }
+  _ddQtyChange(prod, delta) {
+    this._detailQty = Math.max(1, (this._detailQty || 1) + delta);
+    const qe = document.getElementById('dd-qty');
+    const ae = document.getElementById('dd-add-amt');
+    if (qe) qe.textContent = this._detailQty;
+    if (ae) ae.textContent = this.fmt(prod.price * this._detailQty);
+  }
+
+  catalog() {
+    return [
+      // Herramientas
+      { id: 'taladro',      name: 'Taladro percutor',        cat: 'Herramientas',          attr: '650W · mandril 13mm',       price: 485000,            badge: 'Más vendido', img: 'taladro',      desc: 'Taladro percutor de 650W con mandril de 13mm, ideal para perforar concreto, madera y metal. Velocidad variable y empuñadura ergonómica.' },
+      { id: 'destor',       name: 'Set destornilladores',    cat: 'Herramientas',          attr: '6 piezas · punta imantada', price: 89000,             badge: 'Nuevo',        img: 'destornilladores', desc: 'Set de 6 destornilladores con puntas imantadas (Phillips y planos), mango antideslizante y acero cromo-vanadio.' },
+      { id: 'llave',        name: 'Llave francesa',          cat: 'Herramientas',          attr: '10" ajustable',             price: 62000,             badge: 'Stock',        img: 'llave',        desc: 'Llave francesa ajustable de 10 pulgadas en acero forjado, mordaza de apertura amplia y graduación precisa.' },
+      { id: 'martillo',     name: 'Martillo de uña',         cat: 'Herramientas',          attr: '500g · mango fibra',        price: 48000,             badge: 'Stock',        img: 'martillo',     desc: 'Martillo de uña profesional de 500g con mango de fibra de vidrio antideslizante. Ideal para clavado y extracción.' },
+      { id: 'nivel',        name: 'Nivel de burbuja',        cat: 'Herramientas',          attr: '60cm · 3 burbujas',         price: 35000,             badge: 'Stock',        img: 'nivel',        desc: 'Nivel de burbuja de 60cm con 3 ampollas para verificación horizontal, vertical y 45°. Cuerpo de aluminio.' },
+      { id: 'amoladora',    name: 'Amoladora angular',       cat: 'Herramientas',          attr: '720W · disco 115mm',        price: 245000,            badge: 'Más vendido',  img: 'amoladora',   desc: 'Amoladora angular de 720W con disco de 115mm. Interruptor de seguridad y protector regulable. Para corte y desbaste.' },
+      // Electricidad
+      { id: 'cinta',        name: 'Cinta aisladora',         cat: 'Electricidad',          attr: '19mm · 20m',                price: 8500,  old: 12000, badge: 'Oferta',       img: 'cinta',        desc: 'Cinta aisladora de PVC 19mm x 20m, alta adherencia y aislación eléctrica. Resistente a humedad y temperatura.' },
+      { id: 'cable',        name: 'Cable eléctrico',         cat: 'Electricidad',          attr: '2.5mm² · rollo 100m',       price: 145000,            badge: 'Más vendido',  img: 'cable',        desc: 'Cable eléctrico unipolar de 2.5mm², rollo de 100m. Conductor de cobre, aislación antiflama.' },
+      { id: 'tomacorriente',name: 'Tomacorriente doble',     cat: 'Electricidad',          attr: '10A · con toma tierra',     price: 12500,             badge: 'Stock',        img: 'tomacorriente',desc: 'Tomacorriente doble polarizado de 10A con toma a tierra de seguridad. Compatible con cajas estándar.' },
+      { id: 'lampara',      name: 'Lámpara LED 9W',          cat: 'Electricidad',          attr: 'E27 · luz día · 800lm',     price: 8900,  old: 12000, badge: 'Oferta',       img: 'lampara',      desc: 'Lámpara LED de 9W equivalente a 60W. Luz blanca 6500K, 800 lúmenes. Vida útil 25.000 horas.' },
+      { id: 'tablero',      name: 'Tablero eléctrico',       cat: 'Electricidad',          attr: '4 circuitos · embutir',     price: 89000,             badge: 'Stock',        img: 'tablero',      desc: 'Tablero eléctrico para embutir de 4 circuitos. Incluye disyuntor principal. Tapa plástica con llave.' },
+      // Plomería
+      { id: 'pvc',          name: 'Caño PVC',                cat: 'Plomería',              attr: '110mm · 3m',                price: 38000,             badge: 'Stock',        img: 'pvc',          desc: 'Caño de PVC de 110mm x 3m para desagüe. Unión por espiga, apto para redes cloacales y pluviales.' },
+      { id: 'canilla',      name: 'Canilla de pileta',       cat: 'Plomería',              attr: 'Acero inox · 1/2"',         price: 95000,             badge: 'Stock',        img: 'canilla',      desc: 'Canilla de pileta en acero inoxidable con manija larga y conexión de 1/2". Fácil instalación y cierre hermético.' },
+      { id: 'sifon',        name: 'Sifón botella',           cat: 'Plomería',              attr: 'PVC · salida 1.1/4"',       price: 18500,             badge: 'Stock',        img: 'sifon',        desc: 'Sifón botella en PVC de alta resistencia con salida de 1.1/4". Tapón de limpieza incluido.' },
+      { id: 'llave_paso',   name: 'Llave de paso esfera',    cat: 'Plomería',              attr: '1/2" · bronce',             price: 22000,             badge: 'Nuevo',        img: 'llave_paso',   desc: 'Llave de paso esfera de bronce de 1/2". Cierre total de caudal, diseño compacto.' },
+      // Pinturas
+      { id: 'latex',        name: 'Pintura látex interior',  cat: 'Pinturas',              attr: 'Blanco mate · 20L',         price: 215000,            badge: 'Stock',        img: 'latex',        desc: 'Pintura látex interior blanco mate. Lavable, secado rápido y excelente cubrimiento. Balde de 20 litros.' },
+      { id: 'esmalte',      name: 'Esmalte sintético',       cat: 'Pinturas',              attr: 'Blanco brillante · 4L',     price: 145000, old: 178000, badge: 'Oferta',     img: 'esmalte',      desc: 'Esmalte sintético blanco brillante de 4 litros para madera y metal. Secado rápido y acabado espejo.' },
+      { id: 'rodillo',      name: 'Kit rodillo pintura',     cat: 'Pinturas',              attr: 'Lana 23cm + bandeja',       price: 32000,             badge: 'Stock',        img: 'rodillo',      desc: 'Kit de pintura con rodillo de lana de 23cm y bandeja plástica. Aplicación pareja y rápida.' },
+      { id: 'sellador',     name: 'Sellador base agua',      cat: 'Pinturas',              attr: '4L · para interiores',      price: 98000,             badge: 'Stock',        img: 'sellador',     desc: 'Sellador base agua de 4 litros para preparación de superficies interiores. Mejora la adherencia.' },
+      // Construcción
+      { id: 'cemento',      name: 'Cemento Portland',        cat: 'Construcción',          attr: 'Bolsa 50kg',                price: 48000,             badge: 'Stock',        img: 'cemento',      desc: 'Cemento Portland gris en bolsa de 50kg. Apto para estructuras, contrapisos y revoques. Alta resistencia a la compresión.' },
+      { id: 'ladrillo',     name: 'Ladrillo hueco',          cat: 'Construcción',          attr: '8x18x33cm · cerámico',      price: 1200,              badge: 'Stock',        img: 'ladrillo',     desc: 'Ladrillo hueco cerámico de 8x18x33cm de alta resistencia para muros interiores y exteriores.' },
+      { id: 'varilla',      name: 'Varilla hierro c/d',      cat: 'Construcción',          attr: '6mm · 12 metros',           price: 68000,             badge: 'Stock',        img: 'varilla',      desc: 'Varilla de hierro corrugado de 6mm, barra de 12 metros. Para refuerzo de estructuras de hormigón.' },
+      // Jardinería
+      { id: 'manguera',     name: 'Manguera de jardín',      cat: 'Jardinería',            attr: '25 metros · 3/4"',          price: 125000,            badge: 'Más vendido',  img: 'manguera',     desc: 'Manguera de jardín de 25 metros, diámetro 3/4". Flexible, resistente a UV. Incluye pistola de riego.' },
+      { id: 'tijera_jar',   name: 'Tijera podadora',         cat: 'Jardinería',            attr: 'Acero inox · byPass',       price: 42000,             badge: 'Stock',        img: 'tijera_jar',   desc: 'Tijera podadora tipo bypass en acero inoxidable. Mango ergonómico, corte limpio para ramas hasta 2cm.' },
+      { id: 'pala',         name: 'Pala punta redonda',      cat: 'Jardinería',            attr: 'Mango madera · 120cm',      price: 78000,             badge: 'Stock',        img: 'pala',         desc: 'Pala de punta redonda con mango de madera de 120cm. Ideal para cavar y mover tierra.' },
+      // Seguridad
+      { id: 'casco',        name: 'Casco de obra',           cat: 'Seguridad',             attr: 'HDPE · clase A',            price: 28000,             badge: 'Stock',        img: 'casco',        desc: 'Casco de seguridad clase A en HDPE. Ajuste con ruleta, ranuras para viseras y orejeras.' },
+      { id: 'guante',       name: 'Guantes de trabajo',      cat: 'Seguridad',             attr: 'Vaqueta · talla L',         price: 22500,             badge: 'Stock',        img: 'guante',       desc: 'Guantes de trabajo en cuero vaqueta reforzado. Protección contra abrasión y cortes.' },
+      { id: 'lente',        name: 'Lentes de seguridad',     cat: 'Seguridad',             attr: 'Antirayado · claros',       price: 14000,             badge: 'Nuevo',        img: 'lente',        desc: 'Lentes de seguridad antirayado y antiempañante. Montura liviana, protección UV.' },
+      // Limpieza
+      { id: 'escoba',       name: 'Escoba plástica',         cat: 'Limpieza',              attr: '40cm · mango 120cm',        price: 18000,             badge: 'Stock',        img: 'escoba',       desc: 'Escoba plástica de 40cm con mango de aluminio de 120cm. Cerdas resistentes para todo tipo de pisos.' },
+      { id: 'mopa',         name: 'Mopa de microfibra',      cat: 'Limpieza',              attr: '360° · cabezal lavable',    price: 35000,             badge: 'Stock',        img: 'mopa',         desc: 'Mopa de microfibra con rotación de 360°. Cabezal desmontable y lavable para todo tipo de pisos.' },
+      { id: 'lavandina',    name: 'Lavandina concentrada',   cat: 'Limpieza',              attr: '5 litros · 55g/L',          price: 16500, old: 22000, badge: 'Oferta',       img: 'lavandina',    desc: 'Lavandina concentrada de 5 litros, 55g/L de cloro activo. Blanquea, desinfecta y elimina bacterias.' },
+      // Tornillería
+      { id: 'tornillo',     name: 'Tornillos para madera',   cat: 'Tornillería',           attr: 'Caja 200u · 4x40mm',        price: 12000,             badge: 'Stock',        img: 'tornillo',     desc: 'Caja de 200 tornillos para madera de 4x40mm cabeza plana Phillips. Acero zincado, autopunzante.' },
+      { id: 'tarugo',       name: 'Tarugos de nylon',        cat: 'Tornillería',           attr: 'Bolsa 100u · 8mm',          price: 8500,              badge: 'Stock',        img: 'tarugo',       desc: 'Bolsa de 100 tarugos de nylon de 8mm. Expansión uniforme, alta resistencia en hormigón y mampostería.' },
+      { id: 'tuerca',       name: 'Kit tuercas y bulones',   cat: 'Tornillería',           attr: '120 piezas · M6/M8',        price: 28000,             badge: 'Nuevo',        img: 'tuerca',       desc: 'Kit de 120 piezas con tuercas y bulones hexagonales M6 y M8 en acero galvanizado. Caja clasificadora incluida.' },
+      // Adhesivos y selladores
+      { id: 'silicona',     name: 'Silicona selladora',      cat: 'Adhesivos y selladores',attr: 'Transparente · 280ml',      price: 18000, old: 25000, badge: 'Oferta',       img: 'silicona',     desc: 'Silicona selladora transparente de 280ml, impermeable y flexible. Adherencia en vidrio, cerámica, metal y madera.' },
+      { id: 'pegamento',    name: 'Pegamento epoxi',         cat: 'Adhesivos y selladores',attr: '500g · contacto',           price: 35000,             badge: 'Stock',        img: 'pegamento',    desc: 'Pegamento epoxi de contacto de 500g. Alta resistencia en metales, cerámicos, madera y plásticos. Secado en 5 minutos.' },
+      { id: 'espuma',       name: 'Espuma poliuretano',      cat: 'Adhesivos y selladores',attr: '750ml · expansiva',         price: 42000,             badge: 'Stock',        img: 'espuma',       desc: 'Espuma expansiva de poliuretano de 750ml. Relleno, sellado y aislación en marcos, ventanas y cañerías.' },
+    ];
+  }
+
+  renderVals() {
+    const st = this.state;
+    const fmt = n => this.fmt(n);
+    const badgeMap = {
+      'Más vendido': { bg: '#E97932', fg: '#fff', text: 'Más vendido' },
+      'Nuevo': { bg: '#ffffff', fg: '#021F5F', text: 'Nuevo' },
+      'Oferta': { bg: '#F4552A', fg: '#fff', text: 'Oferta' },
+      'Stock': { bg: 'rgba(255,255,255,0.18)', fg: '#fff', text: 'En stock' }
+    };
+    const waBase = (msg) => 'https://wa.me/' + this.wa + '?text=' + encodeURIComponent(msg);
+
+    const prodPhotos = {
+      // Herramientas
+      taladro:        'https://images.unsplash.com/photo-1622044939413-0b829c342434?auto=format&fit=crop&w=500&q=80',
+      destornilladores:'https://images.unsplash.com/photo-1542493852-d195f3500588?auto=format&fit=crop&w=500&q=80',
+      llave:          'https://images.unsplash.com/photo-1611288870280-4a322b8ec7ec?auto=format&fit=crop&w=500&q=80',
+      martillo:       'https://images.unsplash.com/photo-1581783898377-1c85bf937427?auto=format&fit=crop&w=500&q=80',
+      nivel:          'https://images.unsplash.com/photo-1630419493571-5066ebfb5889?auto=format&fit=crop&w=500&q=80',
+      amoladora:      'https://images.unsplash.com/photo-1515630771457-09367d0ae038?auto=format&fit=crop&w=500&q=80',
+      // Electricidad
+      cinta:          'https://images.unsplash.com/photo-1760377821917-722e631cd716?auto=format&fit=crop&w=500&q=80',
+      cable:          'https://images.unsplash.com/photo-1607631755187-298a3f9a640a?auto=format&fit=crop&w=500&q=80',
+      tomacorriente:  'https://images.unsplash.com/photo-1565049981953-379c9c2a5d48?auto=format&fit=crop&w=500&q=80',
+      lampara:        'https://images.unsplash.com/photo-1529310399831-ed472b81d589?auto=format&fit=crop&w=500&q=80',
+      tablero:        'https://images.unsplash.com/photo-1576446470246-499c738d1c8e?auto=format&fit=crop&w=500&q=80',
+      // Plomería
+      pvc:            'https://images.unsplash.com/photo-1737574990049-264694ce17a0?auto=format&fit=crop&w=500&q=80',
+      canilla:        'https://images.unsplash.com/photo-1761353854551-361b1c804849?auto=format&fit=crop&w=500&q=80',
+      sifon:          'https://images.unsplash.com/photo-1538474705339-e87de81450e8?auto=format&fit=crop&w=500&q=80',
+      llave_paso:     'https://images.unsplash.com/photo-1639600993675-2281b2c939f0?auto=format&fit=crop&w=500&q=80',
+      // Pinturas
+      latex:          'https://images.unsplash.com/photo-1585676737728-432f58d5fdba?auto=format&fit=crop&w=500&q=80',
+      esmalte:        'https://images.unsplash.com/photo-1623944361530-8a6cd3eb0de8?auto=format&fit=crop&w=500&q=80',
+      rodillo:        'https://images.unsplash.com/photo-1562259949-e8e7689d7828?auto=format&fit=crop&w=500&q=80',
+      sellador:       'https://images.unsplash.com/photo-1589939705384-5185137a7f0f?auto=format&fit=crop&w=500&q=80',
+      // Construcción
+      cemento:        'https://images.unsplash.com/photo-1575493438282-4e0fb32d1bdd?auto=format&fit=crop&w=500&q=80',
+      ladrillo:       'https://images.unsplash.com/photo-1495578942200-c5f5d2137def?auto=format&fit=crop&w=500&q=80',
+      varilla:        'https://images.unsplash.com/photo-1761479867761-7a8b11f54449?auto=format&fit=crop&w=500&q=80',
+      // Jardinería
+      manguera:       'https://images.unsplash.com/photo-1588501985911-6932ea666801?auto=format&fit=crop&w=500&q=80',
+      tijera_jar:     'https://images.unsplash.com/photo-1773234731719-3d3295d2a4de?auto=format&fit=crop&w=500&q=80',
+      pala:           'https://images.unsplash.com/photo-1647978403048-2e5099133ea3?auto=format&fit=crop&w=500&q=80',
+      // Seguridad
+      casco:          'https://images.unsplash.com/photo-1567954970774-58d6aa6c50dc?auto=format&fit=crop&w=500&q=80',
+      guante:         'https://images.unsplash.com/photo-1617118602199-d3c05ae37ed8?auto=format&fit=crop&w=500&q=80',
+      lente:          'https://images.unsplash.com/photo-1593854519602-687eae339d57?auto=format&fit=crop&w=500&q=80',
+      // Limpieza
+      escoba:         'https://images.unsplash.com/photo-1647381518264-97ff1835026f?auto=format&fit=crop&w=500&q=80',
+      mopa:           'https://images.unsplash.com/photo-1758273238415-01ec03d9ef27?auto=format&fit=crop&w=500&q=80',
+      lavandina:      'https://images.unsplash.com/photo-1584813470613-5b1c1cad3d69?auto=format&fit=crop&w=500&q=80',
+      // Tornillería
+      tornillo:       'https://images.unsplash.com/photo-1613945831677-383c19ad7721?auto=format&fit=crop&w=500&q=80',
+      tarugo:         'https://images.unsplash.com/photo-1503792574895-6074f691cc6a?auto=format&fit=crop&w=500&q=80',
+      tuerca:         'https://images.unsplash.com/photo-1704732061018-3ac738176c20?auto=format&fit=crop&w=500&q=80',
+      // Adhesivos y selladores
+      silicona:       'https://images.unsplash.com/photo-1560755341-c5417203d21c?auto=format&fit=crop&w=500&q=80',
+      pegamento:      'https://images.unsplash.com/photo-1614162063681-1adc832305b1?auto=format&fit=crop&w=500&q=80',
+      espuma:         'https://images.unsplash.com/photo-1643482081334-0b860cca9167?auto=format&fit=crop&w=500&q=80',
+    };
+
+    const all = this.catalog().map(prod => {
+      const qty = st.qtys[prod.id] ?? 1;
+      const b = badgeMap[prod.badge];
+      return {
+        id: prod.id, name: prod.name, cat: prod.cat, attr: prod.attr,
+        priceLabel: fmt(prod.price), hasOld: !!prod.old, oldLabel: prod.old ? fmt(prod.old) : '',
+        badgeBg: b.bg, badgeFg: b.fg, badgeText: b.text, badge: prod.badge, qty, iconPath: this.iconPath(this.iconName(prod.id)),
+        img: prodPhotos[prod.img] || 'assets/prod/' + prod.img + '.png',
+        consult: waBase('Hola! Quiero consultar por: ' + prod.name + ' (' + prod.attr + ').'),
+        inc: () => this.setQty(prod.id, qty + 1),
+        dec: () => this.setQty(prod.id, Math.max(1, qty - 1)),
+        add: () => this.addToCart(prod, qty),
+        open: () => this.openDetail(prod.id)
+      };
+    });
+
+    const f = st.activeFilter;
+    const products = all.filter(p => {
+      if (f === 'Todos') return true;
+      if (f === 'Ofertas') return p.badge === 'Oferta';
+      if (f === 'Más vendidos') return p.badge === 'Más vendido';
+      if (f === 'Pintura') return p.cat === 'Pinturas';
+      return p.cat === f;
+    });
+    const resultLabel = products.length + (products.length === 1 ? ' producto' : ' productos');
+
+    const filterDefs = ['Todos', 'Herramientas', 'Electricidad', 'Plomería', 'Pintura', 'Ofertas', 'Más vendidos'];
+    const filters = filterDefs.map(label => {
+      const active = st.activeFilter === label;
+      const style = 'cursor:pointer;border:1.5px solid ' + (active ? '#E97932' : 'rgba(255,255,255,.22)') +
+        ';background:' + (active ? '#E97932' : 'rgba(255,255,255,.06)') + ';color:#fff;font-weight:600;font-size:13.5px;padding:9px 17px;border-radius:999px;transition:all .22s;font-family:Montserrat;';
+      return { label, style, onClick: () => this.setState({ activeFilter: label }) };
+    });
+
+    const catDefs = [
+      ['Herramientas', 'Manuales y eléctricas para cada tarea.'],
+      ['Electricidad', 'Cables, llaves, tableros y conexiones.'],
+      ['Plomería', 'Caños, grifería y todo para el agua.'],
+      ['Pinturas', 'Látex, esmaltes, rodillos y accesorios.'],
+      ['Construcción', 'Materiales y áridos para tu obra.'],
+      ['Jardinería', 'Herramientas y cuidado de exteriores.'],
+      ['Seguridad', 'Protección personal y de obra.'],
+      ['Limpieza', 'Insumos y artículos de mantenimiento.'],
+      ['Tornillería', 'Tornillos, tarugos, anclajes y fijaciones.'],
+      ['Adhesivos y selladores', 'Siliconas, pegamentos y selladores.']
+    ];
+    const catIcons = ['wrench', 'bolt', 'pipe', 'roller', 'helmet', 'plant', 'shield', 'spray', 'screw', 'glue'];
+    const catTags = ['Taller', 'Instalación', 'Agua', 'Acabados', 'Obra', 'Exterior', 'Protección', 'Mantenimiento', 'Fijaciones', 'Sellado'];
+    const catSlugs = ['herramientas', 'electricidad', 'plomeria', 'pinturas', 'construccion', 'jardineria', 'seguridad', 'limpieza', 'tornilleria', 'adhesivos'];
+    const catPhotos = [
+      'https://images.unsplash.com/photo-1507126694149-a8685f99aa4f?auto=format&fit=crop&w=500&q=80', // herramientas
+      'https://images.unsplash.com/photo-1758101755915-462eddc23f57?auto=format&fit=crop&w=500&q=80', // electricidad
+      'https://images.unsplash.com/photo-1694827893591-af9b80361599?auto=format&fit=crop&w=500&q=80', // plomeria
+      'https://images.unsplash.com/photo-1520856990214-7a9e59dd5ff7?auto=format&fit=crop&w=500&q=80', // pinturas
+      'https://images.unsplash.com/photo-1653280662710-1cac52cde6d7?auto=format&fit=crop&w=500&q=80', // construccion
+      'https://images.unsplash.com/photo-1531873252757-8c22fa9e7a98?auto=format&fit=crop&w=500&q=80', // jardineria
+      'https://images.unsplash.com/photo-1705579612477-20866d78deeb?auto=format&fit=crop&w=500&q=80', // seguridad
+      'https://images.unsplash.com/photo-1550963295-019d8a8a61c5?auto=format&fit=crop&w=500&q=80', // limpieza
+      'https://images.unsplash.com/photo-1710129084868-9ff5127b7e6e?auto=format&fit=crop&w=500&q=80', // tornilleria
+      'https://images.unsplash.com/photo-1560755341-c5417203d21c?auto=format&fit=crop&w=500&q=80', // adhesivos
+    ];
+    const categories = catDefs.map(([name, desc], i) => ({ name, desc, tag: catTags[i], slotId: 'cat-img-' + catSlugs[i], img: catPhotos[i], iconPath: this.iconPath(catIcons[i]), tileBg: this.tileBg(i), go: () => this.openCatalog(name) }));
+
+    const cq = this.norm ? this.norm(st.catSearch) : st.catSearch.toLowerCase();
+    const catMenuItems = categories.filter(c => !cq.trim() || this.normTxt(c.name).includes(cq.trim()));
+    const catMenuEmpty = catMenuItems.length === 0;
+    const cmo = st.catMenuOpen;
+    const catCaretStyle = 'transition:transform .25s ease;transform:rotate(' + (cmo ? '180deg' : '0deg') + ');';
+    const catMenuStyle = 'position:absolute;top:34px;right:0;z-index:60;width:300px;background:#fff url(assets/catdd-bg.png) center center/cover no-repeat;border:1px solid #E7EAF0;border-radius:16px;padding:12px;box-shadow:0 28px 60px -22px rgba(2,18,54,.5);transform-origin:top right;transition:opacity .22s ease,transform .22s ease;opacity:' + (cmo ? '1' : '0') + ';transform:scale(' + (cmo ? '1' : '.95') + ');pointer-events:' + (cmo ? 'auto' : 'none') + ';';
+
+    const offerProds = this.catalog().filter(p => p.old).slice(0, 3);
+    const offers = offerProds.map(p => ({
+      name: p.name, cat: p.cat, attr: p.attr,
+      pct: Math.round((1 - p.price / p.old) * 100),
+      img: prodPhotos[p.img] || ('assets/prod/' + p.img + '.png'),
+      priceLabel: fmt(p.price), oldLabel: fmt(p.old),
+      open: () => this.openDetail(p.id),
+      add: () => this.addToCart(p, 1)
+    }));
+
+    const cartItems = Object.keys(st.cart).map(id => {
+      const c = st.cart[id];
+      return {
+        id, name: c.name, attr: c.attr, qty: c.qty, lineLabel: fmt(c.price * c.qty), img: prodPhotos[c.img] || '', iconPath: this.iconPath(this.iconName(id)),
+        inc: () => this.cartInc(id, 1), dec: () => this.cartInc(id, -1), remove: () => this.cartRemove(id)
+      };
+    });
+    const count = cartItems.reduce((a, c) => a + c.qty, 0);
+    const subtotal = Object.values(st.cart).reduce((a, c) => a + c.price * c.qty, 0);
+    const hasItems = cartItems.length > 0;
+
+    const lines = ['Hola Ferretería República! Quiero hacer este pedido:'];
+    Object.values(st.cart).forEach(c => lines.push('• ' + c.qty + 'x ' + c.name + ' — ' + fmt(c.price * c.qty)));
+    lines.push('Subtotal: ' + fmt(subtotal));
+    const waOrderHref = waBase(lines.join('\n'));
+
+    const headerStyle = 'position:fixed;top:0;left:0;right:0;z-index:100;background:' +
+      (st.scrolled
+        ? "linear-gradient(rgba(2,21,63,.92),rgba(2,21,63,.92)), #021F5F url('assets/header-bg.png') center center/cover no-repeat"
+        : "#021F5F url('assets/header-bg.png') center center/cover no-repeat") +
+      ';backdrop-filter:blur(8px);transition:padding .3s,box-shadow .3s;padding:' +
+      (st.scrolled ? '9px 0' : '17px 0') + ';box-shadow:' +
+      (st.scrolled ? '0 10px 30px -12px rgba(0,0,0,.55)' : 'none') +
+      ';border-bottom:1px solid rgba(255,255,255,.07);';
+
+    const overlayOn = st.cartOpen || st.menuOpen;
+    const overlayStyle = 'position:fixed;inset:0;background:rgba(2,12,35,.5);z-index:110;transition:opacity .35s;opacity:' +
+      (overlayOn ? '1' : '0') + ';pointer-events:' + (overlayOn ? 'auto' : 'none') + ';';
+    const drawerStyle = 'position:fixed;top:0;right:0;height:100%;width:420px;max-width:92vw;background:#fff;z-index:120;box-shadow:-20px 0 60px -20px rgba(2,31,95,.4);display:flex;flex-direction:column;transition:transform .42s cubic-bezier(.4,0,.1,1);transform:translateX(' +
+      (st.cartOpen ? '0' : '101%') + ');';
+    const menuStyle = 'position:fixed;top:0;left:0;height:100%;width:310px;max-width:84vw;background:#021F5F;color:#fff;z-index:120;transition:transform .42s cubic-bezier(.4,0,.1,1);transform:translateX(' +
+      (st.menuOpen ? '0' : '-101%') + ');padding:20px;display:flex;flex-direction:column;overflow-y:auto;';
+
+    this._fanData = all;
+    const dp = st.detail ? this.catalog().find(p => p.id === st.detail) : null;
+    let detail = null;
+    if (dp) {
+      if (this._detailQty == null) this._detailQty = st.qtys[dp.id] || 1;
+      const dq = this._detailQty;
+      const db = badgeMap[dp.badge];
+      detail = {
+        name: dp.name, cat: dp.cat, attr: dp.attr, desc: dp.desc,
+        priceLabel: fmt(dp.price), hasOld: !!dp.old, oldLabel: dp.old ? fmt(dp.old) : '',
+        savePct: dp.old ? '-' + Math.round((1 - dp.price / dp.old) * 100) + '%' : '',
+        lineTotal: fmt(dp.price * dq),
+        img: prodPhotos[dp.img] || 'assets/prod/' + dp.img + '.png', qty: dq, badgeText: db.text, badgeBg: db.bg, badgeFg: db.fg,
+        inc: () => this._ddQtyChange(dp, 1),
+        dec: () => this._ddQtyChange(dp, -1),
+        add: () => { const q = this._detailQty || 1; this.addToCart(dp, q); this._detailQty = null; this.setState({ detail: null }); },
+        consult: waBase('Hola! Quiero consultar por: ' + dp.name + ' (' + dp.attr + ').')
+      };
+    } else {
+      this._detailQty = null;
+    }
+    const detailOpen = !!detail;
+    const detailWrapStyle = 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;transition:opacity .3s ease;opacity:' +
+      (detailOpen ? '1' : '0') + ';pointer-events:' + (detailOpen ? 'auto' : 'none') + ';';
+
+    const searchQ = this.normTxt(st.search);
+    const searchResults = searchQ.length >= 2
+      ? all.filter(p => this.normTxt(p.name + ' ' + p.cat + ' ' + p.attr).includes(searchQ)).slice(0, 6).map(p => ({
+          name: p.name, cat: p.cat, priceLabel: fmt(p.price), img: prodPhotos[p.img] || '',
+          go: () => this.setState({ detail: p, search: '', searchDrop: false })
+        }))
+      : [];
+    const searchDropOpen = searchResults.length > 0 && st.searchDrop;
+    const searchResultCount = searchResults.length;
+
+    const catalogCf = st.catalogFilter;
+    const catalogCs = this.normTxt(st.catalogSearch);
+    const catalogFilterDefs = ['Todos', 'Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Construcción', 'Jardinería', 'Seguridad', 'Limpieza', 'Tornillería', 'Adhesivos y selladores', 'Ofertas'];
+    const catalogFilters = catalogFilterDefs.map(label => ({
+      label,
+      style: 'cursor:pointer;border:1.5px solid ' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.22)') + ';background:' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.06)') + ';color:#fff;font-weight:600;font-size:13px;padding:7px 16px;border-radius:999px;white-space:nowrap;font-family:Montserrat;transition:all .2s;',
+      set: () => this.setState({ catalogFilter: label })
+    }));
+    const catalogProducts = all.filter(p => {
+      const matchFilter = catalogCf === 'Todos' || (catalogCf === 'Ofertas' && p.badge === 'Oferta') || p.cat === catalogCf;
+      const matchSearch = !catalogCs.trim() || this.normTxt(p.name + ' ' + p.cat + ' ' + p.attr).includes(catalogCs.trim());
+      return matchFilter && matchSearch;
+    });
+    const catalogHasResults = catalogProducts.length > 0;
+    const catalogResultLabel = catalogProducts.length + (catalogProducts.length === 1 ? ' producto' : ' productos');
+    const isCatalog = st.view === 'catalog';
+    const homeViewStyle = isCatalog ? 'display:none' : '';
+    const catalogViewStyle = isCatalog ? 'padding-top:72px;min-height:100vh;' : 'display:none';
+
+    return {
+      headerStyle, overlayStyle, drawerStyle, menuStyle,
+      detail, detailOpen, detailWrapStyle, closeDetail: () => this.closeDetail(),
+      fanItems: all,
+      fanPrev: () => this.fanCycle(-1),
+      fanNext: () => this.fanCycle(1),
+      search: st.search, onSearch: (e) => this.setState({ search: e.target.value, searchDrop: true }),
+      searchResults, searchDropOpen, searchResultCount,
+      onSearchFocus: () => this.setState({ searchDrop: true }),
+      onSearchBlur: () => setTimeout(() => this.setState({ searchDrop: false }), 160),
+      goInicio: () => this.goTo('inicio'),
+      goCategorias: () => this.goTo('categorias'),
+      goOfertas: () => this.goTo('ofertas'),
+      goOfertasCatalog: () => this.openCatalog('Ofertas'),
+      openCatalog: (f) => this.openCatalog(f),
+      closeCatalog: () => this.closeCatalog(),
+      goProductos: () => this.goTo('masvendidos'),
+      goContacto: () => this.goTo('contacto'),
+      catMenuItems, catMenuEmpty, catCaretStyle, catMenuStyle,
+      catSearch: st.catSearch,
+      onCatSearch: (e) => this.setState({ catSearch: e.target.value }),
+      toggleCatMenu: () => this.setState(s => ({ catMenuOpen: !s.catMenuOpen })),
+      catPrev: () => { this._cNudge = (this._cNudge || 0) + 270; },
+      catNext: () => { this._cNudge = (this._cNudge || 0) - 270; },
+      openCart: () => this.setState({ cartOpen: true, menuOpen: false }),
+      toggleMenu: () => this.setState(s => ({ menuOpen: !s.menuOpen, mobileCatOpen: false })),
+      closeAll: () => this.setState({ cartOpen: false, menuOpen: false, mobileCatOpen: false }),
+      toggleMobileCats: () => this.setState(s => ({ mobileCatOpen: !s.mobileCatOpen })),
+      mobileCatOpen: st.mobileCatOpen,
+      mobileCatCaretStyle: 'transition:transform .22s ease;transform:rotate(' + (st.mobileCatOpen ? '180' : '0') + 'deg);',
+      closeAndProducts: () => { this.setState({ cartOpen: false }); this.goTo('masvendidos'); },
+      waContact: waBase('Hola Ferretería República! Quiero hacer una consulta.'),
+      categories, filters, products, resultLabel, offers,
+      cartItems, count, hasItems, cartEmpty: !hasItems,
+      subtotalLabel: fmt(subtotal), waOrderHref,
+      ofertasOn: this.props.mostrarOfertas ?? true,
+      countdownOn: this.props.mostrarCountdown ?? true,
+      toast: st.toast, toastName: st.toastName,
+      homeViewStyle, catalogViewStyle,
+      catalogSearch: st.catalogSearch,
+      onCatalogSearch: (e) => this.setState({ catalogSearch: e.target.value }),
+      clearCatalogSearch: () => this.setState({ catalogSearch: '' }),
+      hasCatalogSearch: !!st.catalogSearch,
+      catalogFilters, catalogProducts, catalogCf,
+      catalogResultLabel, catalogHasResults,
+      catalogNoResults: !catalogHasResults,
+      filtersOpen: st.filtersOpen,
+      filterBtnStyle: 'flex:none;height:50px;padding:0 18px;border-radius:13px;border:1.5px solid ' + (st.filtersOpen ? '#E97932' : 'rgba(255,255,255,.22)') + ';background:' + (st.filtersOpen ? '#E97932' : 'rgba(255,255,255,.08)') + ';color:#fff;font-weight:700;font-size:13.5px;cursor:pointer;display:flex;align-items:center;gap:8px;white-space:nowrap;font-family:Montserrat;transition:all .22s;',
+      filterBtnLabel: 'Filtros' + (st.catalogFilter !== 'Todos' ? ' · ' + st.catalogFilter : ''),
+      filterCaretStyle: 'transition:transform .22s;transform:rotate(' + (st.filtersOpen ? '180' : '0') + 'deg);',
+      toggleFilters: () => this.setState(s => ({ filtersOpen: !s.filtersOpen })),
+    };
+  }
+}
+</script>
+</body>
+</html>
