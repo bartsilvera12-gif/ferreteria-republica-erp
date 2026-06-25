@@ -189,22 +189,55 @@
 </x-dc>
 <script type="text/x-dc" data-dc-script>
 class Component extends DCLogic {
-  state = { filter: 'Todos', detail: null, search: '', filterOpen: false, catMenuOpen: false, catSearch: '' };
+  state = {
+    filter: 'Todos', detail: null, search: '', filterOpen: false, catMenuOpen: false, catSearch: '',
+    // Datos cargados desde /api/sitio/productos y /api/sitio/categorias.
+    dbProducts: [], dbCategorias: [], loading: true, loadError: null
+  };
   get wa() { return (this.props.numeroWhatsapp || '595981000000').replace(/[^0-9]/g, ''); }
   fmt(n) { return 'Gs. ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
   norm(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
+  // Devuelve productos en el shape esperado por el rendering:
+  //   { id, name, cat, attr, price, badge, img, desc }
+  // Mapea desde el shape de /api/sitio/productos cargado en state.dbProducts.
   catalog() {
-    return [
-      { id: 'taladro', name: 'Taladro percutor', cat: 'Herramientas', attr: '650W · mandril 13mm', price: 485000, badge: 'Más vendido', img: 'taladro', desc: 'Taladro percutor de 650W con mandril de 13mm, ideal para perforar concreto, madera y metal. Velocidad variable y empuñadura ergonómica para trabajos exigentes.' },
-      { id: 'destor', name: 'Juego de destornilladores', cat: 'Herramientas', attr: '6 piezas · punta imantada', price: 89000, badge: 'Nuevo', img: 'destornilladores', desc: 'Set de 6 destornilladores con puntas imantadas (Phillips y planos), mango antideslizante y acero cromo-vanadio resistente al desgaste.' },
-      { id: 'latex', name: 'Pintura látex interior', cat: 'Pinturas', attr: 'Blanco mate · 20L', price: 215000, badge: 'Stock', img: 'latex', desc: 'Pintura látex interior blanco mate, gran rendimiento y fácil aplicación. Lavable, de secado rápido y excelente cubrimiento. Balde de 20 litros.' },
-      { id: 'cinta', name: 'Cinta aisladora', cat: 'Electricidad', attr: '19mm · 20m', price: 8500, old: 12000, badge: 'Oferta', img: 'cinta', desc: 'Cinta aisladora de PVC 19mm x 20m, alta adherencia y aislación eléctrica. Resistente a la humedad y a la temperatura. Ideal para instalaciones.' },
-      { id: 'llave', name: 'Llave francesa', cat: 'Herramientas', attr: '10" ajustable', price: 62000, badge: 'Stock', img: 'llave', desc: 'Llave francesa ajustable de 10 pulgadas en acero forjado, mordaza de apertura amplia y graduación precisa para tuercas de distintos tamaños.' },
-      { id: 'cable', name: 'Cable eléctrico', cat: 'Electricidad', attr: '2.5mm² · rollo 100m', price: 145000, badge: 'Más vendido', img: 'cable', desc: 'Cable eléctrico unipolar de 2.5mm², rollo de 100m. Conductor de cobre, aislación antiflama, ideal para instalaciones domiciliarias y de obra.' },
-      { id: 'pvc', name: 'Caño PVC', cat: 'Plomería', attr: '110mm · 3m', price: 38000, badge: 'Stock', img: 'pvc', desc: 'Caño de PVC de 110mm x 3m para desagüe, resistente y de fácil instalación. Unión por espiga, apto para redes cloacales y pluviales.' },
-      { id: 'silicona', name: 'Silicona selladora', cat: 'Adhesivos', attr: 'Transparente · 280ml', price: 18000, old: 25000, badge: 'Oferta', img: 'silicona', desc: 'Silicona selladora transparente de 280ml, impermeable y flexible. Excelente adherencia en vidrio, cerámica, metal y madera. Uso interior y exterior.' }
-    ];
+    const prods = this.state.dbProducts || [];
+    return prods.map(p => {
+      const catNombre = (p.categoria && p.categoria.nombre) || 'Sin categoría';
+      const stock = Number(p.stock_actual) || 0;
+      const badge = stock > 0 ? 'Stock' : null;
+      const attr = [p.unidad_medida, p.sku].filter(Boolean).join(' · ');
+      const img = p.imagen_url || 'assets/prod/llave.png';
+      return {
+        id: String(p.id),
+        name: p.nombre || '',
+        cat: catNombre,
+        attr,
+        price: Number(p.precio_venta) || 0,
+        badge,
+        img,
+        desc: p.descripcion || ''
+      };
+    });
+  }
+
+  // Cargar productos + categorias del ERP. Se llama desde componentDidMount.
+  async cargarDatos() {
+    try {
+      const [pr, cr] = await Promise.all([
+        fetch('/api/sitio/productos?limit=500').then(r => r.json()),
+        fetch('/api/sitio/categorias').then(r => r.json())
+      ]);
+      this.setState({
+        dbProducts: Array.isArray(pr.productos) ? pr.productos : [],
+        dbCategorias: Array.isArray(cr.categorias) ? cr.categorias : [],
+        loading: false,
+        loadError: null
+      });
+    } catch (e) {
+      this.setState({ loading: false, loadError: String(e && e.message ? e.message : e) });
+    }
   }
 
   openDetail(id) { this.setState({ detail: id }); }
@@ -223,13 +256,16 @@ class Component extends DCLogic {
       if (st.catMenuOpen && !e.target.closest('[data-catdd]')) this.setState({ catMenuOpen: false });
     };
     document.addEventListener('click', this._onDoc);
+    // Cargar productos + categorias reales del ERP (no bloquea render inicial)
+    this.cargarDatos();
     try {
       const raw = new URLSearchParams(window.location.search).get('cat');
       if (raw) {
-        const valid = ['Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Adhesivos', 'Ofertas'];
+        // El filtro por query string ?cat= se valida contra las categorias dinamicas
+        // cuando estas se cargan. Por ahora seteamos el filtro y catalog() lo respeta.
         const map = { 'Adhesivos y selladores': 'Adhesivos' };
         const v = map[raw] || raw;
-        if (valid.includes(v)) this.setState({ filter: v });
+        this.setState({ filter: v });
       }
     } catch (e) {}
   }
@@ -286,7 +322,12 @@ class Component extends DCLogic {
       (fo ? '1' : '0') + ';transform:scale(' + (fo ? '1' : '.94') + ');pointer-events:' + (fo ? 'auto' : 'none') + ';';
 
     // Dropdown de Categorías en el header (filtra el catálogo por rubro)
-    const rubros = ['Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Adhesivos'];
+    // Rubros dinamicos desde /api/sitio/categorias. Si todavia no cargaron,
+    // se calcula a partir de las categorias presentes en los productos cargados.
+    const dbCats = this.state.dbCategorias || [];
+    const rubros = dbCats.length
+      ? dbCats.map(c => c.nombre)
+      : Array.from(new Set(this.catalog().map(p => p.cat))).sort();
     const rubroIcons = {
       'Herramientas': 'M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94z',
       'Electricidad': 'M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z',
@@ -294,10 +335,12 @@ class Component extends DCLogic {
       'Pinturas': 'M3 4.5h13v5H3z M16 7h4V5 M10 9.5v2.2a1 1 0 0 1-1 1 1 1 0 0 0-1 1V20',
       'Adhesivos': 'M9 4h6v3H9z M10 7h4v12a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1z M11 4V2.4h2V4 M10.5 11h3'
     };
+    // Icono default para categorias que no esten en el mapa hardcodeado (caja generica)
+    const iconDefault = 'M3 7l9-4 9 4-9 4-9-4z M3 7v10l9 4 9-4V7 M12 11v10';
     const cq = this.norm(st.catSearch).trim();
     const catMenuItems = rubros
       .filter(r => !cq || this.norm(r).includes(cq))
-      .map(r => ({ name: r, iconPath: rubroIcons[r], count: this.catalog().filter(p => p.cat === r).length + '', go: () => this.pickCat(r) }));
+      .map(r => ({ name: r, iconPath: rubroIcons[r] || iconDefault, count: this.catalog().filter(p => p.cat === r).length + '', go: () => this.pickCat(r) }));
     const catMenuEmpty = catMenuItems.length === 0;
     const cmo = st.catMenuOpen;
     const catCaretStyle = 'transition:transform .25s ease;transform:rotate(' + (cmo ? '180deg' : '0deg') + ');';

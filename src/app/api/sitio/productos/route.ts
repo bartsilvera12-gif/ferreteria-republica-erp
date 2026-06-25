@@ -3,9 +3,23 @@ import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_LIMIT = 24;
-const MAX_LIMIT = 100;
+const DEFAULT_LIMIT = 100;
+const MAX_LIMIT = 500;
 
+/**
+ * GET /api/sitio/productos
+ *
+ * Lista productos vendibles del schema ferreteriarepublica. Pensado para
+ * consumirse desde el sitio publico (mismo dominio, sin auth).
+ *
+ * Query params (todos opcionales):
+ *  - categoria=<uuid>  Filtra por categoria_principal_id
+ *  - q=<text>          Busqueda case-insensitive en nombre
+ *  - limit, offset     Paginacion
+ *
+ * Cada producto incluye `categoria` con { id, nombre } via embed PostgREST
+ * usando la FK productos.categoria_principal_id -> categorias_productos.id.
+ */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
@@ -26,7 +40,9 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("productos")
     .select(
-      "id, nombre, sku, precio_venta, imagen_url, categoria_principal_id, descripcion, unidad_medida, stock_actual",
+      `id, nombre, sku, precio_venta, imagen_url, descripcion,
+       unidad_medida, stock_actual, categoria_principal_id,
+       categoria:categoria_principal_id ( id, nombre )`,
       { count: "exact" }
     )
     .eq("es_vendible", true)
@@ -58,7 +74,7 @@ export async function GET(request: NextRequest) {
     },
     {
       headers: {
-        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=60",
+        "Cache-Control": "public, s-maxage=120, stale-while-revalidate=60",
       },
     }
   );
