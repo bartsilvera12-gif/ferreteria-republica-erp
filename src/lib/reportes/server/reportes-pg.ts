@@ -1,5 +1,5 @@
 /**
- * Agregados SQL server-side para el módulo Reportes (schema reservacaacupe).
+ * Agregados SQL server-side para el módulo Reportes (schema ferreteriarepublica).
  * Fase 1: Estado de cuenta + Proveedores. Solo lectura sobre
  * ventas / compras / gastos / proveedores. Mismo patrón de pool que compras-pg.
  *

@@ -1,4 +1,4 @@
-// Tipos de los reportes operativos (server-side, schema reservacaacupe).
+// Tipos de los reportes operativos (server-side, schema ferreteriarepublica).
 // Fase 1: Estado de cuenta + Proveedores. Fase 2: Compras.
 // (Ventas/Conciliación: pendientes.)
 

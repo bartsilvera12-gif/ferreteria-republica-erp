@@ -4,17 +4,19 @@
  * (evita duplicar el markup del encabezado en cada documento).
  *
  * SOLO presentación: no toca datos de negocio. Los datos comerciales son fijos
- * de la empresa (Reserva Ecológica Caacupé S.A.).
+ * de la empresa (Ferretería República).
+ *
+ * TODO: confirmar datos comerciales reales (razón social, actividad SIFEN,
+ * teléfono y dirección) con el equipo. Los valores actuales son placeholders.
  */
 
 export const EMPRESA_DOC = {
-  nombre: "Reserva Ecológica Caacupé S.A.",
+  nombre: "Ferretería República",
   actividad: [
-    "Comercio al por menor de otros productos en comercios no especializados",
-    "Venta de plantas, bancos, jardinería, otros",
+    "Comercio al por menor de artículos de ferretería, materiales de construcción y herramientas",
   ],
-  telefono: "(0971) 861 676",
-  direccion: ["200 mts. en Sur Club Costa Ñu", "Ruta Pyca - Caacupé", "Cordillera - Paraguay"],
+  telefono: "",
+  direccion: ["Paraguay"],
   /** Logo del cliente (alta calidad, sin fondo). Servido desde /public. */
   logoUrl: "/brand/ferreteriarepublica-doc-logo.png",
 };

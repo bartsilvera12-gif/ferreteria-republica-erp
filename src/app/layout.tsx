@@ -17,8 +17,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Reserva Ecológica Caacupé",
-  description: "Sistema de gestión Zentra — Reserva Ecológica Caacupé",
+  title: "Ferretería República",
+  description: "Sistema de gestión Zentra — Ferretería República",
 };
 
 export const viewport: Viewport = {
