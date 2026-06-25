@@ -88,34 +88,24 @@ function adminEmpresasMatchesQuery(queryRaw: string): boolean {
 
 const MENU_STRUCTURE: MenuItem[] = [
   { key: "dashboard", slug: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
-  {
-    key: "conversaciones",
-    slug: "conversaciones",
-    label: "Conversaciones",
-    href: "/dashboard/conversaciones",
-    icon: MessageCircle,
-  },
-  {
-    key: "historial-omnicanal",
-    slug: "historial-omnicanal",
-    label: "Historial omnicanal",
-    href: "/dashboard/historial-omnicanal",
-    icon: History,
-  },
-  {
-    key: "conversaciones-finalizadas",
-    slug: "conversaciones-finalizadas",
-    label: "Finalizadas",
-    href: "/dashboard/conversaciones-finalizadas",
-    icon: ListChecks,
-  },
-  {
-    key: "monitoreo",
-    slug: "monitoreo",
-    label: "Monitoreo",
-    href: "/dashboard/monitoreo",
-    icon: Activity,
-  },
+  // Modulo omnicanal/WhatsApp ocultado por ahora (codigo conservado por si se reactiva):
+  // - Conversaciones, Historial omnicanal, Finalizadas, Monitoreo
+  // {
+  //   key: "conversaciones", slug: "conversaciones", label: "Conversaciones",
+  //   href: "/dashboard/conversaciones", icon: MessageCircle,
+  // },
+  // {
+  //   key: "historial-omnicanal", slug: "historial-omnicanal", label: "Historial omnicanal",
+  //   href: "/dashboard/historial-omnicanal", icon: History,
+  // },
+  // {
+  //   key: "conversaciones-finalizadas", slug: "conversaciones-finalizadas", label: "Finalizadas",
+  //   href: "/dashboard/conversaciones-finalizadas", icon: ListChecks,
+  // },
+  // {
+  //   key: "monitoreo", slug: "monitoreo", label: "Monitoreo",
+  //   href: "/dashboard/monitoreo", icon: Activity,
+  // },
   { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart },
   { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
   // Items gastro/legacy ocultados para ferreteria (codigo conservado por si se reactivan):
@@ -148,14 +138,12 @@ const MENU_STRUCTURE: MenuItem[] = [
   { key: "gastos", slug: "gastos", label: "Gastos", href: "/gastos", icon: Receipt },
   { key: "reportes", slug: "reportes", label: "Reportes", href: "/reportes", icon: BarChart3 },
   // Pagos oculto en instancia En lo de Mari (no usa este módulo).
-  { key: "comisiones", slug: "comisiones", label: "Comisiones", href: "/comisiones", icon: Percent },
-  {
-    key: "notas_credito",
-    slug: "notas_credito",
-    label: "Notas de crédito",
-    href: "/notas-credito",
-    icon: ScrollText,
-  },
+  // Comisiones y Notas de credito ocultos por ahora:
+  // { key: "comisiones", slug: "comisiones", label: "Comisiones", href: "/comisiones", icon: Percent },
+  // {
+  //   key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
+  //   href: "/notas-credito", icon: ScrollText,
+  // },
   { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
   {
     key: "configuracion",
@@ -174,16 +162,14 @@ const MENU_STRUCTURE: MenuItem[] = [
   // - Marketing Legacy: reemplazado por Marketing Ops.
   // { key: "planes", slug: "planes", label: "Planes", href: "/planes", icon: FileText },
   // { key: "gestion-clientes", slug: "gestion-clientes", label: "Gestión Clientes", href: "/gestion-clientes", icon: Users },
-  { key: "crm", slug: "crm", label: "CRM Funnel", href: "/crm", icon: Sparkles },
+  // CRM, Marketing y Campanas ocultos por ahora:
+  // { key: "crm", slug: "crm", label: "CRM Funnel", href: "/crm", icon: Sparkles },
   // { key: "marketing", slug: "marketing", label: "Marketing Legacy", href: "/marketing", icon: Megaphone },
-  { key: "marketing_ops", slug: "marketing_ops", label: "Marketing Ops", href: "/dashboard/marketing-ops", icon: Megaphone },
-  {
-    key: "campanas",
-    slug: "campanas",
-    label: "Campañas",
-    href: "/dashboard/campanas",
-    icon: SendHorizontal,
-  },
+  // { key: "marketing_ops", slug: "marketing_ops", label: "Marketing Ops", href: "/dashboard/marketing-ops", icon: Megaphone },
+  // {
+  //   key: "campanas", slug: "campanas", label: "Campañas",
+  //   href: "/dashboard/campanas", icon: SendHorizontal,
+  // },
   // Sorteos ocultado: modulo especifico, no aplica a la ferreteria por ahora.
   // {
   //   key: "sorteos", slug: "sorteos", label: "Sorteos", href: "/sorteos", icon: Ticket,
