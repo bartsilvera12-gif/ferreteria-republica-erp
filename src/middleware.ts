@@ -20,11 +20,7 @@ function isSitioHost(host: string | null): boolean {
  * El sitio puede hacer fetch a /api/sitio/* desde su mismo dominio sin CORS.
  */
 function isPassthroughPath(pathname: string): boolean {
-  return (
-    pathname.startsWith("/api/") ||
-    pathname.startsWith("/_next/") ||
-    pathname === "/favicon.ico"
-  );
+  return pathname.startsWith("/api/") || pathname.startsWith("/_next/");
 }
 
 /**
@@ -49,6 +45,8 @@ export async function middleware(request: NextRequest) {
       url.pathname = "/sitio/index.html";
     } else if (pathname === "/catalogo" || pathname === "/catalogo/") {
       url.pathname = "/sitio/catalogo.html";
+    } else if (pathname === "/favicon.ico") {
+      url.pathname = "/sitio/assets/republica-icon.png";
     } else if (!pathname.startsWith("/sitio/")) {
       url.pathname = `/sitio${pathname}`;
     }
@@ -101,5 +99,5 @@ export async function middleware(request: NextRequest) {
  * para assets estaticos dentro del middleware (ver arriba) para no perder perf.
  */
 export const config = {
-  matcher: ["/((?!api/webhooks|_next/static|_next/image|favicon.ico).*)"],
+  matcher: ["/((?!api/webhooks|_next/static|_next/image).*)"],
 };
