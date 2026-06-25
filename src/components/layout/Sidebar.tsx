@@ -118,15 +118,13 @@ const MENU_STRUCTURE: MenuItem[] = [
   },
   { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart },
   { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
-  {
-    key: "proyectos",
-    slug: "proyectos",
-    label: "Pedidos",
-    href: "/dashboard/proyectos",
-    icon: Utensils,
-  },
-  // Recetas ocultado: ERP de ferretería solo opera con productos de reventa.
-  // El modulo sigue existiendo en codigo (/dashboard/recetas) por si se reactiva.
+  // Items gastro/legacy ocultados para ferreteria (codigo conservado por si se reactivan):
+  // - Pedidos (proyectos): kanban de cocina, no aplica.
+  // - Recetas: combos/insumos, no aplica.
+  // {
+  //   key: "proyectos", slug: "proyectos", label: "Pedidos",
+  //   href: "/dashboard/proyectos", icon: Utensils,
+  // },
   // { key: "recetas", slug: "recetas", label: "Recetas", href: "/dashboard/recetas", icon: ChefHat },
   { key: "inventario", slug: "inventario", label: "Inventario", href: "/inventario", icon: Package, children: [
     { label: "Productos", href: "/inventario" },
@@ -170,10 +168,14 @@ const MENU_STRUCTURE: MenuItem[] = [
       { label: "Equipos y supervisión", href: "/configuracion/omnicanal-equipos" },
     ],
   },
-  { key: "planes", slug: "planes", label: "Planes", href: "/planes", icon: FileText },
-  { key: "gestion-clientes", slug: "gestion-clientes", label: "Gestión Clientes", href: "/gestion-clientes", icon: Users },
+  // Items ocultos en ferreteria (no aplican / duplicados):
+  // - Planes: suscripciones, modelo SaaS.
+  // - Gestion Clientes: duplicado de Clientes con vista distinta.
+  // - Marketing Legacy: reemplazado por Marketing Ops.
+  // { key: "planes", slug: "planes", label: "Planes", href: "/planes", icon: FileText },
+  // { key: "gestion-clientes", slug: "gestion-clientes", label: "Gestión Clientes", href: "/gestion-clientes", icon: Users },
   { key: "crm", slug: "crm", label: "CRM Funnel", href: "/crm", icon: Sparkles },
-  { key: "marketing", slug: "marketing", label: "Marketing Legacy", href: "/marketing", icon: Megaphone },
+  // { key: "marketing", slug: "marketing", label: "Marketing Legacy", href: "/marketing", icon: Megaphone },
   { key: "marketing_ops", slug: "marketing_ops", label: "Marketing Ops", href: "/dashboard/marketing-ops", icon: Megaphone },
   {
     key: "campanas",
@@ -182,14 +184,11 @@ const MENU_STRUCTURE: MenuItem[] = [
     href: "/dashboard/campanas",
     icon: SendHorizontal,
   },
-  {
-    key: "sorteos",
-    slug: "sorteos",
-    label: "Sorteos",
-    href: "/sorteos",
-    icon: Ticket,
-    children: [{ label: "Tickets / Comprobantes", href: "/sorteos/tickets", exactMatch: true }],
-  },
+  // Sorteos ocultado: modulo especifico, no aplica a la ferreteria por ahora.
+  // {
+  //   key: "sorteos", slug: "sorteos", label: "Sorteos", href: "/sorteos", icon: Ticket,
+  //   children: [{ label: "Tickets / Comprobantes", href: "/sorteos/tickets", exactMatch: true }],
+  // },
 ];
 
 /**

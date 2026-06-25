@@ -3,6 +3,9 @@ import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 
 export const dynamic = "force-dynamic";
 
+const SITIO_EMPRESA_ID =
+  process.env.SITIO_EMPRESA_ID?.trim() || "75f4194a-a24a-4e9b-830e-4506f2d9b2a6";
+
 /**
  * GET /api/sitio/categorias
  *
@@ -21,6 +24,7 @@ export async function GET() {
       `id, nombre, codigo, descripcion, parent_id,
        productos:productos!categoria_principal_id ( id )`
     )
+    .eq("empresa_id", SITIO_EMPRESA_ID)
     .eq("activo", true)
     .order("nombre", { ascending: true });
 

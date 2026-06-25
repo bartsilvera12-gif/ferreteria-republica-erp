@@ -7,6 +7,14 @@ const DEFAULT_LIMIT = 100;
 const MAX_LIMIT = 500;
 
 /**
+ * Empresa que provee los productos del sitio publico.
+ * Default: Ferreteria Republica (creada al setup). Override via env por si en
+ * el futuro se cambia.
+ */
+const SITIO_EMPRESA_ID =
+  process.env.SITIO_EMPRESA_ID?.trim() || "75f4194a-a24a-4e9b-830e-4506f2d9b2a6";
+
+/**
  * GET /api/sitio/productos
  *
  * Lista productos vendibles del schema ferreteriarepublica. Pensado para
@@ -45,6 +53,7 @@ export async function GET(request: NextRequest) {
        categoria:categoria_principal_id ( id, nombre )`,
       { count: "exact" }
     )
+    .eq("empresa_id", SITIO_EMPRESA_ID)
     .eq("es_vendible", true)
     .order("nombre", { ascending: true })
     .range(offset, offset + limit - 1);
