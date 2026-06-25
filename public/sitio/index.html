@@ -866,12 +866,33 @@ class Component extends DCLogic {
     activeFilter: 'Todos', cart: {}, qtys: {}, search: '', note: false, detail: null, catMenuOpen: false, catSearch: '',
     toast: false, toastName: '',
     view: 'home', catalogFilter: 'Todos', catalogSearch: '',
-    searchDrop: false, filtersOpen: false, mobileCatOpen: false
+    searchDrop: false, filtersOpen: false, mobileCatOpen: false,
+    // Datos cargados desde /api/sitio/productos y /api/sitio/categorias
+    dbProducts: [], dbCategorias: [], loading: true, loadError: null
   };
+
+  // Carga productos + categorias del ERP. Se llama en componentDidMount.
+  async cargarDatos() {
+    try {
+      const [pr, cr] = await Promise.all([
+        fetch('/api/sitio/productos?limit=500').then(r => r.json()),
+        fetch('/api/sitio/categorias').then(r => r.json())
+      ]);
+      this.setState({
+        dbProducts: Array.isArray(pr.productos) ? pr.productos : [],
+        dbCategorias: Array.isArray(cr.categorias) ? cr.categorias : [],
+        loading: false, loadError: null
+      });
+    } catch (e) {
+      this.setState({ loading: false, loadError: String(e && e.message ? e.message : e) });
+    }
+  }
 
   get wa() { return (this.props.numeroWhatsapp || '595981000000').replace(/[^0-9]/g, ''); }
 
   componentDidMount() {
+    // Disparar carga de productos + categorias del ERP (no bloquea render).
+    this.cargarDatos();
     this._onScroll = () => {
       const y = window.scrollY;
       const s = y > 36;
@@ -1154,56 +1175,28 @@ class Component extends DCLogic {
     if (ae) ae.textContent = this.fmt(prod.price * this._detailQty);
   }
 
+  // Devuelve productos en el shape esperado por el rendering:
+  //   { id, name, cat, attr, price, badge, img, desc }
+  // Mapea desde el shape de /api/sitio/productos cargado en state.dbProducts.
   catalog() {
-    return [
-      // Herramientas
-      { id: 'taladro',      name: 'Taladro percutor',        cat: 'Herramientas',          attr: '650W · mandril 13mm',       price: 485000,            badge: 'Más vendido', img: 'taladro',      desc: 'Taladro percutor de 650W con mandril de 13mm, ideal para perforar concreto, madera y metal. Velocidad variable y empuñadura ergonómica.' },
-      { id: 'destor',       name: 'Set destornilladores',    cat: 'Herramientas',          attr: '6 piezas · punta imantada', price: 89000,             badge: 'Nuevo',        img: 'destornilladores', desc: 'Set de 6 destornilladores con puntas imantadas (Phillips y planos), mango antideslizante y acero cromo-vanadio.' },
-      { id: 'llave',        name: 'Llave francesa',          cat: 'Herramientas',          attr: '10" ajustable',             price: 62000,             badge: 'Stock',        img: 'llave',        desc: 'Llave francesa ajustable de 10 pulgadas en acero forjado, mordaza de apertura amplia y graduación precisa.' },
-      { id: 'martillo',     name: 'Martillo de uña',         cat: 'Herramientas',          attr: '500g · mango fibra',        price: 48000,             badge: 'Stock',        img: 'martillo',     desc: 'Martillo de uña profesional de 500g con mango de fibra de vidrio antideslizante. Ideal para clavado y extracción.' },
-      { id: 'nivel',        name: 'Nivel de burbuja',        cat: 'Herramientas',          attr: '60cm · 3 burbujas',         price: 35000,             badge: 'Stock',        img: 'nivel',        desc: 'Nivel de burbuja de 60cm con 3 ampollas para verificación horizontal, vertical y 45°. Cuerpo de aluminio.' },
-      { id: 'amoladora',    name: 'Amoladora angular',       cat: 'Herramientas',          attr: '720W · disco 115mm',        price: 245000,            badge: 'Más vendido',  img: 'amoladora',   desc: 'Amoladora angular de 720W con disco de 115mm. Interruptor de seguridad y protector regulable. Para corte y desbaste.' },
-      // Electricidad
-      { id: 'cinta',        name: 'Cinta aisladora',         cat: 'Electricidad',          attr: '19mm · 20m',                price: 8500,  old: 12000, badge: 'Oferta',       img: 'cinta',        desc: 'Cinta aisladora de PVC 19mm x 20m, alta adherencia y aislación eléctrica. Resistente a humedad y temperatura.' },
-      { id: 'cable',        name: 'Cable eléctrico',         cat: 'Electricidad',          attr: '2.5mm² · rollo 100m',       price: 145000,            badge: 'Más vendido',  img: 'cable',        desc: 'Cable eléctrico unipolar de 2.5mm², rollo de 100m. Conductor de cobre, aislación antiflama.' },
-      { id: 'tomacorriente',name: 'Tomacorriente doble',     cat: 'Electricidad',          attr: '10A · con toma tierra',     price: 12500,             badge: 'Stock',        img: 'tomacorriente',desc: 'Tomacorriente doble polarizado de 10A con toma a tierra de seguridad. Compatible con cajas estándar.' },
-      { id: 'lampara',      name: 'Lámpara LED 9W',          cat: 'Electricidad',          attr: 'E27 · luz día · 800lm',     price: 8900,  old: 12000, badge: 'Oferta',       img: 'lampara',      desc: 'Lámpara LED de 9W equivalente a 60W. Luz blanca 6500K, 800 lúmenes. Vida útil 25.000 horas.' },
-      { id: 'tablero',      name: 'Tablero eléctrico',       cat: 'Electricidad',          attr: '4 circuitos · embutir',     price: 89000,             badge: 'Stock',        img: 'tablero',      desc: 'Tablero eléctrico para embutir de 4 circuitos. Incluye disyuntor principal. Tapa plástica con llave.' },
-      // Plomería
-      { id: 'pvc',          name: 'Caño PVC',                cat: 'Plomería',              attr: '110mm · 3m',                price: 38000,             badge: 'Stock',        img: 'pvc',          desc: 'Caño de PVC de 110mm x 3m para desagüe. Unión por espiga, apto para redes cloacales y pluviales.' },
-      { id: 'canilla',      name: 'Canilla de pileta',       cat: 'Plomería',              attr: 'Acero inox · 1/2"',         price: 95000,             badge: 'Stock',        img: 'canilla',      desc: 'Canilla de pileta en acero inoxidable con manija larga y conexión de 1/2". Fácil instalación y cierre hermético.' },
-      { id: 'sifon',        name: 'Sifón botella',           cat: 'Plomería',              attr: 'PVC · salida 1.1/4"',       price: 18500,             badge: 'Stock',        img: 'sifon',        desc: 'Sifón botella en PVC de alta resistencia con salida de 1.1/4". Tapón de limpieza incluido.' },
-      { id: 'llave_paso',   name: 'Llave de paso esfera',    cat: 'Plomería',              attr: '1/2" · bronce',             price: 22000,             badge: 'Nuevo',        img: 'llave_paso',   desc: 'Llave de paso esfera de bronce de 1/2". Cierre total de caudal, diseño compacto.' },
-      // Pinturas
-      { id: 'latex',        name: 'Pintura látex interior',  cat: 'Pinturas',              attr: 'Blanco mate · 20L',         price: 215000,            badge: 'Stock',        img: 'latex',        desc: 'Pintura látex interior blanco mate. Lavable, secado rápido y excelente cubrimiento. Balde de 20 litros.' },
-      { id: 'esmalte',      name: 'Esmalte sintético',       cat: 'Pinturas',              attr: 'Blanco brillante · 4L',     price: 145000, old: 178000, badge: 'Oferta',     img: 'esmalte',      desc: 'Esmalte sintético blanco brillante de 4 litros para madera y metal. Secado rápido y acabado espejo.' },
-      { id: 'rodillo',      name: 'Kit rodillo pintura',     cat: 'Pinturas',              attr: 'Lana 23cm + bandeja',       price: 32000,             badge: 'Stock',        img: 'rodillo',      desc: 'Kit de pintura con rodillo de lana de 23cm y bandeja plástica. Aplicación pareja y rápida.' },
-      { id: 'sellador',     name: 'Sellador base agua',      cat: 'Pinturas',              attr: '4L · para interiores',      price: 98000,             badge: 'Stock',        img: 'sellador',     desc: 'Sellador base agua de 4 litros para preparación de superficies interiores. Mejora la adherencia.' },
-      // Construcción
-      { id: 'cemento',      name: 'Cemento Portland',        cat: 'Construcción',          attr: 'Bolsa 50kg',                price: 48000,             badge: 'Stock',        img: 'cemento',      desc: 'Cemento Portland gris en bolsa de 50kg. Apto para estructuras, contrapisos y revoques. Alta resistencia a la compresión.' },
-      { id: 'ladrillo',     name: 'Ladrillo hueco',          cat: 'Construcción',          attr: '8x18x33cm · cerámico',      price: 1200,              badge: 'Stock',        img: 'ladrillo',     desc: 'Ladrillo hueco cerámico de 8x18x33cm de alta resistencia para muros interiores y exteriores.' },
-      { id: 'varilla',      name: 'Varilla hierro c/d',      cat: 'Construcción',          attr: '6mm · 12 metros',           price: 68000,             badge: 'Stock',        img: 'varilla',      desc: 'Varilla de hierro corrugado de 6mm, barra de 12 metros. Para refuerzo de estructuras de hormigón.' },
-      // Jardinería
-      { id: 'manguera',     name: 'Manguera de jardín',      cat: 'Jardinería',            attr: '25 metros · 3/4"',          price: 125000,            badge: 'Más vendido',  img: 'manguera',     desc: 'Manguera de jardín de 25 metros, diámetro 3/4". Flexible, resistente a UV. Incluye pistola de riego.' },
-      { id: 'tijera_jar',   name: 'Tijera podadora',         cat: 'Jardinería',            attr: 'Acero inox · byPass',       price: 42000,             badge: 'Stock',        img: 'tijera_jar',   desc: 'Tijera podadora tipo bypass en acero inoxidable. Mango ergonómico, corte limpio para ramas hasta 2cm.' },
-      { id: 'pala',         name: 'Pala punta redonda',      cat: 'Jardinería',            attr: 'Mango madera · 120cm',      price: 78000,             badge: 'Stock',        img: 'pala',         desc: 'Pala de punta redonda con mango de madera de 120cm. Ideal para cavar y mover tierra.' },
-      // Seguridad
-      { id: 'casco',        name: 'Casco de obra',           cat: 'Seguridad',             attr: 'HDPE · clase A',            price: 28000,             badge: 'Stock',        img: 'casco',        desc: 'Casco de seguridad clase A en HDPE. Ajuste con ruleta, ranuras para viseras y orejeras.' },
-      { id: 'guante',       name: 'Guantes de trabajo',      cat: 'Seguridad',             attr: 'Vaqueta · talla L',         price: 22500,             badge: 'Stock',        img: 'guante',       desc: 'Guantes de trabajo en cuero vaqueta reforzado. Protección contra abrasión y cortes.' },
-      { id: 'lente',        name: 'Lentes de seguridad',     cat: 'Seguridad',             attr: 'Antirayado · claros',       price: 14000,             badge: 'Nuevo',        img: 'lente',        desc: 'Lentes de seguridad antirayado y antiempañante. Montura liviana, protección UV.' },
-      // Limpieza
-      { id: 'escoba',       name: 'Escoba plástica',         cat: 'Limpieza',              attr: '40cm · mango 120cm',        price: 18000,             badge: 'Stock',        img: 'escoba',       desc: 'Escoba plástica de 40cm con mango de aluminio de 120cm. Cerdas resistentes para todo tipo de pisos.' },
-      { id: 'mopa',         name: 'Mopa de microfibra',      cat: 'Limpieza',              attr: '360° · cabezal lavable',    price: 35000,             badge: 'Stock',        img: 'mopa',         desc: 'Mopa de microfibra con rotación de 360°. Cabezal desmontable y lavable para todo tipo de pisos.' },
-      { id: 'lavandina',    name: 'Lavandina concentrada',   cat: 'Limpieza',              attr: '5 litros · 55g/L',          price: 16500, old: 22000, badge: 'Oferta',       img: 'lavandina',    desc: 'Lavandina concentrada de 5 litros, 55g/L de cloro activo. Blanquea, desinfecta y elimina bacterias.' },
-      // Tornillería
-      { id: 'tornillo',     name: 'Tornillos para madera',   cat: 'Tornillería',           attr: 'Caja 200u · 4x40mm',        price: 12000,             badge: 'Stock',        img: 'tornillo',     desc: 'Caja de 200 tornillos para madera de 4x40mm cabeza plana Phillips. Acero zincado, autopunzante.' },
-      { id: 'tarugo',       name: 'Tarugos de nylon',        cat: 'Tornillería',           attr: 'Bolsa 100u · 8mm',          price: 8500,              badge: 'Stock',        img: 'tarugo',       desc: 'Bolsa de 100 tarugos de nylon de 8mm. Expansión uniforme, alta resistencia en hormigón y mampostería.' },
-      { id: 'tuerca',       name: 'Kit tuercas y bulones',   cat: 'Tornillería',           attr: '120 piezas · M6/M8',        price: 28000,             badge: 'Nuevo',        img: 'tuerca',       desc: 'Kit de 120 piezas con tuercas y bulones hexagonales M6 y M8 en acero galvanizado. Caja clasificadora incluida.' },
-      // Adhesivos y selladores
-      { id: 'silicona',     name: 'Silicona selladora',      cat: 'Adhesivos y selladores',attr: 'Transparente · 280ml',      price: 18000, old: 25000, badge: 'Oferta',       img: 'silicona',     desc: 'Silicona selladora transparente de 280ml, impermeable y flexible. Adherencia en vidrio, cerámica, metal y madera.' },
-      { id: 'pegamento',    name: 'Pegamento epoxi',         cat: 'Adhesivos y selladores',attr: '500g · contacto',           price: 35000,             badge: 'Stock',        img: 'pegamento',    desc: 'Pegamento epoxi de contacto de 500g. Alta resistencia en metales, cerámicos, madera y plásticos. Secado en 5 minutos.' },
-      { id: 'espuma',       name: 'Espuma poliuretano',      cat: 'Adhesivos y selladores',attr: '750ml · expansiva',         price: 42000,             badge: 'Stock',        img: 'espuma',       desc: 'Espuma expansiva de poliuretano de 750ml. Relleno, sellado y aislación en marcos, ventanas y cañerías.' },
-    ];
+    const prods = this.state.dbProducts || [];
+    return prods.map(p => {
+      const catNombre = (p.categoria && p.categoria.nombre) || 'Sin categoría';
+      const stock = Number(p.stock_actual) || 0;
+      const badge = stock > 0 ? 'Stock' : null;
+      const attr = [p.unidad_medida, p.sku].filter(Boolean).join(' · ');
+      const img = p.imagen_url || 'assets/prod/llave.png';
+      return {
+        id: String(p.id),
+        name: p.nombre || '',
+        cat: catNombre,
+        attr,
+        price: Number(p.precio_venta) || 0,
+        badge,
+        img,
+        desc: p.descripcion || ''
+      };
+    });
   }
 
   renderVals() {
@@ -1274,7 +1267,7 @@ class Component extends DCLogic {
         id: prod.id, name: prod.name, cat: prod.cat, attr: prod.attr,
         priceLabel: fmt(prod.price), hasOld: !!prod.old, oldLabel: prod.old ? fmt(prod.old) : '',
         badgeBg: b.bg, badgeFg: b.fg, badgeText: b.text, badge: prod.badge, qty, iconPath: this.iconPath(this.iconName(prod.id)),
-        img: prodPhotos[prod.img] || 'assets/prod/' + prod.img + '.png',
+        img: prod.img,
         consult: waBase('Hola! Quiero consultar por: ' + prod.name + ' (' + prod.attr + ').'),
         inc: () => this.setQty(prod.id, qty + 1),
         dec: () => this.setQty(prod.id, Math.max(1, qty - 1)),
@@ -1293,7 +1286,10 @@ class Component extends DCLogic {
     });
     const resultLabel = products.length + (products.length === 1 ? ' producto' : ' productos');
 
-    const filterDefs = ['Todos', 'Herramientas', 'Electricidad', 'Plomería', 'Pintura', 'Ofertas', 'Más vendidos'];
+    // Categorias dinamicas del ERP (this.state.dbCategorias).
+    const dbCats = this.state.dbCategorias || [];
+    const catNames = dbCats.map(c => c.nombre);
+    const filterDefs = ['Todos', ...catNames, 'Ofertas', 'Más vendidos'];
     const filters = filterDefs.map(label => {
       const active = st.activeFilter === label;
       const style = 'cursor:pointer;border:1.5px solid ' + (active ? '#E97932' : 'rgba(255,255,255,.22)') +
@@ -1301,34 +1297,19 @@ class Component extends DCLogic {
       return { label, style, onClick: () => this.setState({ activeFilter: label }) };
     });
 
-    const catDefs = [
-      ['Herramientas', 'Manuales y eléctricas para cada tarea.'],
-      ['Electricidad', 'Cables, llaves, tableros y conexiones.'],
-      ['Plomería', 'Caños, grifería y todo para el agua.'],
-      ['Pinturas', 'Látex, esmaltes, rodillos y accesorios.'],
-      ['Construcción', 'Materiales y áridos para tu obra.'],
-      ['Jardinería', 'Herramientas y cuidado de exteriores.'],
-      ['Seguridad', 'Protección personal y de obra.'],
-      ['Limpieza', 'Insumos y artículos de mantenimiento.'],
-      ['Tornillería', 'Tornillos, tarugos, anclajes y fijaciones.'],
-      ['Adhesivos y selladores', 'Siliconas, pegamentos y selladores.']
-    ];
-    const catIcons = ['wrench', 'bolt', 'pipe', 'roller', 'helmet', 'plant', 'shield', 'spray', 'screw', 'glue'];
-    const catTags = ['Taller', 'Instalación', 'Agua', 'Acabados', 'Obra', 'Exterior', 'Protección', 'Mantenimiento', 'Fijaciones', 'Sellado'];
-    const catSlugs = ['herramientas', 'electricidad', 'plomeria', 'pinturas', 'construccion', 'jardineria', 'seguridad', 'limpieza', 'tornilleria', 'adhesivos'];
-    const catPhotos = [
-      'https://images.unsplash.com/photo-1507126694149-a8685f99aa4f?auto=format&fit=crop&w=500&q=80', // herramientas
-      'https://images.unsplash.com/photo-1758101755915-462eddc23f57?auto=format&fit=crop&w=500&q=80', // electricidad
-      'https://images.unsplash.com/photo-1694827893591-af9b80361599?auto=format&fit=crop&w=500&q=80', // plomeria
-      'https://images.unsplash.com/photo-1520856990214-7a9e59dd5ff7?auto=format&fit=crop&w=500&q=80', // pinturas
-      'https://images.unsplash.com/photo-1653280662710-1cac52cde6d7?auto=format&fit=crop&w=500&q=80', // construccion
-      'https://images.unsplash.com/photo-1531873252757-8c22fa9e7a98?auto=format&fit=crop&w=500&q=80', // jardineria
-      'https://images.unsplash.com/photo-1705579612477-20866d78deeb?auto=format&fit=crop&w=500&q=80', // seguridad
-      'https://images.unsplash.com/photo-1550963295-019d8a8a61c5?auto=format&fit=crop&w=500&q=80', // limpieza
-      'https://images.unsplash.com/photo-1710129084868-9ff5127b7e6e?auto=format&fit=crop&w=500&q=80', // tornilleria
-      'https://images.unsplash.com/photo-1560755341-c5417203d21c?auto=format&fit=crop&w=500&q=80', // adhesivos
-    ];
-    const categories = catDefs.map(([name, desc], i) => ({ name, desc, tag: catTags[i], slotId: 'cat-img-' + catSlugs[i], img: catPhotos[i], iconPath: this.iconPath(catIcons[i]), tileBg: this.tileBg(i), go: () => this.openCatalog(name) }));
+    // Carrusel de categorias del home: solo nombre + visual placeholder.
+    const defaultIcons = ['wrench', 'bolt', 'pipe', 'roller', 'helmet', 'plant', 'shield', 'spray', 'screw', 'glue'];
+    const defaultPhoto = 'assets/header-bg.png';
+    const categories = dbCats.map((c, i) => ({
+      name: c.nombre,
+      desc: c.descripcion || '',
+      tag: '',
+      slotId: 'cat-img-' + (c.id || i),
+      img: defaultPhoto,
+      iconPath: this.iconPath(defaultIcons[i % defaultIcons.length]),
+      tileBg: this.tileBg(i),
+      go: () => this.openCatalog(c.nombre)
+    }));
 
     const cq = this.norm ? this.norm(st.catSearch) : st.catSearch.toLowerCase();
     const catMenuItems = categories.filter(c => !cq.trim() || this.normTxt(c.name).includes(cq.trim()));
@@ -1341,7 +1322,7 @@ class Component extends DCLogic {
     const offers = offerProds.map(p => ({
       name: p.name, cat: p.cat, attr: p.attr,
       pct: Math.round((1 - p.price / p.old) * 100),
-      img: prodPhotos[p.img] || ('assets/prod/' + p.img + '.png'),
+      img: p.img,
       priceLabel: fmt(p.price), oldLabel: fmt(p.old),
       open: () => this.openDetail(p.id),
       add: () => this.addToCart(p, 1)
@@ -1350,7 +1331,7 @@ class Component extends DCLogic {
     const cartItems = Object.keys(st.cart).map(id => {
       const c = st.cart[id];
       return {
-        id, name: c.name, attr: c.attr, qty: c.qty, lineLabel: fmt(c.price * c.qty), img: prodPhotos[c.img] || '', iconPath: this.iconPath(this.iconName(id)),
+        id, name: c.name, attr: c.attr, qty: c.qty, lineLabel: fmt(c.price * c.qty), img: c.img, iconPath: this.iconPath(this.iconName(id)),
         inc: () => this.cartInc(id, 1), dec: () => this.cartInc(id, -1), remove: () => this.cartRemove(id)
       };
     });
@@ -1392,7 +1373,7 @@ class Component extends DCLogic {
         priceLabel: fmt(dp.price), hasOld: !!dp.old, oldLabel: dp.old ? fmt(dp.old) : '',
         savePct: dp.old ? '-' + Math.round((1 - dp.price / dp.old) * 100) + '%' : '',
         lineTotal: fmt(dp.price * dq),
-        img: prodPhotos[dp.img] || 'assets/prod/' + dp.img + '.png', qty: dq, badgeText: db.text, badgeBg: db.bg, badgeFg: db.fg,
+        img: dp.img, qty: dq, badgeText: db.text, badgeBg: db.bg, badgeFg: db.fg,
         inc: () => this._ddQtyChange(dp, 1),
         dec: () => this._ddQtyChange(dp, -1),
         add: () => { const q = this._detailQty || 1; this.addToCart(dp, q); this._detailQty = null; this.setState({ detail: null }); },
@@ -1408,7 +1389,7 @@ class Component extends DCLogic {
     const searchQ = this.normTxt(st.search);
     const searchResults = searchQ.length >= 2
       ? all.filter(p => this.normTxt(p.name + ' ' + p.cat + ' ' + p.attr).includes(searchQ)).slice(0, 6).map(p => ({
-          name: p.name, cat: p.cat, priceLabel: fmt(p.price), img: prodPhotos[p.img] || '',
+          name: p.name, cat: p.cat, priceLabel: fmt(p.price), img: p.img,
           go: () => this.setState({ detail: p, search: '', searchDrop: false })
         }))
       : [];
@@ -1417,7 +1398,8 @@ class Component extends DCLogic {
 
     const catalogCf = st.catalogFilter;
     const catalogCs = this.normTxt(st.catalogSearch);
-    const catalogFilterDefs = ['Todos', 'Herramientas', 'Electricidad', 'Plomería', 'Pinturas', 'Construcción', 'Jardinería', 'Seguridad', 'Limpieza', 'Tornillería', 'Adhesivos y selladores', 'Ofertas'];
+    // Filtros del catalogo: dinamicos desde categorias del ERP.
+    const catalogFilterDefs = ['Todos', ...(this.state.dbCategorias || []).map(c => c.nombre), 'Ofertas'];
     const catalogFilters = catalogFilterDefs.map(label => ({
       label,
       style: 'cursor:pointer;border:1.5px solid ' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.22)') + ';background:' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.06)') + ';color:#fff;font-weight:600;font-size:13px;padding:7px 16px;border-radius:999px;white-space:nowrap;font-family:Montserrat;transition:all .2s;',

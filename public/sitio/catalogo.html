@@ -297,7 +297,7 @@ class Component extends DCLogic {
         id: p.id, name: p.name, cat: p.cat, attr: p.attr,
         priceLabel: fmt(p.price), hasOld: !!p.old, oldLabel: p.old ? fmt(p.old) : '',
         badgeBg: b.bg, badgeFg: b.fg, badgeText: b.text,
-        img: 'assets/prod/' + p.img + '.png',
+        img: p.img,
         open: () => this.openDetail(p.id)
       };
     });
@@ -355,7 +355,7 @@ class Component extends DCLogic {
         name: dp.name, cat: dp.cat, attr: dp.attr, desc: dp.desc,
         priceLabel: fmt(dp.price), hasOld: !!dp.old, oldLabel: dp.old ? fmt(dp.old) : '',
         savePct: dp.old ? '-' + Math.round((1 - dp.price / dp.old) * 100) + '%' : '',
-        img: 'assets/prod/' + dp.img + '.png', badgeText: db.text, badgeBg: db.bg, badgeFg: db.fg,
+        img: dp.img, badgeText: db.text, badgeBg: db.bg, badgeFg: db.fg,
         consult: waBase('Hola! Quiero consultar por: ' + dp.name + ' (' + dp.attr + ').')
       };
     }
