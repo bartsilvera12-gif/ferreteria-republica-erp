@@ -238,8 +238,9 @@ export default function InventarioPage() {
         </div>
       </div>
 
-      {/* Tabs gastronómicos (filtran por tipo de producto) */}
-      <div className="border-b border-gray-200">
+      {/* Tabs gastronomicos OCULTOS en ferreteria: solo opera con productos de reventa.
+          Codigo conservado por si se reactiva en otra instancia. */}
+      <div className="hidden border-b border-gray-200">
         <nav className="-mb-px flex gap-6 overflow-x-auto" aria-label="Tabs">
           {([
             { id: "reventa", label: "Reventa", subtitle: "Productos comprados y revendidos" },
