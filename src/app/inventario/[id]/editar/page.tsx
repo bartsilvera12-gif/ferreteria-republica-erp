@@ -743,6 +743,24 @@ export default function EditarProductoPage() {
               </p>
             </div>
 
+            {/* Control de stock — visible: define si el producto es inventariado */}
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <label className="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={controlaStock}
+                  onChange={(e) => setControlaStock(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                />
+                <span>
+                  <span className="font-medium">Controla stock / Producto inventariado</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Si está activo, no se podrá vender sin stock suficiente. Desactivá esto para servicios o productos no inventariados (ej. mano de obra, corte).
+                  </span>
+                </span>
+              </label>
+            </div>
+
             {/* Configuración gastronómica — oculta (no relevante en UX simplificada) */}
             <div className="hidden mt-5 pt-4 border-t border-gray-100">
               <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-3">
