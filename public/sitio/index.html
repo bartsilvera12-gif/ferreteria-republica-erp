@@ -1182,8 +1182,7 @@ class Component extends DCLogic {
     const prods = this.state.dbProducts || [];
     return prods.map(p => {
       const catNombre = (p.categoria && p.categoria.nombre) || 'Sin categoría';
-      const stock = Number(p.stock_actual) || 0;
-      const badge = stock > 0 ? 'Stock' : null;
+      const badge = 'Stock';
       const attr = [p.unidad_medida, p.sku].filter(Boolean).join(' · ');
       const img = p.imagen_url || 'assets/prod/llave.png';
       return {
@@ -1262,7 +1261,7 @@ class Component extends DCLogic {
 
     const all = this.catalog().map(prod => {
       const qty = st.qtys[prod.id] ?? 1;
-      const b = badgeMap[prod.badge];
+      const b = (badgeMap[prod.badge] || badgeMap['Stock']);
       return {
         id: prod.id, name: prod.name, cat: prod.cat, attr: prod.attr,
         priceLabel: fmt(prod.price), hasOld: !!prod.old, oldLabel: prod.old ? fmt(prod.old) : '',
@@ -1367,7 +1366,7 @@ class Component extends DCLogic {
     if (dp) {
       if (this._detailQty == null) this._detailQty = st.qtys[dp.id] || 1;
       const dq = this._detailQty;
-      const db = badgeMap[dp.badge];
+      const db = (badgeMap[dp.badge] || badgeMap['Stock']);
       detail = {
         name: dp.name, cat: dp.cat, attr: dp.attr, desc: dp.desc,
         priceLabel: fmt(dp.price), hasOld: !!dp.old, oldLabel: dp.old ? fmt(dp.old) : '',
