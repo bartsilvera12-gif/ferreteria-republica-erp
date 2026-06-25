@@ -6,7 +6,7 @@ import { NextResponse, type NextRequest } from "next/server";
  * Configurable via SITIO_HOST_REGEX. Default: ferreteriarepublica.com y subdominio www.
  */
 const SITIO_HOST_REGEX = new RegExp(
-  `^${process.env.SITIO_HOST_REGEX ?? "(www\\.)?ferreteriarepublica\\.com"}$`
+  `^${process.env.SITIO_HOST_REGEX ?? "(www\\.)?ferreteriarepublica\\.com\\.py"}$`
 );
 
 function isSitioHost(host: string | null): boolean {
