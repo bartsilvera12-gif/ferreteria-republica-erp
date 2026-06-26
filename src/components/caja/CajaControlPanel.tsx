@@ -23,6 +23,7 @@ import {
   AlertTriangle,
   Clock,
 } from "lucide-react";
+import MontoInput from "@/components/ui/MontoInput";
 import type {
   Caja,
   CajaResumen,
@@ -457,11 +458,10 @@ function ModalAbrir({
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Monto inicial (Gs.)
           </label>
-          <input
-            type="number"
-            min={0}
+          <MontoInput
             value={monto}
-            onChange={(e) => setMonto(e.target.value)}
+            onChange={(n) => setMonto(String(n))}
+            decimals={false}
             autoFocus
             className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm font-semibold tabular-nums focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none"
           />
@@ -576,11 +576,10 @@ function ModalCerrar({
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Efectivo contado (Gs.)
           </label>
-          <input
-            type="number"
-            min={0}
+          <MontoInput
             value={monto}
-            onChange={(e) => setMonto(e.target.value)}
+            onChange={(n) => setMonto(String(n))}
+            decimals={false}
             autoFocus
             className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm font-semibold tabular-nums focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none"
           />
@@ -753,10 +752,10 @@ function ModalMovimiento({
             <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
               Monto (Gs.)
             </label>
-            <input
-              type="number"
+            <MontoInput
               value={monto}
-              onChange={(e) => setMonto(e.target.value)}
+              onChange={(n) => setMonto(String(n))}
+              decimals={false}
               className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm font-semibold tabular-nums focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none"
             />
           </div>

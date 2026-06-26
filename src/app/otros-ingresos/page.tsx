@@ -29,6 +29,7 @@ import {
   Eye,
 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import MontoInput from "@/components/ui/MontoInput";
 
 type Ingreso = {
   id: string;
@@ -562,11 +563,10 @@ function CrearIngresoModal({
               <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
                 Monto (Gs.) *
               </label>
-              <input
-                type="number"
-                min={1}
+              <MontoInput
                 value={monto}
-                onChange={(e) => setMonto(e.target.value)}
+                onChange={(n) => setMonto(String(n))}
+                decimals={false}
                 className="w-full rounded-lg border-2 border-slate-200 px-3 py-2 text-sm font-semibold tabular-nums focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none"
               />
             </div>
