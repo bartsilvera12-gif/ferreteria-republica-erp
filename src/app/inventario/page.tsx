@@ -47,6 +47,31 @@ function margenColor(margen: number): string {
   return "text-red-600";
 }
 
+/**
+ * Devuelve un color consistente para una categoria basado en hash del nombre.
+ * Cada categoria distinta queda con su color propio, asi el ojo escanea
+ * rapido la columna y ve grupos de la misma cat. Paleta soft tipo Linear/Notion.
+ */
+const CATEGORY_PALETTE = [
+  { dot: "#0ea5e9", bg: "#f0f9ff" },  // sky
+  { dot: "#10b981", bg: "#ecfdf5" },  // emerald
+  { dot: "#f59e0b", bg: "#fffbeb" },  // amber
+  { dot: "#8b5cf6", bg: "#f5f3ff" },  // violet
+  { dot: "#ec4899", bg: "#fdf2f8" },  // pink
+  { dot: "#06b6d4", bg: "#ecfeff" },  // cyan
+  { dot: "#ef4444", bg: "#fef2f2" },  // red
+  { dot: "#14b8a6", bg: "#f0fdfa" },  // teal
+  { dot: "#a855f7", bg: "#faf5ff" },  // purple
+  { dot: "#f97316", bg: "#fff7ed" },  // orange
+  { dot: "#84cc16", bg: "#f7fee7" },  // lime
+  { dot: "#6366f1", bg: "#eef2ff" },  // indigo
+];
+function categoryColor(name: string): { dot: string; bg: string } {
+  let h = 0;
+  for (let i = 0; i < name.length; i++) h = (h * 31 + name.charCodeAt(i)) >>> 0;
+  return CATEGORY_PALETTE[h % CATEGORY_PALETTE.length];
+}
+
 interface CategoriaLite {
   id: string;
   nombre: string;
@@ -388,9 +413,24 @@ export default function InventarioPage() {
                         {catNombre === "—" ? (
                           <span className="text-slate-300">—</span>
                         ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-medium text-slate-600">
-                            {catNombre}
-                          </span>
+                          (() => {
+                            const c = categoryColor(catNombre);
+                            return (
+                              <span
+                                className="inline-flex max-w-full items-center gap-1.5 truncate whitespace-nowrap rounded-md border border-slate-200/70 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                                title={catNombre}
+                              >
+                                <span
+                                  className="h-1.5 w-1.5 shrink-0 rounded-full"
+                                  style={{
+                                    background: c.dot,
+                                    boxShadow: `0 0 0 3px ${c.bg}`,
+                                  }}
+                                />
+                                <span className="truncate">{catNombre}</span>
+                              </span>
+                            );
+                          })()
                         )}
                       </td>
                       <td className="px-3 py-3.5 text-right tabular-nums text-slate-700">
