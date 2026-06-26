@@ -36,6 +36,19 @@ const nextConfig: NextConfig = {
   // del mismo user (vuelve al dashboard, los chunks JS/CSS ya estan locales).
   async headers() {
     return [
+      // HSTS: declara que el dominio SIEMPRE debe ser HTTPS. El browser
+      // recuerda esto por 2 anos y nunca mas vuelve a probar HTTP -> elimina
+      // el 307 HTTP->HTTPS que creaba entradas falsas en el historial.
+      // includeSubDomains aplica a futuros subdominios.
+      {
+        source: "/:path*",
+        headers: [
+          {
+            key: "Strict-Transport-Security",
+            value: "max-age=63072000; includeSubDomains; preload",
+          },
+        ],
+      },
       {
         source: "/_next/static/(.*)",
         headers: [
