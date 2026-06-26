@@ -128,11 +128,25 @@ export default function ProductPickerModal({
     return String(Math.round(precioGs));
   }
 
-  /** Cambia el tipo de precio del producto seleccionado y ajusta el precio unitario. */
+  /**
+   * Cambia el tipo de precio del producto seleccionado y ajusta el precio
+   * unitario CONSIDERANDO la presentacion actual:
+   *
+   * - Si la presentacion tiene un precio_venta override fijo, el tipo no
+   *   modifica el precio (override sticky — misma convencion que en
+   *   handlePresentacionChange).
+   * - Sin override: precio = precio_tipo * cantidad_base.
+   */
   function handleTipoPrecio(tipo: "minorista" | "mayorista" | "distribuidor") {
     setTipoPrecio(tipo);
-    if (sel) setPrecio(precioEnMonedaStr(precioPorTipoPicker(sel, tipo)));
     setFeedback(null);
+    if (!sel) return;
+    if (presSel && presSel.precio_venta != null && presSel.precio_venta > 0) {
+      // Override sticky.
+      return;
+    }
+    const cantBase = presSel ? presSel.cantidad_base : 1;
+    setPrecio(precioEnMonedaStr(precioPorTipoPicker(sel, tipo) * cantBase));
   }
 
   useEffect(() => { if (open) { setQ(""); setError(null); setSel(null); setTimeout(() => inputRef.current?.focus(), 50); } }, [open]);
@@ -504,7 +518,17 @@ export default function ProductPickerModal({
                             {t === "minorista" ? "Minorista" : t === "mayorista" ? "Mayorista" : "Distribuidor"}
                           </span>
                           <span className={`block text-[10px] tabular-nums ${tipoPrecio === t ? "text-white/90" : "text-slate-400"}`}>
-                            {formatGs(precioPorTipoPicker(sel, t))}
+                            {/* El precio mostrado en cada boton es el de la
+                                presentacion actual (precio_tipo * cantidad_base),
+                                no el precio base del producto. Asi 'Mayorista'
+                                en una Caja=200 muestra Gs.8.000.000 (40k*200) en
+                                lugar de Gs.40.000 (base). Si la presentacion
+                                tiene override, mostramos el override fijo. */}
+                            {formatGs(
+                              presSel && presSel.precio_venta != null && presSel.precio_venta > 0
+                                ? presSel.precio_venta
+                                : precioPorTipoPicker(sel, t) * (presSel ? presSel.cantidad_base : 1)
+                            )}
                           </span>
                         </button>
                       ))}
