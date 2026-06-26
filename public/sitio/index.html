@@ -684,6 +684,13 @@
             <div style="font-size:14px;color:#7a849a;">Probá con otra palabra o cambiá el filtro.</div>
           </div>
         </sc-if>
+        <sc-if value="{{ catalogNoResults }}" hint-placeholder-val="{{ false }}">
+          <div style="text-align:center;padding:80px 20px;background:#fff;border-radius:18px;border:1px solid #E7EAF0;">
+            <div style="font-size:48px;margin-bottom:16px;">🔍</div>
+            <div style="font-size:18px;font-weight:700;color:#15213b;margin-bottom:7px;">Sin resultados</div>
+            <div style="font-size:14px;color:#7a849a;">Probá con otra palabra o cambiá el filtro.</div>
+          </div>
+        </sc-if>
         <sc-if value="{{ catalogHasResults }}" hint-placeholder-val="{{ true }}">
           <div class="catalog-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;">
             <sc-for list="{{ catalogProducts }}" as="p" hint-placeholder-count="8">
@@ -704,6 +711,20 @@
                 </div>
               </div>
             </sc-for>
+          </div>
+        </sc-if>
+        <!-- Paginacion (solo si total > pageSize) -->
+        <sc-if value="{{ catalogHasPagination }}" hint-placeholder-val="{{ false }}">
+          <div style="margin-top:40px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap;">
+            <button onClick="{{ catalogPrevPage }}" style="{{ catalogPrevStyle }}">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M15 18l-6-6 6-6"/></svg>
+              Anterior
+            </button>
+            <span style="font-size:13.5px;color:#697287;font-weight:600;font-family:Montserrat;padding:0 16px;">{{ catalogPageLabel }}</span>
+            <button onClick="{{ catalogNextPage }}" style="{{ catalogNextStyle }}">
+              Siguiente
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M9 6l6 6-6 6"/></svg>
+            </button>
           </div>
         </sc-if>
       </div>
@@ -871,6 +892,8 @@ class Component extends DCLogic {
     activeFilter: 'Todos', cart: {}, qtys: {}, search: '', note: false, detail: null, catMenuOpen: false, catSearch: '',
     toast: false, toastName: '',
     view: 'home', catalogFilter: 'Todos', catalogSearch: '',
+    // Estado paginado del catalogo (vista embebida server-side).
+    catalogServerProducts: [], catalogTotal: 0, catalogPage: 1, catalogPageSize: 25, catalogLoading: false,
     searchDrop: false, filtersOpen: false, mobileCatOpen: false,
     // Datos cargados desde /api/sitio/productos y /api/sitio/categorias
     dbProducts: [], dbCategorias: [], dbOfertas: [], countdownEnd: null, loading: true, loadError: null,
@@ -966,8 +989,6 @@ class Component extends DCLogic {
       if (raw) this.setState({ cart: JSON.parse(raw) || {} });
     } catch (e) {}
     // Si llegamos con ?cart=1 (link desde el carrito del catalogo), abrir drawer.
-    // Limpiamos el query de la URL para que un refresh no vuelva a abrir el
-    // drawer (replaceState no agrega entrada al historial).
     try {
       const sp = new URLSearchParams(window.location.search);
       if (sp.get('cart') === '1') {
@@ -977,6 +998,37 @@ class Component extends DCLogic {
         window.history.replaceState(null, '', clean);
       }
     } catch (e) {}
+    // Si llegamos a /catalogo (o tenemos ?cat= / ?q=), arrancar en vista catalogo.
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      const path = window.location.pathname;
+      const wantCatalog = path === '/catalogo' || path === '/catalogo/' || sp.has('cat') || sp.has('q');
+      if (wantCatalog) {
+        let f = sp.get('cat') || 'Todos';
+        const q = sp.get('q') || '';
+        this.setState({
+          view: 'catalog',
+          catalogFilter: f,
+          catalogSearch: q,
+          catalogPage: 1
+        }, () => this.cargarCatalogo());
+      }
+    } catch (e) {}
+    // Sync nav back/forward: cuando el usuario navega historial, actualizar view.
+    this._onPopState = (e) => {
+      try {
+        const path = window.location.pathname;
+        const sp = new URLSearchParams(window.location.search);
+        if (path === '/catalogo' || path === '/catalogo/') {
+          const f = sp.get('cat') || 'Todos';
+          const q = sp.get('q') || '';
+          this.setState({ view: 'catalog', catalogFilter: f, catalogSearch: q, catalogPage: 1 }, () => this.cargarCatalogo());
+        } else {
+          this.setState({ view: 'home' });
+        }
+      } catch (err) {}
+    };
+    window.addEventListener('popstate', this._onPopState);
     // Disparar carga de productos + categorias del ERP (no bloquea render).
     this.cargarDatos();
     this._onScroll = () => {
@@ -1210,15 +1262,84 @@ class Component extends DCLogic {
 
   openCatalog(filter) {
     const f = (typeof filter === 'string') ? filter : 'Todos';
-    // Navegar a la pagina real del catalogo (con paginacion server-side
-    // y filtros que consultan el ERP de verdad). La vista embebida que
-    // existia antes solo veia los 8 destacados cargados en el home.
-    const qs = (f && f !== 'Todos') ? ('?cat=' + encodeURIComponent(f)) : '';
-    window.location.href = '/catalogo' + qs;
+    // SPA-style: cambia la vista sin recargar la pagina + sync URL con
+    // pushState para que /catalogo aparezca en la barra de direcciones.
+    this.setState({
+      view: 'catalog',
+      catalogFilter: f,
+      catalogSearch: '',
+      catalogPage: 1,
+      catMenuOpen: false, menuOpen: false
+    }, () => {
+      // Actualiza URL sin recargar
+      try {
+        const qs = (f && f !== 'Todos') ? ('?cat=' + encodeURIComponent(f)) : '';
+        window.history.pushState({ view: 'catalog', filter: f }, '', '/catalogo' + qs);
+      } catch (e) {}
+      this.cargarCatalogo();
+    });
+    window.scrollTo({ top: 0, behavior: 'instant' });
   }
   closeCatalog() {
-    this.setState({ view: 'home' });
+    this.setState({ view: 'home' }, () => {
+      try { window.history.pushState({ view: 'home' }, '', '/'); } catch (e) {}
+    });
     window.scrollTo({ top: 0, behavior: 'instant' });
+  }
+  // Carga productos del catalogo paginados desde /api/sitio/productos.
+  // Lee state.catalogFilter, catalogSearch, catalogPage para armar la query.
+  // El filtro 'Ofertas' usa ?en_oferta=1; los demas matchean por nombre de categoria.
+  async cargarCatalogo() {
+    try {
+      this.setState({ catalogLoading: true });
+      const st = this.state;
+      const pageSize = st.catalogPageSize || 25;
+      const url = new URL('/api/sitio/productos', location.origin);
+      url.searchParams.set('limit', String(pageSize));
+      url.searchParams.set('offset', String(((st.catalogPage || 1) - 1) * pageSize));
+      if (st.catalogSearch) url.searchParams.set('q', st.catalogSearch.trim());
+      if (st.catalogFilter === 'Ofertas') {
+        url.searchParams.set('en_oferta', '1');
+      } else if (st.catalogFilter && st.catalogFilter !== 'Todos') {
+        const cat = (st.dbCategorias || []).find(c => c.nombre === st.catalogFilter);
+        if (cat) url.searchParams.set('categoria', cat.id);
+      }
+      const j = await fetch(url.toString()).then(r => r.json());
+      this.setState({
+        catalogServerProducts: Array.isArray(j.productos) ? j.productos : [],
+        catalogTotal: Number(j.total) || 0,
+        catalogLoading: false
+      });
+    } catch (e) {
+      this.setState({ catalogLoading: false });
+    }
+  }
+  setCatalogPage(n) {
+    const max = Math.max(1, Math.ceil((this.state.catalogTotal || 0) / (this.state.catalogPageSize || 25)));
+    const safe = Math.max(1, Math.min(max, n));
+    if (safe === (this.state.catalogPage || 1)) return;
+    this.setState({ catalogPage: safe }, () => {
+      this.cargarCatalogo();
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+  }
+  onCatalogFilterChange(f) {
+    if (f === this.state.catalogFilter) return;
+    this.setState({ catalogFilter: f, catalogPage: 1 }, () => {
+      try {
+        const qs = (f && f !== 'Todos') ? ('?cat=' + encodeURIComponent(f)) : '';
+        window.history.replaceState({ view: 'catalog', filter: f }, '', '/catalogo' + qs);
+      } catch (e) {}
+      this.cargarCatalogo();
+    });
+  }
+  onCatalogSearchInput(e) {
+    const v = e.target.value;
+    this.setState({ catalogSearch: v });
+    clearTimeout(this._catalogSearchT);
+    this._catalogSearchT = setTimeout(() => {
+      this.setState({ catalogPage: 1 }, () => this.cargarCatalogo());
+    }, 350);
   }
 
   goTo(id) {
@@ -1521,21 +1642,36 @@ class Component extends DCLogic {
     const searchSeeAllHref = '/catalogo?q=' + encodeURIComponent(st.search);
 
     const catalogCf = st.catalogFilter;
-    const catalogCs = this.normTxt(st.catalogSearch);
     // Filtros del catalogo: dinamicos desde categorias del ERP.
     const catalogFilterDefs = ['Todos', ...(this.state.dbCategorias || []).map(c => c.nombre), 'Ofertas'];
     const catalogFilters = catalogFilterDefs.map(label => ({
       label,
       style: 'cursor:pointer;border:1.5px solid ' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.22)') + ';background:' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.06)') + ';color:#fff;font-weight:600;font-size:13px;padding:7px 16px;border-radius:999px;white-space:nowrap;font-family:Montserrat;transition:all .2s;',
-      set: () => this.setState({ catalogFilter: label })
+      set: () => this.onCatalogFilterChange(label)
     }));
-    const catalogProducts = all.filter(p => {
-      const matchFilter = catalogCf === 'Todos' || (catalogCf === 'Ofertas' && p.badge === 'Oferta') || p.cat === catalogCf;
-      const matchSearch = !catalogCs.trim() || this.normTxt(p.name + ' ' + p.cat + ' ' + p.attr).includes(catalogCs.trim());
-      return matchFilter && matchSearch;
-    });
+    // Productos del catalogo: ahora vienen del server (paginados, todo el catalogo).
+    const _catNow = Date.now();
+    const catalogProducts = (st.catalogServerProducts || []).map(p => this._mapProd(p, _catNow));
     const catalogHasResults = catalogProducts.length > 0;
-    const catalogResultLabel = catalogProducts.length + (catalogProducts.length === 1 ? ' producto' : ' productos');
+    const catalogTotal = st.catalogTotal || 0;
+    const catalogPageSize = st.catalogPageSize || 25;
+    const catalogPage = Math.max(1, st.catalogPage || 1);
+    const catalogTotalPages = Math.max(1, Math.ceil(catalogTotal / catalogPageSize));
+    const catalogFromIdx = catalogTotal === 0 ? 0 : (catalogPage - 1) * catalogPageSize + 1;
+    const catalogToIdx = Math.min(catalogPage * catalogPageSize, catalogTotal);
+    const catalogResultLabel = st.catalogLoading
+      ? 'Cargando productos...'
+      : catalogTotal === 0
+      ? 'Sin productos'
+      : 'Mostrando ' + catalogFromIdx + '-' + catalogToIdx + ' de ' + catalogTotal;
+    const catalogHasPrev = catalogPage > 1;
+    const catalogHasNext = catalogPage < catalogTotalPages;
+    const catalogPageLabel = 'Página ' + catalogPage + ' de ' + catalogTotalPages;
+    const catalogPageBtnStyle = (en) => 'display:inline-flex;align-items:center;gap:6px;height:42px;padding:0 18px;border-radius:11px;border:1.5px solid ' +
+      (en ? '#E97932' : '#E2E7EF') + ';background:' + (en ? '#fff' : '#F6F7FA') +
+      ';color:' + (en ? '#E97932' : '#A4ACBA') + ';font-weight:700;font-size:14px;cursor:' +
+      (en ? 'pointer' : 'not-allowed') + ';font-family:Montserrat;transition:all .2s;';
+    const catalogNoResults = !st.catalogLoading && catalogTotal === 0;
     const isCatalog = st.view === 'catalog';
     const homeViewStyle = isCatalog ? 'display:none' : '';
     const catalogViewStyle = isCatalog ? 'padding-top:72px;min-height:100vh;' : 'display:none';
@@ -1591,7 +1727,14 @@ class Component extends DCLogic {
       toast: st.toast, toastName: st.toastName,
       homeViewStyle, catalogViewStyle,
       catalogSearch: st.catalogSearch,
-      onCatalogSearch: (e) => this.setState({ catalogSearch: e.target.value }),
+      onCatalogSearch: (e) => this.onCatalogSearchInput(e),
+      // Paginacion del catalogo
+      catalogHasPagination: catalogTotal > catalogPageSize,
+      catalogPageLabel, catalogHasPrev, catalogHasNext, catalogNoResults,
+      catalogPrevStyle: catalogPageBtnStyle(catalogHasPrev),
+      catalogNextStyle: catalogPageBtnStyle(catalogHasNext),
+      catalogPrevPage: () => { if (catalogHasPrev) this.setCatalogPage(catalogPage - 1); },
+      catalogNextPage: () => { if (catalogHasNext) this.setCatalogPage(catalogPage + 1); },
       clearCatalogSearch: () => this.setState({ catalogSearch: '' }),
       hasCatalogSearch: !!st.catalogSearch,
       catalogFilters, catalogProducts, catalogCf,
