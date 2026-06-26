@@ -37,6 +37,10 @@ interface ProductoRow {
   es_insumo?: boolean | null;
   controla_stock?: boolean | null;
   destacado?: boolean | null;
+  discount_type?: string | null;
+  discount_value?: number | string | null;
+  discount_starts_at?: string | null;
+  discount_ends_at?: string | null;
   valorizado?: boolean | null;
   unidad_compra?: string | null;
   unidad_receta?: string | null;
@@ -91,6 +95,13 @@ function rowToProducto(row: ProductoRow): Producto {
     es_insumo: row.es_insumo ?? false,
     controla_stock: row.controla_stock ?? true,
     destacado: row.destacado ?? false,
+    discount_type:
+      row.discount_type === "percentage" || row.discount_type === "fixed"
+        ? row.discount_type
+        : null,
+    discount_value: row.discount_value != null ? Number(row.discount_value) : 0,
+    discount_starts_at: row.discount_starts_at ?? null,
+    discount_ends_at: row.discount_ends_at ?? null,
     valorizado: row.valorizado ?? true,
     unidad_compra: row.unidad_compra ?? null,
     unidad_receta: row.unidad_receta ?? null,
@@ -215,6 +226,16 @@ export async function saveProducto(
     es_insumo: typeof datos.es_insumo === "boolean" ? datos.es_insumo : false,
     controla_stock: typeof datos.controla_stock === "boolean" ? datos.controla_stock : true,
     destacado: typeof datos.destacado === "boolean" ? datos.destacado : false,
+    discount_type:
+      datos.discount_type === "percentage" || datos.discount_type === "fixed"
+        ? datos.discount_type
+        : null,
+    discount_value:
+      typeof datos.discount_value === "number" && datos.discount_value >= 0
+        ? datos.discount_value
+        : 0,
+    discount_starts_at: datos.discount_starts_at ?? null,
+    discount_ends_at: datos.discount_ends_at ?? null,
     valorizado: typeof datos.valorizado === "boolean" ? datos.valorizado : true,
     unidad_compra: datos.unidad_compra ?? null,
     unidad_receta: datos.unidad_receta ?? null,
@@ -285,6 +306,18 @@ export async function updateProducto(
   if (typeof datos.es_insumo === "boolean") body.es_insumo = datos.es_insumo;
   if (typeof datos.controla_stock === "boolean") body.controla_stock = datos.controla_stock;
   if (typeof datos.destacado === "boolean") body.destacado = datos.destacado;
+  if (datos.discount_type !== undefined) {
+    body.discount_type =
+      datos.discount_type === "percentage" || datos.discount_type === "fixed"
+        ? datos.discount_type
+        : null;
+  }
+  if (datos.discount_value !== undefined)
+    body.discount_value = datos.discount_value ?? 0;
+  if (datos.discount_starts_at !== undefined)
+    body.discount_starts_at = datos.discount_starts_at ?? null;
+  if (datos.discount_ends_at !== undefined)
+    body.discount_ends_at = datos.discount_ends_at ?? null;
   if (typeof datos.valorizado === "boolean") body.valorizado = datos.valorizado;
   if (datos.unidad_compra !== undefined) body.unidad_compra = datos.unidad_compra ?? null;
   if (datos.unidad_receta !== undefined) body.unidad_receta = datos.unidad_receta ?? null;

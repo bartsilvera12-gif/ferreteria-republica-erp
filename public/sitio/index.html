@@ -868,20 +868,52 @@ class Component extends DCLogic {
     view: 'home', catalogFilter: 'Todos', catalogSearch: '',
     searchDrop: false, filtersOpen: false, mobileCatOpen: false,
     // Datos cargados desde /api/sitio/productos y /api/sitio/categorias
-    dbProducts: [], dbCategorias: [], loading: true, loadError: null
+    dbProducts: [], dbCategorias: [], dbOfertas: [], loading: true, loadError: null
   };
 
-  // Carga productos destacados (max 8) + categorias del ERP.
-  // Para la home solo necesitamos 8 destacados, no la lista completa.
+  // Helpers de descuento promocional (inline porque support.js no soporta imports).
+  _discActive(p, now) {
+    const t = p.discount_type;
+    const v = Number(p.discount_value || 0);
+    if (!t || v <= 0) return false;
+    if (t !== 'percentage' && t !== 'fixed') return false;
+    const s = p.discount_starts_at ? Date.parse(p.discount_starts_at) : null;
+    const e = p.discount_ends_at ? Date.parse(p.discount_ends_at) : null;
+    if (s !== null && !isNaN(s) && now < s) return false;
+    if (e !== null && !isNaN(e) && now > e) return false;
+    return true;
+  }
+  _discEffPrice(p, now) {
+    const base = Number(p.precio_venta) || 0;
+    if (!this._discActive(p, now)) return base;
+    const v = Number(p.discount_value || 0);
+    const ef = p.discount_type === 'percentage' ? base - base * v / 100 : base - v;
+    return Math.max(0, Math.round(ef));
+  }
+  _discPct(p, now) {
+    const base = Number(p.precio_venta) || 0;
+    if (base <= 0 || !this._discActive(p, now)) return 0;
+    return Math.round((base - this._discEffPrice(p, now)) / base * 100);
+  }
+
+  // Carga: 8 destacados + categorias + 3 ofertas activas (para sección Ofertas).
   async cargarDatos() {
     try {
-      const [pr, cr] = await Promise.all([
+      const [pr, cr, ofRes] = await Promise.all([
         fetch('/api/sitio/productos?destacado=1&limit=8').then(r => r.json()),
-        fetch('/api/sitio/categorias').then(r => r.json())
+        fetch('/api/sitio/categorias').then(r => r.json()),
+        fetch('/api/sitio/productos?en_oferta=1&limit=12').then(r => r.json())
       ]);
+      // Filtro client-side de ofertas: el server filtra por discount_type+value,
+      // aca filtramos por ventana temporal (reloj del cliente).
+      const now = Date.now();
+      const ofertasActivas = (Array.isArray(ofRes.productos) ? ofRes.productos : [])
+        .filter(p => this._discActive(p, now))
+        .slice(0, 3);
       this.setState({
         dbProducts: Array.isArray(pr.productos) ? pr.productos : [],
         dbCategorias: Array.isArray(cr.categorias) ? cr.categorias : [],
+        dbOfertas: ofertasActivas,
         loading: false, loadError: null
       });
     } catch (e) {
@@ -1179,24 +1211,39 @@ class Component extends DCLogic {
   // Devuelve productos en el shape esperado por el rendering:
   //   { id, name, cat, attr, price, badge, img, desc }
   // Mapea desde el shape de /api/sitio/productos cargado en state.dbProducts.
+  // Mapea productos (destacados o ofertas) al shape esperado por el rendering.
+  // Calcula precio efectivo + porcentaje de descuento si el producto esta en oferta.
+  _mapProd(p, now) {
+    const catNombre = (p.categoria && p.categoria.nombre) || 'Sin categoría';
+    const attr = [p.unidad_medida, p.sku].filter(Boolean).join(' · ');
+    const img = p.imagen_url || 'assets/prod/llave.png';
+    const base = Number(p.precio_venta) || 0;
+    const efectivo = this._discEffPrice(p, now);
+    const enOferta = efectivo < base;
+    const pctOff = enOferta ? this._discPct(p, now) : 0;
+    return {
+      id: String(p.id),
+      name: p.nombre || '',
+      cat: catNombre,
+      attr,
+      price: efectivo,
+      old: enOferta ? base : null,
+      pctOff,
+      badge: enOferta ? 'Oferta' : 'Stock',
+      img,
+      desc: p.descripcion || ''
+    };
+  }
+
+  // Productos destacados mapeados (los del state.dbProducts cargados con ?destacado=1).
   catalog() {
-    const prods = this.state.dbProducts || [];
-    return prods.map(p => {
-      const catNombre = (p.categoria && p.categoria.nombre) || 'Sin categoría';
-      const badge = 'Stock';
-      const attr = [p.unidad_medida, p.sku].filter(Boolean).join(' · ');
-      const img = p.imagen_url || 'assets/prod/llave.png';
-      return {
-        id: String(p.id),
-        name: p.nombre || '',
-        cat: catNombre,
-        attr,
-        price: Number(p.precio_venta) || 0,
-        badge,
-        img,
-        desc: p.descripcion || ''
-      };
-    });
+    const now = Date.now();
+    return (this.state.dbProducts || []).map(p => this._mapProd(p, now));
+  }
+  // Productos en oferta mapeados (state.dbOfertas, cargados con ?en_oferta=1).
+  catalogOfertas() {
+    const now = Date.now();
+    return (this.state.dbOfertas || []).map(p => this._mapProd(p, now));
   }
 
   renderVals() {
@@ -1318,15 +1365,17 @@ class Component extends DCLogic {
     const catCaretStyle = 'transition:transform .25s ease;transform:rotate(' + (cmo ? '180deg' : '0deg') + ');';
     const catMenuStyle = 'position:absolute;top:34px;right:0;z-index:60;width:300px;background:#fff url(assets/catdd-bg.png) center center/cover no-repeat;border:1px solid #E7EAF0;border-radius:16px;padding:12px;box-shadow:0 28px 60px -22px rgba(2,18,54,.5);transform-origin:top right;transition:opacity .22s ease,transform .22s ease;opacity:' + (cmo ? '1' : '0') + ';transform:scale(' + (cmo ? '1' : '.95') + ');pointer-events:' + (cmo ? 'auto' : 'none') + ';';
 
-    const offerProds = this.catalog().filter(p => p.old).slice(0, 3);
+    // Ofertas vienen del state.dbOfertas (productos con descuento activo segun reloj cliente).
+    const offerProds = this.catalogOfertas().slice(0, 3);
     const offers = offerProds.map(p => ({
       name: p.name, cat: p.cat, attr: p.attr,
-      pct: Math.round((1 - p.price / p.old) * 100),
+      pct: p.pctOff,
       img: p.img,
-      priceLabel: fmt(p.price), oldLabel: fmt(p.old),
+      priceLabel: fmt(p.price), oldLabel: fmt(p.old || p.price),
       open: () => this.openDetail(p.id),
       add: () => this.addToCart(p, 1)
     }));
+    const hasOfertas = offers.length > 0;
 
     const cartItems = Object.keys(st.cart).map(id => {
       const c = st.cart[id];
@@ -1448,10 +1497,12 @@ class Component extends DCLogic {
       mobileCatCaretStyle: 'transition:transform .22s ease;transform:rotate(' + (st.mobileCatOpen ? '180' : '0') + 'deg);',
       closeAndProducts: () => { this.setState({ cartOpen: false }); this.goTo('masvendidos'); },
       waContact: waBase('Hola Ferretería República! Quiero hacer una consulta.'),
-      categories, filters, products, resultLabel, offers,
+      categories, filters, products, resultLabel, offers, hasOfertas,
       cartItems, count, hasItems, cartEmpty: !hasItems,
       subtotalLabel: fmt(subtotal), waOrderHref,
-      ofertasOn: this.props.mostrarOfertas ?? true,
+      // ofertasOn antes era un toggle de props. Ahora se deriva: hay seccion
+      // Ofertas solo si tenemos productos con descuento activo en el ERP.
+      ofertasOn: hasOfertas,
       countdownOn: this.props.mostrarCountdown ?? true,
       toast: st.toast, toastName: st.toastName,
       homeViewStyle, catalogViewStyle,

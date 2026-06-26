@@ -15,7 +15,8 @@ const PRODUCTO_COLS =
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "es_vendible, es_insumo, controla_stock, destacado, valorizado, unidad_compra, unidad_receta, " +
-  "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta";
+  "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
+  "discount_type, discount_value, discount_starts_at, discount_ends_at";
 
 function toNumber(v: unknown): unknown {
   return typeof v === "string" ? Number(v) : v;
@@ -113,6 +114,29 @@ export async function POST(request: NextRequest) {
     const esInsumo = typeof body.es_insumo === "boolean" ? body.es_insumo : undefined;
     const controlaStock = typeof body.controla_stock === "boolean" ? body.controla_stock : undefined;
     const destacado = typeof body.destacado === "boolean" ? body.destacado : undefined;
+    const discountType =
+      body.discount_type === "percentage" || body.discount_type === "fixed"
+        ? body.discount_type
+        : body.discount_type === null || body.discount_type === ""
+        ? null
+        : undefined;
+    const discountValueRaw = toNumber(body.discount_value);
+    const discountValue =
+      typeof discountValueRaw === "number" && discountValueRaw >= 0
+        ? discountValueRaw
+        : undefined;
+    const discountStartsAt =
+      typeof body.discount_starts_at === "string" && body.discount_starts_at.trim()
+        ? body.discount_starts_at
+        : body.discount_starts_at === null
+        ? null
+        : undefined;
+    const discountEndsAt =
+      typeof body.discount_ends_at === "string" && body.discount_ends_at.trim()
+        ? body.discount_ends_at
+        : body.discount_ends_at === null
+        ? null
+        : undefined;
     const valorizado = typeof body.valorizado === "boolean" ? body.valorizado : undefined;
     const unidadCompra =
       typeof body.unidad_compra === "string"
@@ -167,6 +191,10 @@ export async function POST(request: NextRequest) {
     if (esInsumo !== undefined) insertPayload.es_insumo = esInsumo;
     if (controlaStock !== undefined) insertPayload.controla_stock = controlaStock;
     if (destacado !== undefined) insertPayload.destacado = destacado;
+    if (discountType !== undefined) insertPayload.discount_type = discountType;
+    if (discountValue !== undefined) insertPayload.discount_value = discountValue;
+    if (discountStartsAt !== undefined) insertPayload.discount_starts_at = discountStartsAt;
+    if (discountEndsAt !== undefined) insertPayload.discount_ends_at = discountEndsAt;
     if (valorizado !== undefined) insertPayload.valorizado = valorizado;
     if (unidadCompra !== undefined) insertPayload.unidad_compra = unidadCompra;
     if (unidadReceta !== undefined) insertPayload.unidad_receta = unidadReceta;

@@ -24,6 +24,7 @@ const SITIO_EMPRESA_ID =
  *  - categoria=<uuid>  Filtra por categoria_principal_id
  *  - q=<text>          Busqueda case-insensitive en nombre
  *  - destacado=1       Solo productos marcados como destacados (home)
+ *  - en_oferta=1       Solo productos con descuento activo AHORA (sitio filtra)
  *  - limit, offset     Paginacion
  *
  * Cada producto incluye `categoria` con { id, nombre } via embed PostgREST
@@ -46,6 +47,9 @@ export async function GET(request: NextRequest) {
   const destacado = ["1", "true", "yes"].includes(
     (searchParams.get("destacado") ?? "").toLowerCase()
   );
+  const enOferta = ["1", "true", "yes"].includes(
+    (searchParams.get("en_oferta") ?? "").toLowerCase()
+  );
 
   const supabase = createServiceRoleClient();
 
@@ -54,6 +58,7 @@ export async function GET(request: NextRequest) {
     .select(
       `id, nombre, sku, precio_venta, imagen_url, descripcion,
        unidad_medida, stock_actual, categoria_principal_id, destacado,
+       discount_type, discount_value, discount_starts_at, discount_ends_at,
        categoria:categoria_principal_id ( id, nombre )`,
       { count: "exact" }
     )
@@ -70,6 +75,14 @@ export async function GET(request: NextRequest) {
   }
   if (destacado) {
     query = query.eq("destacado", true);
+  }
+  if (enOferta) {
+    // Pre-filtro server-side: tiene tipo y valor > 0. La ventana temporal
+    // se valida client-side con isDiscountWindowActive() (los timestamps
+    // dependen del reloj del cliente).
+    query = query
+      .not("discount_type", "is", null)
+      .gt("discount_value", 0);
   }
 
   const { data, error, count } = await query;

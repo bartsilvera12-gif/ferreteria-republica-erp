@@ -89,6 +89,11 @@ export default function NuevoProductoPage() {
   const [controlaStock, setControlaStock] = useState(true);
   // Producto destacado: aparece en seccion "Productos destacados" del sitio publico.
   const [destacado, setDestacado] = useState(false);
+  // Descuento promocional (oferta) — modelo: tipo + valor + ventana temporal.
+  const [discountType, setDiscountType] = useState<"" | "percentage" | "fixed">("");
+  const [discountValue, setDiscountValue] = useState("");
+  const [discountStartsAt, setDiscountStartsAt] = useState("");
+  const [discountEndsAt, setDiscountEndsAt] = useState("");
   const [valorizado, setValorizado] = useState(true);
   const [unidadCompra, setUnidadCompra] = useState("");
   const [unidadReceta, setUnidadReceta] = useState("");
@@ -343,6 +348,10 @@ export default function NuevoProductoPage() {
           es_insumo: esInsumo,
           controla_stock: controlaStock,
           destacado: destacado,
+          discount_type: discountType || null,
+          discount_value: discountType ? Math.max(0, parseFloat(discountValue) || 0) : 0,
+          discount_starts_at: discountType && discountStartsAt ? new Date(discountStartsAt).toISOString() : null,
+          discount_ends_at: discountType && discountEndsAt ? new Date(discountEndsAt).toISOString() : null,
           valorizado: valorizado,
           unidad_compra: unidadCompra.trim() || null,
           unidad_receta: unidadReceta.trim() || null,
@@ -974,6 +983,66 @@ export default function NuevoProductoPage() {
                   </span>
                 </span>
               </label>
+            </div>
+
+            {/* Descuento promocional (oferta) */}
+            <div className="mt-5 pt-4 border-t border-gray-100">
+              <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-3">
+                Descuento promocional
+              </p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Tipo de descuento</label>
+                  <select
+                    value={discountType}
+                    onChange={(e) => setDiscountType(e.target.value as "" | "percentage" | "fixed")}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  >
+                    <option value="">Sin descuento</option>
+                    <option value="percentage">Por porcentaje</option>
+                    <option value="fixed">Monto fijo (Gs.)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">
+                    Valor {discountType === "percentage" ? "(%)" : discountType === "fixed" ? "(Gs.)" : ""}
+                  </label>
+                  <input
+                    type="number"
+                    inputMode={discountType === "percentage" ? "decimal" : "numeric"}
+                    min="0"
+                    step={discountType === "percentage" ? "0.5" : "100"}
+                    value={discountValue}
+                    onChange={(e) => setDiscountValue(e.target.value)}
+                    disabled={!discountType}
+                    placeholder={discountType === "percentage" ? "15" : discountType === "fixed" ? "5000" : "—"}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Inicio (opcional)</label>
+                  <input
+                    type="datetime-local"
+                    value={discountStartsAt}
+                    onChange={(e) => setDiscountStartsAt(e.target.value)}
+                    disabled={!discountType}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm text-gray-700 mb-1">Fin (opcional)</label>
+                  <input
+                    type="datetime-local"
+                    value={discountEndsAt}
+                    onChange={(e) => setDiscountEndsAt(e.target.value)}
+                    disabled={!discountType}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent disabled:bg-gray-50 disabled:text-gray-400"
+                  />
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Si dejás las fechas vacías, el descuento es indefinido. Aparece en la sección &quot;Ofertas&quot; del home con badge -X%.
+              </p>
             </div>
 
             {/* Configuración gastronómica — oculta (campos técnicos no necesarios en UX gastro simplificada) */}

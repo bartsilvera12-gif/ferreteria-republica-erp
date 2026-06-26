@@ -33,6 +33,14 @@ export interface Producto {
   controla_stock?: boolean;
   /** Si true, aparece en la sección "Productos destacados" del sitio público. */
   destacado?: boolean;
+  /** Descuento promocional: 'percentage' | 'fixed' | null. */
+  discount_type?: "percentage" | "fixed" | null;
+  /** Valor del descuento (% si percentage, Gs. si fixed). */
+  discount_value?: number | null;
+  /** Inicio de la ventana de oferta (ISO). null = sin restriccion. */
+  discount_starts_at?: string | null;
+  /** Fin de la ventana de oferta (ISO). null = sin restriccion. */
+  discount_ends_at?: string | null;
   /** Si false, no entra en valuación (combos/promos). */
   valorizado?: boolean;
   /** Unidad usada al comprar (ej. "Bolsa 25kg"). */

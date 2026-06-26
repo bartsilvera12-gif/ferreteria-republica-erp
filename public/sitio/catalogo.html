@@ -215,22 +215,55 @@ class Component extends DCLogic {
   fmt(n) { return 'Gs. ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
   norm(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
+  // Helpers de descuento promocional (compatibles con isDiscountWindowActive
+  // del backend). Se inlinean aca porque support.js no soporta imports.
+  _discActive(p, now) {
+    const t = p.discount_type;
+    const v = Number(p.discount_value || 0);
+    if (!t || v <= 0) return false;
+    if (t !== 'percentage' && t !== 'fixed') return false;
+    const s = p.discount_starts_at ? Date.parse(p.discount_starts_at) : null;
+    const e = p.discount_ends_at ? Date.parse(p.discount_ends_at) : null;
+    if (s !== null && !isNaN(s) && now < s) return false;
+    if (e !== null && !isNaN(e) && now > e) return false;
+    return true;
+  }
+  _discEffPrice(p, now) {
+    const base = Number(p.precio_venta) || 0;
+    if (!this._discActive(p, now)) return base;
+    const v = Number(p.discount_value || 0);
+    const ef = p.discount_type === 'percentage' ? base - base * v / 100 : base - v;
+    return Math.max(0, Math.round(ef));
+  }
+  _discPct(p, now) {
+    const base = Number(p.precio_venta) || 0;
+    if (base <= 0 || !this._discActive(p, now)) return 0;
+    return Math.round((base - this._discEffPrice(p, now)) / base * 100);
+  }
+
   // Devuelve productos en el shape esperado por el rendering:
-  //   { id, name, cat, attr, price, badge, img, desc }
+  //   { id, name, cat, attr, price, badge, img, desc, old?, pctOff? }
   // Mapea desde el shape de /api/sitio/productos cargado en state.dbProducts.
   catalog() {
     const prods = this.state.dbProducts || [];
+    const now = Date.now();
     return prods.map(p => {
       const catNombre = (p.categoria && p.categoria.nombre) || 'Sin categoría';
-      const badge = 'Stock';
       const attr = [p.unidad_medida, p.sku].filter(Boolean).join(' · ');
       const img = p.imagen_url || 'assets/prod/llave.png';
+      const base = Number(p.precio_venta) || 0;
+      const efectivo = this._discEffPrice(p, now);
+      const enOferta = efectivo < base;
+      const pctOff = enOferta ? this._discPct(p, now) : 0;
+      const badge = enOferta ? 'Oferta' : 'Stock';
       return {
         id: String(p.id),
         name: p.nombre || '',
         cat: catNombre,
         attr,
-        price: Number(p.precio_venta) || 0,
+        price: efectivo,
+        old: enOferta ? base : null,
+        pctOff,
         badge,
         img,
         desc: p.descripcion || ''
