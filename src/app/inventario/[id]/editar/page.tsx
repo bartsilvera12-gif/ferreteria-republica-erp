@@ -435,44 +435,9 @@ export default function EditarProductoPage() {
         <p className="text-gray-600">Modifica los datos del producto</p>
       </div>
 
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 max-w-5xl">
-        <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-3">Tipo de producto</p>
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          {(["reventa", "materia", "menu"] as TipoGastro[]).map((t) => {
-            const s = TIPO_SUMMARY[t];
-            const activo = tipoGastro === t;
-            const Icon = s.Icon;
-            return (
-              <button
-                key={t}
-                type="button"
-                onClick={() => aplicarTipoGastro(t)}
-                className={`text-left rounded-lg border-2 p-3 transition-all ${
-                  activo ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.06] shadow-sm" : "border-slate-200 hover:border-slate-300"
-                }`}
-              >
-                <div className="flex items-center gap-2">
-                  <Icon className={`w-5 h-5 ${activo ? s.acento : "text-slate-400"}`} />
-                  <span className="text-sm font-semibold text-slate-900">{s.titulo}</span>
-                </div>
-                <p className="mt-1.5 text-xs text-slate-500 leading-snug">{s.descripcion}</p>
-              </button>
-            );
-          })}
-        </div>
-
-        {/* Advertencia: el producto tiene receta y se lo saca de Menú */}
-        {tieneReceta && tipoGastro !== "menu" && (
-          <div className="mt-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            <span className="mt-0.5">⚠</span>
-            <span>
-              Este producto tiene una <strong>receta asociada</strong>. Al cambiarlo a
-              <strong> {tipoGastro === "reventa" ? "Reventa" : "Materia prima"}</strong>, la receta deja de aplicarse al vender
-              (no se borra). Revisá Recetas si querés ajustarla.
-            </span>
-          </div>
-        )}
-
+      {/* Selector de tipo de producto OCULTO en ferreteria (solo reventa).
+          Logica de Modo de receta tambien oculta porque solo aplica a menu. */}
+      <div className="hidden">
         {/* Modo de receta: solo para Menú con receta asociada */}
         {tipoGastro === "menu" && tieneReceta && (
           <div className="mt-4 border-t border-slate-100 pt-4">

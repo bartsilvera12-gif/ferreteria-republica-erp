@@ -18,6 +18,9 @@ import {
   Package,
   Loader2,
   X,
+  Pencil,
+  Trash2,
+  AlertTriangle,
 } from "lucide-react";
 
 const metodoBadge: Record<MetodoValuacion, string> = {
@@ -68,6 +71,34 @@ export default function InventarioPage() {
   const [categoriaId, setCategoriaId] = useState("");
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(25);
+
+  // Modal de eliminacion
+  const [deleting, setDeleting] = useState<Producto | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  async function confirmarEliminar() {
+    if (!deleting) return;
+    setDeleteLoading(true);
+    setDeleteError(null);
+    try {
+      const r = await fetch(`/api/productos/${deleting.id}`, {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j?.success) {
+        setDeleteError((j as { error?: string })?.error ?? "No se pudo eliminar.");
+        return;
+      }
+      setDeleting(null);
+      setRefreshKey((k) => k + 1);
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setDeleteLoading(false);
+    }
+  }
 
   // Debounce del search (350ms)
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -401,13 +432,29 @@ export default function InventarioPage() {
                           {p.metodo_valuacion}
                         </span>
                       </td>
-                      <td className="px-5 py-3.5 text-center">
-                        <Link
-                          href={`/inventario/${p.id}/editar`}
-                          className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 transition-all hover:border-[#4FAEB2] hover:bg-[#4FAEB2]/5 hover:text-[#4FAEB2]"
-                        >
-                          Editar
-                        </Link>
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-center gap-1">
+                          <Link
+                            href={`/inventario/${p.id}/editar`}
+                            title="Editar producto"
+                            aria-label={`Editar ${p.nombre}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-[#4FAEB2]/10 hover:text-[#4FAEB2]"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleting(p);
+                              setDeleteError(null);
+                            }}
+                            title="Eliminar producto"
+                            aria-label={`Eliminar ${p.nombre}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -473,6 +520,71 @@ export default function InventarioPage() {
           </div>
         )}
       </section>
+
+      {/* Modal de confirmacion de eliminar */}
+      {deleting && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 px-4"
+          onClick={() => !deleteLoading && setDeleting(null)}
+        >
+          <div
+            className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-start gap-4">
+              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-red-50">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <h3 className="text-base font-semibold text-slate-900">
+                  ¿Eliminar este producto?
+                </h3>
+                <p className="mt-1 text-sm text-slate-600">
+                  Estás por eliminar{" "}
+                  <strong className="text-slate-900">{deleting.nombre}</strong>
+                  {deleting.sku ? (
+                    <>
+                      {" "}
+                      (SKU <span className="font-mono">{deleting.sku}</span>)
+                    </>
+                  ) : null}
+                  . Esta acción se puede revertir contactando soporte si fue por
+                  error, pero el producto deja de aparecer en el inventario y en
+                  el sitio público.
+                </p>
+                {deleteError && (
+                  <p className="mt-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {deleteError}
+                  </p>
+                )}
+              </div>
+            </div>
+            <div className="mt-5 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDeleting(null)}
+                disabled={deleteLoading}
+                className="rounded-lg px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarEliminar}
+                disabled={deleteLoading}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition-all hover:bg-red-700 disabled:opacity-60"
+              >
+                {deleteLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Trash2 className="h-4 w-4" />
+                )}
+                {deleteLoading ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

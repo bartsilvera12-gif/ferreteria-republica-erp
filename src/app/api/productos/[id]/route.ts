@@ -265,3 +265,41 @@ export async function PATCH(
     return NextResponse.json(errorResponse("No se pudo actualizar el producto."), { status: 500 });
   }
 }
+
+/**
+ * DELETE /api/productos/[id]
+ *
+ * Soft delete: setea activo=false. El producto deja de aparecer en el
+ * listado del ERP y en el sitio publico. NO se borra fisicamente para
+ * preservar integridad con ventas/movimientos historicos. El usuario
+ * puede reactivarlo desde la base si fuera necesario.
+ */
+export async function DELETE(
+  request: NextRequest,
+  ctxParams: { params: Promise<{ id: string }> }
+) {
+  try {
+    const { id } = await ctxParams.params;
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const empresaId = ctx.auth.empresa_id;
+
+    const upd = await ctx.supabase
+      .from("productos")
+      .update({ activo: false })
+      .eq("empresa_id", empresaId)
+      .eq("id", id)
+      .select("id")
+      .maybeSingle();
+
+    if (upd.error) {
+      console.error("[/api/productos/[id] DELETE]", upd.error.message);
+      return NextResponse.json(errorResponse("No se pudo eliminar el producto."), { status: 500 });
+    }
+    if (!upd.data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+    return NextResponse.json(successResponse({ id }));
+  } catch (err) {
+    console.error("[/api/productos/[id] DELETE] outer", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo eliminar el producto."), { status: 500 });
+  }
+}

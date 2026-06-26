@@ -480,7 +480,8 @@ export default function NuevoProductoPage() {
     );
   }
 
-  const summary = TIPO_SUMMARY[tipoGastro];
+  // En ferreteria solo hay productos de reventa. La card resumen con la
+  // descripcion del tipo se oculta — no aporta y ocupa espacio.
   const showStock = tipoGastro === "reventa";
   const showPrecioVenta = tipoGastro !== "materia";
 
@@ -489,23 +490,6 @@ export default function NuevoProductoPage() {
 
       <div>
         <h1 className="text-3xl font-bold text-gray-800">Nuevo producto</h1>
-      </div>
-
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5 max-w-5xl">
-        <div className="flex items-start gap-4">
-          <summary.Icon className={`w-7 h-7 shrink-0 ${summary.acento}`} />
-          <div className="flex-1 min-w-0">
-            <div className="text-base font-semibold text-slate-900">{summary.titulo}</div>
-            <div className="text-sm text-slate-600 mt-0.5">{summary.descripcion}</div>
-          </div>
-          <button
-            type="button"
-            onClick={() => setTipoGastro(null)}
-            className="text-xs text-amber-700 hover:text-amber-900 underline shrink-0"
-          >
-            Cambiar tipo
-          </button>
-        </div>
       </div>
 
       <div className="bg-white rounded-xl shadow p-6 max-w-5xl">
