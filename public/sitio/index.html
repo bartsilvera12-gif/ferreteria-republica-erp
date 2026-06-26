@@ -960,6 +960,16 @@ class Component extends DCLogic {
   get wa() { return (this.props.numeroWhatsapp || '595981000000').replace(/[^0-9]/g, ''); }
 
   componentDidMount() {
+    // Cargar carrito guardado por el catalogo (o sesion anterior del home).
+    try {
+      const raw = localStorage.getItem('FR_CART');
+      if (raw) this.setState({ cart: JSON.parse(raw) || {} });
+    } catch (e) {}
+    // Si llegamos con ?cart=1 (link desde el carrito del catalogo), abrir drawer.
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('cart') === '1') this.setState({ cartOpen: true });
+    } catch (e) {}
     // Disparar carga de productos + categorias del ERP (no bloquea render).
     this.cargarDatos();
     this._onScroll = () => {
@@ -1217,14 +1227,16 @@ class Component extends DCLogic {
 
   setQty(id, n) { this.setState(s => ({ qtys: { ...s.qtys, [id]: n } })); }
 
+  _persistCart(cart) {
+    try { localStorage.setItem('FR_CART', JSON.stringify(cart || {})); } catch (e) {}
+  }
   addToCart(prod, qty) {
     this.setState(s => {
       const cur = s.cart[prod.id];
       const newQty = (cur ? cur.qty : 0) + qty;
-      return {
-        cart: { ...s.cart, [prod.id]: { id: prod.id, name: prod.name, attr: prod.attr, price: prod.price, qty: newQty, img: prod.img || '' } },
-        toast: true, toastName: prod.name, note: false
-      };
+      const cart = { ...s.cart, [prod.id]: { id: prod.id, name: prod.name, attr: prod.attr, price: prod.price, qty: newQty, img: prod.img || '' } };
+      this._persistCart(cart);
+      return { cart, toast: true, toastName: prod.name, note: false };
     });
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => this.setState({ toast: false }), 2500);
@@ -1235,10 +1247,18 @@ class Component extends DCLogic {
       const q = it.qty + d;
       const cart = { ...s.cart };
       if (q <= 0) delete cart[id]; else cart[id] = { ...it, qty: q };
+      this._persistCart(cart);
       return { cart };
     });
   }
-  cartRemove(id) { this.setState(s => { const cart = { ...s.cart }; delete cart[id]; return { cart }; }); }
+  cartRemove(id) {
+    this.setState(s => {
+      const cart = { ...s.cart };
+      delete cart[id];
+      this._persistCart(cart);
+      return { cart };
+    });
+  }
   openDetail(id) { this._detailQty = this.state.qtys[id] || 1; this.setState({ detail: id, menuOpen: false }); }
   closeDetail() { this.setState({ detail: null }); }
   _ddQtyChange(prod, delta) {

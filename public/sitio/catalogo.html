@@ -82,7 +82,10 @@
         <a onClick="{{ goOfertas }}" class="nav-ofertas" style="cursor:pointer;">Ofertas</a>
       </nav>
       <div style="display:flex;align-items:center;gap:10px;flex:none;">
-        <a href="/" class="icon-btn" aria-label="Carrito" style="width:44px;height:44px;border-radius:12px;border:1.5px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg></a>
+        <a href="{{ cartHref }}" class="icon-btn" aria-label="Carrito" style="position:relative;width:44px;height:44px;border-radius:12px;border:1.5px solid rgba(255,255,255,.18);background:rgba(255,255,255,.06);display:flex;align-items:center;justify-content:center;text-decoration:none;flex:none;">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="1.8"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg>
+          <sc-if value="{{ hasCart }}" hint-placeholder-val="{{ true }}"><span style="position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;padding:0 5px;border-radius:999px;background:#F4552A;color:#fff;font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center;border:2px solid #021F5F;">{{ cartCount }}</span></sc-if>
+        </a>
       </div>
     </div>
   </header>
@@ -200,11 +203,19 @@
               <span style="display:inline-flex;align-items:center;gap:6px;font-size:12px;font-weight:600;color:#1f8a5b;"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#1f8a5b" stroke-width="2.2"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>Stock disponible</span>
             </div>
           </div>
+          <button onClick="{{ detail.addToCart }}" class="dd-cta" style="height:52px;border-radius:13px;background:linear-gradient(135deg,#F4552A,#E97932);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:10px;border:none;cursor:pointer;box-shadow:0 14px 30px -12px rgba(233,121,50,.7);margin-bottom:10px;"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><circle cx="9" cy="20" r="1.4"/><circle cx="18" cy="20" r="1.4"/><path d="M3 4h2l2.2 12h10l2-8H6"/></svg>Agregar al carrito</button>
           <a href="{{ detail.consult }}" target="_blank" class="dd-cta" style="height:52px;border-radius:13px;background:linear-gradient(135deg,#25D366,#1aa34f);color:#fff;font-weight:700;font-size:15px;display:flex;align-items:center;justify-content:center;gap:10px;text-decoration:none;box-shadow:0 14px 30px -12px rgba(37,211,102,.7);"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M12 2a10 10 0 00-8.6 15l-1.3 4.8 4.9-1.3A10 10 0 1012 2z"/></svg>Consultar por WhatsApp</a>
         </div>
       </div>
     </sc-if>
   </div>
+  <!-- Toast "agregado al carrito" -->
+  <sc-if value="{{ toast }}" hint-placeholder-val="{{ false }}">
+    <div style="position:fixed;bottom:24px;left:50%;transform:translateX(-50%);z-index:200;background:#15213b;color:#fff;padding:13px 22px;border-radius:14px;font-size:14px;font-weight:600;display:flex;align-items:center;gap:10px;box-shadow:0 18px 40px -12px rgba(0,0,0,.45);">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3ddc8c" stroke-width="2.4"><circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/></svg>
+      Agregado: <span style="color:#ffb37a;">{{ toastName }}</span>
+    </div>
+  </sc-if>
 </div>
 </x-dc>
 <script type="text/x-dc" data-dc-script>
@@ -214,8 +225,33 @@ class Component extends DCLogic {
     // Datos cargados desde /api/sitio/productos y /api/sitio/categorias.
     dbProducts: [], dbCategorias: [], loading: true, loadError: null,
     // Paginacion server-side (25 productos por pagina)
-    page: 1, pageSize: 25, total: 0
+    page: 1, pageSize: 25, total: 0,
+    // Carrito compartido con el home via localStorage (clave FR_CART).
+    cart: {}, toast: false, toastName: ''
   };
+
+  // ===== CARRITO (compartido con el home via localStorage FR_CART) =====
+  _loadCart() {
+    try {
+      const raw = localStorage.getItem('FR_CART');
+      if (raw) this.setState({ cart: JSON.parse(raw) || {} });
+    } catch (e) {}
+  }
+  _persistCart(cart) {
+    try { localStorage.setItem('FR_CART', JSON.stringify(cart || {})); } catch (e) {}
+  }
+  addToCart(prod, qty) {
+    const q = qty || 1;
+    this.setState(s => {
+      const cur = s.cart[prod.id];
+      const newQty = (cur ? cur.qty : 0) + q;
+      const cart = { ...s.cart, [prod.id]: { id: prod.id, name: prod.name, attr: prod.attr, price: prod.price, qty: newQty, img: prod.img || '' } };
+      this._persistCart(cart);
+      return { cart, toast: true, toastName: prod.name };
+    });
+    clearTimeout(this._toastTimer);
+    this._toastTimer = setTimeout(() => this.setState({ toast: false }), 2500);
+  }
   get wa() { return (this.props.numeroWhatsapp || '595981000000').replace(/[^0-9]/g, ''); }
   fmt(n) { return 'Gs. ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
   norm(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
@@ -375,6 +411,7 @@ class Component extends DCLogic {
       if (st.catMenuOpen && !e.target.closest('[data-catdd]')) this.setState({ catMenuOpen: false });
     };
     document.addEventListener('click', this._onDoc);
+    this._loadCart();
     // Leer filtros de URL: ?cat=X y ?q=Y.
     let initialFilter = 'Todos';
     let initialQuery = '';
@@ -507,9 +544,13 @@ class Component extends DCLogic {
         priceLabel: fmt(dp.price), hasOld: !!dp.old, oldLabel: dp.old ? fmt(dp.old) : '',
         savePct: dp.old ? '-' + Math.round((1 - dp.price / dp.old) * 100) + '%' : '',
         img: dp.img, badgeText: db.text, badgeBg: db.bg, badgeFg: db.fg,
-        consult: waBase('Hola! Quiero consultar por: ' + dp.name + ' (' + dp.attr + ').')
+        consult: waBase('Hola! Quiero consultar por: ' + dp.name + ' (' + dp.attr + ').'),
+        addToCart: () => { this.addToCart(dp, 1); this.closeDetail(); }
       };
     }
+    // Conteo total de items en el carrito para el badge del icono header.
+    const cartCount = Object.keys(st.cart || {}).reduce((n, id) => n + (st.cart[id]?.qty || 0), 0);
+    const hasCart = cartCount > 0;
     const detailOpen = !!detail;
     const detailWrapStyle = 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;transition:opacity .3s ease;opacity:' +
       (detailOpen ? '1' : '0') + ';pointer-events:' + (detailOpen ? 'auto' : 'none') + ';';
@@ -536,7 +577,10 @@ class Component extends DCLogic {
       nextStyle: pageBtnStyle(hasNext),
       pageInfoStyle,
       gotoPrev: () => { if (hasPrev) this.prevPage(); },
-      gotoNext: () => { if (hasNext) this.nextPage(); }
+      gotoNext: () => { if (hasNext) this.nextPage(); },
+      // Carrito (icono del header)
+      cartCount, hasCart, cartHref: '/?cart=1',
+      toast: st.toast, toastName: st.toastName
     };
   }
 }
