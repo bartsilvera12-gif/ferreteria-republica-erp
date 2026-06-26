@@ -1767,11 +1767,17 @@ class Component extends DCLogic {
       onSearchBlur: () => setTimeout(() => this.setState({ searchDrop: false }), 160),
       goInicio: () => this.goTo('inicio'),
       goCategorias: () => this.goTo('categorias'),
-      goOfertas: () => this.goTo('ofertas'),
+      // 'Ver ofertas' del hero abre el catalogo con el filtro de Ofertas
+      // aplicado (mismo destino que 'Ver todas las ofertas' del bloque inferior
+      // y la pill 'Ofertas' del navbar). Antes scrolleaba al anchor del home.
+      goOfertas: () => this.openCatalog('Ofertas'),
       goOfertasCatalog: () => this.openCatalog('Ofertas'),
       openCatalog: (f) => this.openCatalog(f),
       closeCatalog: () => this.closeCatalog(),
-      goProductos: () => this.goTo('masvendidos'),
+      // 'Comprar ahora' del hero abre el catalogo completo (sin filtro).
+      // Antes scrolleaba a la seccion 'masvendidos' del home; ahora lleva
+      // directo a /catalogo donde el cliente tiene la grilla completa.
+      goProductos: () => this.openCatalog('Todos'),
       goContacto: () => this.goTo('contacto'),
       catMenuItems, catMenuEmpty, catCaretStyle, catMenuStyle,
       catSearch: st.catSearch,
