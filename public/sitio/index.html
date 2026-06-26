@@ -1162,7 +1162,15 @@ class Component extends DCLogic {
     }
     this._fanCards.forEach((el, i) => {
       if (el._fanBound) return; el._fanBound = true;
-      el.addEventListener('mouseenter', () => { if (this._fanVisible && this._fanVisible.has(i)) this.fanHover(this._fanVisible.get(i)); });
+      el.addEventListener('mouseenter', () => {
+        if (this._fanVisible && this._fanVisible.has(i)) {
+          this.fanHover(this._fanVisible.get(i));
+          // Sincronizar labels con la card bajo el cursor (sin moverla al
+          // centro). Asi al pasar el mouse por cualquier card el nombre,
+          // precio y atributos de abajo reflejan ese producto.
+          this._fanShowData(i);
+        }
+      });
       // Click handler: si la card NO esta centrada -> centrarla (actualiza
       // nombre/precio/atributos de abajo). Si SI esta centrada -> abrir el
       // detalle del producto. Asi cualquier card del fan responde al click
@@ -1179,7 +1187,14 @@ class Component extends DCLogic {
         }
       });
     });
-    if (!layout._leaveBound) { layout._leaveBound = true; layout.addEventListener('mouseleave', () => this.fanHover(null)); }
+    if (!layout._leaveBound) {
+      layout._leaveBound = true;
+      layout.addEventListener('mouseleave', () => {
+        this.fanHover(null);
+        // Al sacar el mouse, restaurar labels al producto centrado actual.
+        this._fanShowData(this._fanCenter);
+      });
+    }
     if (!layout._touchBound) {
       layout._touchBound = true;
       let sx = 0, sy = 0, st = 0, locked = false;
@@ -1237,6 +1252,20 @@ class Component extends DCLogic {
     const total = (this._fanCards || []).length; if (!total) return;
     this._fanCenter = (this._fanCenter + dir + total) % total;
     this.fanLayout();
+  }
+  // Actualiza los labels (nombre/precio/atributos) + boton 'Agregar' al
+  // producto cuyo card index recibe. Lo usan hover y click sin reposicionar
+  // el fan. Lo extrajimos como helper porque fanLayout tambien lo hacia
+  // inline solo con el centrado.
+  _fanShowData(cardIndex) {
+    const it = this._fanData && this._fanData[cardIndex];
+    if (!it) return;
+    const set = (id, v) => { const e = document.getElementById(id); if (e) e.textContent = v; };
+    set('fanName', it.name);
+    set('fanPrice', it.priceLabel);
+    set('fanAttr', it.attr);
+    const addb = document.getElementById('fanAdd');
+    if (addb) addb.onclick = it.add;
   }
   fanHover(hoveredSlot) {
     const cards = this._fanCards, visible = this._fanVisible; if (!cards || !visible) return;
