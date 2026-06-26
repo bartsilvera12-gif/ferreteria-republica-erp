@@ -107,7 +107,9 @@ const MENU_STRUCTURE: MenuItem[] = [
   //   href: "/dashboard/monitoreo", icon: Activity,
   // },
   { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart },
-  { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
+  // Presupuestos oculto en ferreteria (la tienda publica + WhatsApp manejan
+  // cotizaciones manualmente, no se usa el modulo).
+  // { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
   // Items gastro/legacy ocultados para ferreteria (codigo conservado por si se reactivan):
   // - Pedidos (proyectos): kanban de cocina, no aplica.
   // - Recetas: combos/insumos, no aplica.
@@ -122,7 +124,9 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Categorías", href: "/inventario/categorias" },
     // "Depósitos / Ubicaciones" oculto en instancia En lo de Mari (no aplica para gastronomía).
   ]},
-  { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
+  // Clientes oculto en ferreteria (el contacto es por WhatsApp, no se
+  // mantiene base de clientes en el ERP).
+  // { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
   { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Banknote },
   {
     key: "compras",
