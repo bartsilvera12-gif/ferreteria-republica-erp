@@ -1818,10 +1818,14 @@ class Component extends DCLogic {
       categories, filters, products, resultLabel, offers, hasOfertas,
       cartItems, count, hasItems, cartEmpty: !hasItems,
       subtotalLabel: fmt(subtotal), waOrderHref,
-      // ofertasOn antes era un toggle de props. Ahora se deriva: hay seccion
-      // Ofertas solo si tenemos productos con descuento activo en el ERP.
-      ofertasOn: hasOfertas,
-      // Countdown solo se muestra si el ERP tiene una fecha futura configurada.
+      // Seccion Ofertas se muestra SOLO si:
+      //   1) hay productos destacados con descuento activo (hasOfertas), Y
+      //   2) hay una fecha de countdown configurada en el ERP que no expiro.
+      // Si la fecha vence o se borra desde Ofertas del home, la seccion entera
+      // se oculta hasta que el admin cargue una nueva fecha futura.
+      ofertasOn:
+        hasOfertas &&
+        !!(st.countdownEnd && Date.parse(st.countdownEnd) > Date.now()),
       countdownOn: !!(st.countdownEnd && Date.parse(st.countdownEnd) > Date.now()),
       toast: st.toast, toastName: st.toastName,
       homeViewStyle, catalogViewStyle,
