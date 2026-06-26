@@ -122,18 +122,18 @@ export default function OfertasHomePage() {
   }, []);
 
   // Buscar productos en el picker (debounce 300ms) — solo con descuento.
+  // Al abrir el modal, lista TODOS los productos con descuento (sin query).
+  // Al tipear 1+ caracter, filtra por nombre/SKU mantieniendo el filtro de
+  // descuento activo.
   useEffect(() => {
     if (!pickerOpen) return;
     const q = pickerQuery.trim();
-    if (q.length < 2) {
-      setPickerResults([]);
-      return;
-    }
     setPickerLoading(true);
     const t = setTimeout(async () => {
       try {
+        const qs = q.length > 0 ? `q=${encodeURIComponent(q)}&` : "";
         const res = await fetchWithSupabaseSession(
-          `/api/productos/search?q=${encodeURIComponent(q)}&limit=20&con_descuento=1`
+          `/api/productos/search?${qs}limit=50&con_descuento=1`
         );
         const json = await res.json();
         const items = Array.isArray(json?.data?.items) ? json.data.items : [];
@@ -502,30 +502,21 @@ export default function OfertasHomePage() {
                   <p className="text-xs text-slate-400 mt-2">Buscando...</p>
                 </div>
               )}
-              {!pickerLoading && pickerQuery.trim().length < 2 && (
+              {!pickerLoading && pickerResults.length === 0 && (
                 <div className="py-12 text-center">
-                  <Search className="h-7 w-7 text-slate-300 mx-auto mb-2" />
+                  <Tag className="h-7 w-7 text-slate-300 mx-auto mb-2" />
                   <p className="text-sm font-semibold text-slate-600">
-                    Escribí al menos 2 caracteres
+                    {pickerQuery.trim().length > 0
+                      ? "Sin resultados"
+                      : "No hay productos con descuento"}
                   </p>
-                  <p className="text-xs text-slate-400 mt-1">
-                    Solo aparecen productos con descuento activo
+                  <p className="text-xs text-slate-400 mt-1 max-w-xs mx-auto">
+                    {pickerQuery.trim().length > 0
+                      ? `Ningún producto con descuento coincide con "${pickerQuery}"`
+                      : "Configurá un descuento promocional en algún producto desde Inventario → Editar producto."}
                   </p>
                 </div>
               )}
-              {!pickerLoading &&
-                pickerQuery.trim().length >= 2 &&
-                pickerResults.length === 0 && (
-                  <div className="py-12 text-center">
-                    <Tag className="h-7 w-7 text-slate-300 mx-auto mb-2" />
-                    <p className="text-sm font-semibold text-slate-600">
-                      Sin resultados
-                    </p>
-                    <p className="text-xs text-slate-400 mt-1">
-                      Ningún producto con descuento coincide con &quot;{pickerQuery}&quot;
-                    </p>
-                  </div>
-                )}
               {!pickerLoading &&
                 pickerResults.map((p) => {
                   const disc = getDiscountInfo(p);
