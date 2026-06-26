@@ -1160,8 +1160,11 @@ class Component extends DCLogic {
 
   openCatalog(filter) {
     const f = (typeof filter === 'string') ? filter : 'Todos';
-    this.setState({ view: 'catalog', catalogFilter: f, catalogSearch: '', menuOpen: false, catMenuOpen: false });
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    // Navegar a la pagina real del catalogo (con paginacion server-side
+    // y filtros que consultan el ERP de verdad). La vista embebida que
+    // existia antes solo veia los 8 destacados cargados en el home.
+    const qs = (f && f !== 'Todos') ? ('?cat=' + encodeURIComponent(f)) : '';
+    window.location.href = '/catalogo' + qs;
   }
   closeCatalog() {
     this.setState({ view: 'home' });

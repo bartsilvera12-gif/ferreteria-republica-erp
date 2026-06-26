@@ -355,18 +355,30 @@ class Component extends DCLogic {
       if (st.catMenuOpen && !e.target.closest('[data-catdd]')) this.setState({ catMenuOpen: false });
     };
     document.addEventListener('click', this._onDoc);
-    // Cargar productos + categorias reales del ERP (no bloquea render inicial)
-    this.cargarDatos();
+    // Leer filtro de URL (?cat=X). El filtro se hace server-side por categoria_id,
+    // que solo conocemos despues de cargar /api/sitio/categorias. Por eso:
+    //   - si hay filtro en URL: cargamos categorias PRIMERO, luego cargarDatos
+    //     (la primera consulta ya pega bien con la categoria correcta)
+    //   - sin filtro: cargarDatos directo
+    let initialFilter = 'Todos';
     try {
       const raw = new URLSearchParams(window.location.search).get('cat');
       if (raw) {
-        // El filtro por query string ?cat= se valida contra las categorias dinamicas
-        // cuando estas se cargan. Por ahora seteamos el filtro y catalog() lo respeta.
         const map = { 'Adhesivos y selladores': 'Adhesivos' };
-        const v = map[raw] || raw;
-        this.setState({ filter: v });
+        initialFilter = map[raw] || raw;
       }
     } catch (e) {}
+    if (initialFilter !== 'Todos') {
+      fetch('/api/sitio/categorias').then(r => r.json()).then(cr => {
+        const cats = Array.isArray(cr.categorias) ? cr.categorias : [];
+        this.setState({ dbCategorias: cats, filter: initialFilter, loading: true }, () => this.cargarDatos());
+      }).catch(() => {
+        this.setState({ filter: initialFilter });
+        this.cargarDatos();
+      });
+    } else {
+      this.cargarDatos();
+    }
   }
   componentWillUnmount() { if (this._onDoc) document.removeEventListener('click', this._onDoc); }
 
