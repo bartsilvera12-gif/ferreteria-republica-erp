@@ -127,6 +127,10 @@ export default function NuevaVentaPage() {
   // Facturación de un pedido enviado a Caja (?pedido_id=...). Precarga items + cliente.
   const [pedidoId, setPedidoId] = useState<string | null>(null);
   const [pedidoNumero, setPedidoNumero] = useState<string | null>(null);
+  // Pedido del modulo Consulta (?pedido_caja_id=...). Flujo paralelo,
+  // independiente del legacy proyectos.
+  const [pedidoCajaId, setPedidoCajaId] = useState<string | null>(null);
+  const [pedidoCajaTitulo, setPedidoCajaTitulo] = useState<string | null>(null);
 
   // ── Condiciones de la venta ───────────────────────────────────────────────
   // Instancia dedicada: siempre Guaraníes.
@@ -323,6 +327,73 @@ export default function NuevaVentaPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Precarga al cobrar un pedido del modulo Consulta (?pedido_caja_id=...):
+  // trae el pedido y carga sus items + cliente en el carrito.
+  useEffect(() => {
+    let cancelled = false;
+    let pid: string | null = null;
+    try {
+      pid = new URLSearchParams(window.location.search).get("pedido_caja_id");
+    } catch { pid = null; }
+    if (!pid) return;
+    setPedidoCajaId(pid);
+    (async () => {
+      try {
+        const res = await fetch(`/api/pedidos-caja/${pid}`, {
+          credentials: "include",
+          cache: "no-store",
+        });
+        const j = await res.json();
+        if (cancelled || !j?.success || !j.data?.pedido) return;
+        const p = j.data.pedido as {
+          titulo: string;
+          cliente_id?: string | null;
+          items: Array<{
+            producto_id: string;
+            producto_nombre: string;
+            sku: string | null;
+            cantidad: number;
+            precio_venta: number;
+            tipo_precio?: "minorista" | "mayorista" | "distribuidor";
+            presentacion_id?: string | null;
+            presentacion_nombre?: string | null;
+            presentacion_cantidad_base?: number | null;
+          }>;
+        };
+        setPedidoCajaTitulo(p.titulo);
+        const lineas: LineaVenta[] = (p.items ?? [])
+          .filter((it) => it.producto_id && (Number(it.cantidad) || 0) > 0)
+          .map((it) => {
+            const cantidad = Number(it.cantidad) || 0;
+            const precio = Number(it.precio_venta) || 0;
+            const iva: TipoIvaVenta = "10%";
+            const totalLinea = cantidad * precio;
+            const montoIva = calcIva(iva, totalLinea);
+            const subtotal = totalLinea - montoIva;
+            return {
+              producto_id: String(it.producto_id),
+              producto_nombre: it.producto_nombre,
+              sku: it.sku ?? "",
+              cantidad,
+              precio_venta_original: precio,
+              precio_venta: precio,
+              tipo_iva: iva,
+              tipo_precio: (it.tipo_precio ?? "minorista") as TipoPrecioVenta,
+              subtotal,
+              monto_iva: montoIva,
+              total_linea: totalLinea,
+              presentacion_id: it.presentacion_id ?? null,
+              presentacion_nombre: it.presentacion_nombre ?? null,
+              presentacion_cantidad_base: it.presentacion_cantidad_base ?? null,
+            };
+          });
+        if (!cancelled && lineas.length) setItems(lineas);
+        if (!cancelled && p.cliente_id) setClienteId(String(p.cliente_id));
+      } catch { /* fallback: el cajero carga manualmente */ }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   // Cargar entidades bancarias (caja/banco/tarjeta/billetera) para el detalle de cobro.
   useEffect(() => {
     let cancelled = false;
@@ -361,7 +432,8 @@ export default function NuevaVentaPage() {
   useEffect(() => {
     let tienePedido = false;
     try {
-      tienePedido = !!new URLSearchParams(window.location.search).get("pedido_id");
+      const sp = new URLSearchParams(window.location.search);
+      tienePedido = !!(sp.get("pedido_id") || sp.get("pedido_caja_id"));
     } catch { tienePedido = false; }
     if (!tienePedido) setPickerOpen(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -603,7 +675,7 @@ export default function NuevaVentaPage() {
           titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
           observacion: pagoObservacion.trim() || null,
         },
-        { permitirSinStock, pedidoId }
+        { permitirSinStock, pedidoId, pedidoCajaId }
       );
 
       if (!resultado.success) {
@@ -675,6 +747,15 @@ export default function NuevaVentaPage() {
         <div className="rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-4 py-3 text-sm text-slate-700">
           <span className="font-semibold text-[#3F8E91]">Estás facturando un pedido{pedidoNumero ? ` (${pedidoNumero})` : ""}.</span>{" "}
           La venta se generará al confirmar y el pedido quedará marcado como facturado. Podés ajustar items, precios y método de pago.
+        </div>
+      )}
+
+      {pedidoCajaId && (
+        <div className="rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-4 py-3 text-sm text-slate-700">
+          <span className="font-semibold text-[#3F8E91]">
+            Cobrando pedido de Consulta{pedidoCajaTitulo ? ` (${pedidoCajaTitulo})` : ""}.
+          </span>{" "}
+          Al confirmar, el pedido quedará marcado como facturado. Podés ajustar items, precios y método de pago.
         </div>
       )}
 

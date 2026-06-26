@@ -7,6 +7,7 @@ import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import { getVentas } from "@/lib/ventas/storage";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
+import PedidosConsultaPendientes from "./PedidosConsultaPendientes";
 import { esMismoDiaAsuncion } from "@/lib/fecha/asuncion";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
@@ -208,6 +209,7 @@ export default function VentasPage() {
         <p className="mt-0.5 text-xs text-slate-500">Cobro, facturación y cierre de pedidos</p>
       </div>
 
+      <PedidosConsultaPendientes />
       <PedidosPendientesCaja />
 
       {/* ── Métricas del día ──────────────────────────────────────────────────── */}

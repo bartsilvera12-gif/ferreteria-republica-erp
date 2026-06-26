@@ -107,6 +107,9 @@ const MENU_STRUCTURE: MenuItem[] = [
   //   href: "/dashboard/monitoreo", icon: Activity,
   // },
   { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart },
+  // Consulta: vendedor arma pedidos en el salon y los envia a Caja para cobrar.
+  // Slug 'ventas' para heredar acceso del modulo (mismo permiso).
+  { key: "consulta", slug: "ventas", label: "Consulta", href: "/consulta", icon: Search },
   // Presupuestos oculto en ferreteria (la tienda publica + WhatsApp manejan
   // cotizaciones manualmente, no se usa el modulo).
   // { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
@@ -124,9 +127,8 @@ const MENU_STRUCTURE: MenuItem[] = [
     { label: "Categorías", href: "/inventario/categorias" },
     // "Depósitos / Ubicaciones" oculto en instancia En lo de Mari (no aplica para gastronomía).
   ]},
-  // Clientes oculto en ferreteria (el contacto es por WhatsApp, no se
-  // mantiene base de clientes en el ERP).
-  // { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
+  // Clientes: reactivado para que el modulo Consulta pueda asociar pedidos.
+  { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
   { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Banknote },
   {
     key: "compras",
@@ -205,7 +207,7 @@ const MENU_STRUCTURE: MenuItem[] = [
  */
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
-  { id: "comercial", titulo: "Comercial", keys: ["clientes", "crm", "gestion-clientes", "ventas", "presupuestos", "comisiones", "planes", "ofertas_home"] },
+  { id: "comercial", titulo: "Comercial", keys: ["clientes", "crm", "gestion-clientes", "ventas", "consulta", "presupuestos", "comisiones", "planes", "ofertas_home"] },
   { id: "finanzas", titulo: "Finanzas", keys: ["pagos", "gastos", "notas_credito", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "recetas", "proyectos"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones", "conversaciones-finalizadas", "historial-omnicanal", "monitoreo", "campanas"] },

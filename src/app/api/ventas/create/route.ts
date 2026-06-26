@@ -145,6 +145,13 @@ export async function POST(request: NextRequest) {
     const permitirSinStock = o.permitir_sin_stock === true;
     // Pedido (proyecto) que se está facturando desde Caja. Opcional.
     const pedidoId = typeof o.pedido_id === "string" && o.pedido_id.trim() ? o.pedido_id.trim() : null;
+    // Pedido del modulo Consulta (tabla pedidos_caja). Opcional, independiente
+    // del legacy proyectos. Cuando viene, al finalizar la venta marcamos el
+    // pedido como facturado via marcarPedidoFacturado.
+    const pedidoCajaId =
+      typeof o.pedido_caja_id === "string" && o.pedido_caja_id.trim()
+        ? o.pedido_caja_id.trim()
+        : null;
 
     // Pedido de cocina (modalidad obligatoria en instancia En lo de Mari)
     const pedidoRaw = (o.pedido_cocina ?? null) as Record<string, unknown> | null;
@@ -262,6 +269,26 @@ export async function POST(request: NextRequest) {
         }
       } catch (e) {
         console.error("[ventas/create] link pedido->venta fallo (venta OK):", e instanceof Error ? e.message : e);
+      }
+    }
+
+    // Marcar pedido_caja como facturado (modulo Consulta). Best-effort.
+    if (pedidoCajaId) {
+      try {
+        const { marcarPedidoFacturado } = await import("@/lib/pedidos-caja/server");
+        const sbCaja = createServiceRoleClientWithDbSchema(schema);
+        await marcarPedidoFacturado(
+          sbCaja,
+          auth.empresa_id,
+          pedidoCajaId,
+          ventaId,
+          numeroControl
+        );
+      } catch (e) {
+        console.error(
+          "[ventas/create] no se pudo marcar pedido_caja facturado:",
+          e instanceof Error ? e.message : e
+        );
       }
     }
 
