@@ -193,14 +193,18 @@ export default function EditarProductoPage() {
       if (cancelled || !p) return;
       const costo = p.costo_promedio;
       const precio = p.precio_venta;
-      const markup = costo > 0 ? ((precio - costo) / costo) * 100 : 0;
+      // Treshold > 1: el import inicial uso costo=1 como placeholder. Con
+      // costos <= 1 el markup sale absurdo (1.499.900% para precio 15k) y
+      // confunde al usuario. Lo dejamos en blanco hasta que carguen un
+      // costo real.
+      const markup = costo > 1 ? ((precio - costo) / costo) * 100 : null;
       setForm({
         nombre: p.nombre,
         sku: p.sku,
         codigo_barras: p.codigo_barras ?? "",
         codigo_barras_interno: p.codigo_barras_interno === true,
         costo_promedio: String(p.costo_promedio),
-        markup: markup.toFixed(2),
+        markup: markup !== null ? markup.toFixed(2) : "",
         precio_venta: String(p.precio_venta),
         precio_mayorista: p.precio_mayorista != null ? String(p.precio_mayorista) : "",
         cantidad_minima_mayorista: p.cantidad_minima_mayorista != null ? String(p.cantidad_minima_mayorista) : "",
@@ -287,11 +291,14 @@ export default function EditarProductoPage() {
     const precio = parseFloat(form.precio_venta);
     // Al cambiar el costo NO movemos el precio (es lo que el cliente cobra).
     // Recalculamos markup a partir del gap precio-costo cuando ambos son válidos.
-    if (!isNaN(costo) && costo > 0 && !isNaN(precio) && precio > 0) {
+    // Threshold > 1: ver comentario en el load. Si el costo sigue siendo el
+    // placeholder de 1 (o menor), markup queda vacio en vez de mostrar un
+    // numero absurdo.
+    if (!isNaN(costo) && costo > 1 && !isNaN(precio) && precio > 0) {
       const nuevoMarkup = ((precio - costo) / costo) * 100;
       setForm((prev) => ({ ...prev, costo_promedio: String(costo), markup: nuevoMarkup.toFixed(2) }));
     } else {
-      setForm((prev) => ({ ...prev, costo_promedio: String(costo) }));
+      setForm((prev) => ({ ...prev, costo_promedio: String(costo), markup: "" }));
     }
   }
 
@@ -300,7 +307,7 @@ export default function EditarProductoPage() {
     setErrorGeneral(null);
     const markup = parseFloat(e.target.value);
     const costo = parseFloat(form.costo_promedio);
-    if (!isNaN(markup) && !isNaN(costo) && costo > 0) {
+    if (!isNaN(markup) && !isNaN(costo) && costo > 1) {
       const nuevoPrecio = costo * (1 + markup / 100);
       setForm((prev) => ({ ...prev, markup: e.target.value, precio_venta: nuevoPrecio.toFixed(0) }));
     } else {
@@ -970,6 +977,17 @@ export default function EditarProductoPage() {
                   decimals={false}
                   required
                 />
+                {(() => {
+                  const c = parseFloat(form.costo_promedio);
+                  if (!isNaN(c) && c > 0 && c <= 1) {
+                    return (
+                      <p className="mt-1.5 text-[11px] text-amber-700">
+                        Costo placeholder de la importación. Cargá el costo real para calcular el markup.
+                      </p>
+                    );
+                  }
+                  return null;
+                })()}
               </div>
               {showPrecioVenta && (
               <div>
@@ -981,6 +999,14 @@ export default function EditarProductoPage() {
                   onChange={handleMarkupChange}
                   className={inputClass}
                   step="0.01"
+                  placeholder={(() => {
+                    const c = parseFloat(form.costo_promedio);
+                    return !isNaN(c) && c > 0 && c <= 1 ? "Sin costo real" : "";
+                  })()}
+                  disabled={(() => {
+                    const c = parseFloat(form.costo_promedio);
+                    return !isNaN(c) && c > 0 && c <= 1;
+                  })()}
                 />
               </div>
               )}
