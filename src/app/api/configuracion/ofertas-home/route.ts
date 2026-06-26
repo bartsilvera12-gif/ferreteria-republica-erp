@@ -23,7 +23,9 @@ export async function GET(request: NextRequest) {
     sb.from("empresas").select("ofertas_countdown_end").eq("id", empresaId).maybeSingle(),
     sb
       .from("productos")
-      .select("id, nombre, sku, precio_venta")
+      .select(
+        "id, nombre, sku, precio_venta, discount_type, discount_value, discount_starts_at, discount_ends_at"
+      )
       .eq("empresa_id", empresaId)
       .eq("oferta_semana_destacada", true)
       .order("nombre", { ascending: true }),

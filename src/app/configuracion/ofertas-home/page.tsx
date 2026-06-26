@@ -78,12 +78,39 @@ export default function OfertasHomePage() {
     (async () => {
       try {
         const res = await fetchWithSupabaseSession("/api/configuracion/ofertas-home");
-        const json = await res.json();
+        const json = await res.json().catch(() => ({}));
         if (cancel) return;
-        if (!res.ok || !json?.success) throw new Error(json?.error || "Error al cargar");
-        setCountdownEnd(isoToDatetimeLocal(json.countdownEnd));
-        setSelected(Array.isArray(json.productos) ? json.productos : []);
+        if (!res.ok) {
+          throw new Error(json?.error ?? `Error ${res.status} al cargar`);
+        }
+        if (!json?.success) {
+          throw new Error(json?.error ?? "Respuesta inválida del servidor");
+        }
+        setCountdownEnd(isoToDatetimeLocal(json.countdownEnd ?? null));
+        // Defensiva: cada producto puede no tener todos los campos. Garantizo
+        // shape minimo asi el render no explota si la API devuelve algo raro.
+        const raw: unknown[] = Array.isArray(json.productos) ? json.productos : [];
+        const safe: ProductoLite[] = raw
+          .filter((p): p is Record<string, unknown> => !!p && typeof p === "object")
+          .map((p): ProductoLite => ({
+            id: String(p.id ?? ""),
+            nombre: String(p.nombre ?? ""),
+            sku: String(p.sku ?? ""),
+            precio_venta: Number(p.precio_venta) || 0,
+            discount_type:
+              p.discount_type === "percentage" || p.discount_type === "fixed"
+                ? p.discount_type
+                : null,
+            discount_value: p.discount_value != null ? Number(p.discount_value) : null,
+            discount_starts_at:
+              typeof p.discount_starts_at === "string" ? p.discount_starts_at : null,
+            discount_ends_at:
+              typeof p.discount_ends_at === "string" ? p.discount_ends_at : null,
+          }))
+          .filter((p) => p.id); // sin id no sirve para nada
+        setSelected(safe);
       } catch (e) {
+        console.error("[ofertas-home] load:", e);
         if (!cancel) setError(e instanceof Error ? e.message : String(e));
       } finally {
         if (!cancel) setLoading(false);
@@ -238,7 +265,7 @@ export default function OfertasHomePage() {
         <section className="lg:col-span-2 bg-white rounded-2xl border-2 border-[#4FAEB2]/20 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] overflow-hidden hover:border-[#4FAEB2]/40 transition-colors">
           <div className="px-6 py-5 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent flex items-center gap-3">
             <div className="h-10 w-10 rounded-xl bg-[#4FAEB2] flex items-center justify-center shadow-sm shadow-[#4FAEB2]/30">
-              <Calendar className="h-4.5 w-4.5 text-white" />
+              <Calendar className="h-5 w-5 text-white" />
             </div>
             <div>
               <h2 className="text-[15px] font-bold text-slate-800 leading-none">
@@ -280,7 +307,7 @@ export default function OfertasHomePage() {
           <div className="px-6 py-5 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-3">
               <div className="h-10 w-10 rounded-xl bg-[#4FAEB2] flex items-center justify-center shadow-sm shadow-[#4FAEB2]/30">
-                <Package className="h-4.5 w-4.5 text-white" />
+                <Package className="h-5 w-5 text-white" />
               </div>
               <div>
                 <h2 className="text-[15px] font-bold text-slate-800 leading-none flex items-center gap-2">
