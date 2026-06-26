@@ -703,11 +703,10 @@
                   <div style="font-size:10px;font-weight:700;color:#E97932;letter-spacing:.1em;text-transform:uppercase;margin-bottom:5px;">{{ p.cat }}</div>
                   <div style="font-size:16px;font-weight:700;color:#15213b;line-height:1.25;margin-bottom:3px;">{{ p.name }}</div>
                   <div style="font-size:12.5px;color:#7a849a;margin-bottom:12px;">{{ p.attr }}</div>
-                  <div style="margin-top:auto;display:flex;align-items:baseline;gap:8px;">
-                    <span style="font-family:'Oswald',sans-serif;font-weight:600;font-size:24px;color:#021F5F;line-height:1;">{{ p.priceLabel }}</span>
+                  <div style="margin-top:auto;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;">
+                    <span style="font-family:'Oswald',sans-serif;font-weight:600;font-size:26px;color:#021F5F;line-height:1;">{{ p.priceLabel }}</span>
                     <sc-if value="{{ p.hasOld }}" hint-placeholder-val="{{ false }}"><span style="font-family:'Oswald',sans-serif;font-size:14px;color:#A4ACBA;text-decoration:line-through;">{{ p.oldLabel }}</span></sc-if>
                   </div>
-                  <div style="margin-top:12px;display:inline-flex;align-items:center;gap:7px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:#E97932;">Ver detalle <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div>
                 </div>
               </div>
             </sc-for>
@@ -1602,7 +1601,18 @@ class Component extends DCLogic {
       (st.menuOpen ? '0' : '-101%') + ');padding:20px;display:flex;flex-direction:column;overflow-y:auto;';
 
     this._fanData = all;
-    const dp = st.detail ? this.catalog().find(p => p.id === st.detail) : null;
+    // Resolver el producto del detalle. Buscar primero en destacados (catalog())
+    // y si no, en los productos cargados del catalogo server-side (donde el
+    // usuario clickeo desde la vista paginada).
+    let dp = null;
+    if (st.detail) {
+      dp = this.catalog().find(p => p.id === st.detail);
+      if (!dp) {
+        const _dpNow = Date.now();
+        const fromCatalog = (st.catalogServerProducts || []).find(p => String(p.id) === st.detail);
+        if (fromCatalog) dp = this._mapProd(fromCatalog, _dpNow);
+      }
+    }
     let detail = null;
     if (dp) {
       if (this._detailQty == null) this._detailQty = st.qtys[dp.id] || 1;
@@ -1649,9 +1659,21 @@ class Component extends DCLogic {
       style: 'cursor:pointer;border:1.5px solid ' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.22)') + ';background:' + (catalogCf === label ? '#E97932' : 'rgba(255,255,255,.06)') + ';color:#fff;font-weight:600;font-size:13px;padding:7px 16px;border-radius:999px;white-space:nowrap;font-family:Montserrat;transition:all .2s;',
       set: () => this.onCatalogFilterChange(label)
     }));
-    // Productos del catalogo: ahora vienen del server (paginados, todo el catalogo).
+    // Productos del catalogo: vienen del server (paginados, todo el catalogo).
+    // _mapProd devuelve el shape base; aca agregamos priceLabel, badge styles y
+    // el handler open() para que se abra el modal de detalle al clickear la card.
     const _catNow = Date.now();
-    const catalogProducts = (st.catalogServerProducts || []).map(p => this._mapProd(p, _catNow));
+    const catalogProducts = (st.catalogServerProducts || []).map(rawP => {
+      const p = this._mapProd(rawP, _catNow);
+      const b = (badgeMap[p.badge] || badgeMap['Stock']);
+      return {
+        ...p,
+        priceLabel: fmt(p.price),
+        hasOld: !!p.old, oldLabel: p.old ? fmt(p.old) : '',
+        badgeBg: b.bg, badgeFg: b.fg, badgeText: b.text,
+        open: () => this.openDetail(p.id)
+      };
+    });
     const catalogHasResults = catalogProducts.length > 0;
     const catalogTotal = st.catalogTotal || 0;
     const catalogPageSize = st.catalogPageSize || 25;
