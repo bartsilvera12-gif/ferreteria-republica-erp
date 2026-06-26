@@ -364,28 +364,34 @@ class Component extends DCLogic {
       if (st.catMenuOpen && !e.target.closest('[data-catdd]')) this.setState({ catMenuOpen: false });
     };
     document.addEventListener('click', this._onDoc);
-    // Leer filtro de URL (?cat=X). El filtro se hace server-side por categoria_id,
-    // que solo conocemos despues de cargar /api/sitio/categorias. Por eso:
-    //   - si hay filtro en URL: cargamos categorias PRIMERO, luego cargarDatos
-    //     (la primera consulta ya pega bien con la categoria correcta)
-    //   - sin filtro: cargarDatos directo
+    // Leer filtros de URL: ?cat=X y ?q=Y.
+    // El filtro por categoria se hace server-side por categoria_id que solo
+    // conocemos despues de cargar /api/sitio/categorias. Por eso si hay ?cat=,
+    // cargamos categorias PRIMERO y despues cargarDatos.
+    // El ?q= se aplica directo (no requiere categorias).
     let initialFilter = 'Todos';
+    let initialQuery = '';
     try {
-      const raw = new URLSearchParams(window.location.search).get('cat');
+      const sp = new URLSearchParams(window.location.search);
+      const raw = sp.get('cat');
       if (raw) {
         const map = { 'Adhesivos y selladores': 'Adhesivos' };
         initialFilter = map[raw] || raw;
       }
+      const q = sp.get('q');
+      if (q) initialQuery = q;
     } catch (e) {}
+    const baseState = { search: initialQuery };
     if (initialFilter !== 'Todos') {
       fetch('/api/sitio/categorias').then(r => r.json()).then(cr => {
         const cats = Array.isArray(cr.categorias) ? cr.categorias : [];
-        this.setState({ dbCategorias: cats, filter: initialFilter, loading: true }, () => this.cargarDatos());
+        this.setState({ ...baseState, dbCategorias: cats, filter: initialFilter, loading: true }, () => this.cargarDatos());
       }).catch(() => {
-        this.setState({ filter: initialFilter });
+        this.setState({ ...baseState, filter: initialFilter });
         this.cargarDatos();
       });
     } else {
+      this.setState(baseState);
       this.cargarDatos();
     }
   }

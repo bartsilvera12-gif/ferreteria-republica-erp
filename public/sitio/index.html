@@ -211,7 +211,7 @@
     <div class="sec-pad" style="max-width:1240px;margin:0 auto;padding:0 28px;display:flex;align-items:center;gap:22px;">
       <img onClick="{{ goInicio }}" src="assets/republica-logo.png" alt="Ferretería República" style="height:38px;width:auto;cursor:pointer;flex:none;"/>
       <div class="header-search" style="flex:1;min-width:0;max-width:540px;position:relative;">
-        <input class="search-field" value="{{ search }}" onChange="{{ onSearch }}" onFocus="{{ onSearchFocus }}" onBlur="{{ onSearchBlur }}" placeholder="Buscá herramientas, materiales..." style="width:100%;height:42px;border-radius:11px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;padding:0 16px 0 42px;font-size:13.5px;outline:none;"/>
+        <input class="search-field" value="{{ search }}" onChange="{{ onSearch }}" onInput="{{ onSearch }}" onKeyDown="{{ onSearchKey }}" onFocus="{{ onSearchFocus }}" onBlur="{{ onSearchBlur }}" placeholder="Buscá herramientas, materiales..." style="width:100%;height:42px;border-radius:11px;border:1.5px solid rgba(255,255,255,.16);background:rgba(255,255,255,.08);color:#fff;padding:0 16px 0 42px;font-size:13.5px;outline:none;"/>
         <svg style="position:absolute;left:14px;top:12px;pointer-events:none;" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#aeb7c7" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.2-3.2"/></svg>
         <sc-if value="{{ searchDropOpen }}" hint-placeholder-val="{{ false }}">
           <div style="position:absolute;top:calc(100% + 8px);left:0;right:0;z-index:200;background:#fff;border-radius:16px;box-shadow:0 24px 60px -18px rgba(2,18,54,.38);border:1px solid #E7EAF0;overflow:hidden;">
@@ -225,7 +225,11 @@
                 <div style="font-size:14px;font-weight:700;color:#021F5F;font-family:'Oswald',sans-serif;white-space:nowrap;flex:none;">{{ sr.priceLabel }}</div>
               </div>
             </sc-for>
-            <div style="padding:10px 14px;font-size:12px;color:#9aa3b4;text-align:center;">Mostrando {{ searchResultCount }} resultado{{ searchResultCount === 1 ? '' : 's' }} — hacé clic para ver detalle</div>
+            <sc-if value="{{ searchHasQuery }}" hint-placeholder-val="{{ false }}">
+              <a href="{{ searchSeeAllHref }}" style="display:block;padding:12px 14px;font-size:13px;color:#E97932;font-weight:700;text-decoration:none;text-align:center;background:#FFF7F0;border-top:1px solid #F0F3F8;letter-spacing:.02em;transition:background .15s;" style-hover="background:#FFEFE0;">
+                Ver todos los resultados →
+              </a>
+            </sc-if>
           </div>
         </sc-if>
       </div>
@@ -872,7 +876,9 @@ class Component extends DCLogic {
     view: 'home', catalogFilter: 'Todos', catalogSearch: '',
     searchDrop: false, filtersOpen: false, mobileCatOpen: false,
     // Datos cargados desde /api/sitio/productos y /api/sitio/categorias
-    dbProducts: [], dbCategorias: [], dbOfertas: [], countdownEnd: null, loading: true, loadError: null
+    dbProducts: [], dbCategorias: [], dbOfertas: [], countdownEnd: null, loading: true, loadError: null,
+    // Resultados del buscador del header (server-side, no filtra solo destacados).
+    serverSearch: [], serverSearchLoading: false
   };
 
   // Helpers de descuento promocional (inline porque support.js no soporta imports).
@@ -898,6 +904,32 @@ class Component extends DCLogic {
     const base = Number(p.precio_venta) || 0;
     if (base <= 0 || !this._discActive(p, now)) return 0;
     return Math.round((base - this._discEffPrice(p, now)) / base * 100);
+  }
+
+  // Handler del input de busqueda del header: setea el texto + dispara fetch
+  // server-side debounced 350ms a /api/sitio/productos?q=... y guarda los
+  // resultados en state.serverSearch. Asi el dropdown muestra coincidencias
+  // del catalogo ENTERO, no solo de los 8 destacados.
+  onHeaderSearch(e) {
+    const v = e.target.value;
+    this.setState({ search: v, searchDrop: true });
+    clearTimeout(this._headerSearchT);
+    if (this.normTxt(v).length < 2) {
+      this.setState({ serverSearch: [], serverSearchLoading: false });
+      return;
+    }
+    this.setState({ serverSearchLoading: true });
+    this._headerSearchT = setTimeout(async () => {
+      try {
+        const url = '/api/sitio/productos?limit=6&q=' + encodeURIComponent(v.trim());
+        const j = await fetch(url).then(r => r.json());
+        // Solo aplicar si el texto sigue siendo el actual (race condition).
+        if (this.state.search !== v) return;
+        this.setState({ serverSearch: Array.isArray(j.productos) ? j.productos : [], serverSearchLoading: false });
+      } catch {
+        this.setState({ serverSearch: [], serverSearchLoading: false });
+      }
+    }, 350);
   }
 
   // Carga: 8 destacados + categorias + banner ofertas (3 productos + countdown
@@ -1449,15 +1481,20 @@ class Component extends DCLogic {
     const detailWrapStyle = 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;padding:24px;transition:opacity .3s ease;opacity:' +
       (detailOpen ? '1' : '0') + ';pointer-events:' + (detailOpen ? 'auto' : 'none') + ';';
 
+    // Buscador del header: usa resultados server-side cargados por onSearch().
+    // Se mapean al shape esperado por la UI. Click en resultado navega al
+    // catalogo con filtro de busqueda aplicado.
     const searchQ = this.normTxt(st.search);
-    const searchResults = searchQ.length >= 2
-      ? all.filter(p => this.normTxt(p.name + ' ' + p.cat + ' ' + p.attr).includes(searchQ)).slice(0, 6).map(p => ({
-          name: p.name, cat: p.cat, priceLabel: fmt(p.price), img: p.img,
-          go: () => this.setState({ detail: p, search: '', searchDrop: false })
-        }))
-      : [];
-    const searchDropOpen = searchResults.length > 0 && st.searchDrop;
+    const now = Date.now();
+    const serverSearch = (this.state.serverSearch || []).map(p => this._mapProd(p, now));
+    const searchResults = (searchQ.length >= 2 ? serverSearch : []).slice(0, 6).map(p => ({
+      name: p.name, cat: p.cat, priceLabel: fmt(p.price), img: p.img,
+      go: () => { window.location.href = '/catalogo?q=' + encodeURIComponent(st.search); }
+    }));
+    const searchDropOpen = (searchResults.length > 0 || this.state.serverSearchLoading) && st.searchDrop;
     const searchResultCount = searchResults.length;
+    const searchHasQuery = searchQ.length >= 2;
+    const searchSeeAllHref = '/catalogo?q=' + encodeURIComponent(st.search);
 
     const catalogCf = st.catalogFilter;
     const catalogCs = this.normTxt(st.catalogSearch);
@@ -1485,8 +1522,16 @@ class Component extends DCLogic {
       fanItems: all,
       fanPrev: () => this.fanCycle(-1),
       fanNext: () => this.fanCycle(1),
-      search: st.search, onSearch: (e) => this.setState({ search: e.target.value, searchDrop: true }),
-      searchResults, searchDropOpen, searchResultCount,
+      search: st.search,
+      onSearch: (e) => this.onHeaderSearch(e),
+      onSearchKey: (e) => {
+        // Enter en el buscador navega a /catalogo?q=...
+        if (e.key === 'Enter' && searchHasQuery) {
+          window.location.href = searchSeeAllHref;
+        }
+      },
+      searchResults, searchDropOpen, searchResultCount, searchHasQuery, searchSeeAllHref,
+      serverSearchLoading: this.state.serverSearchLoading,
       onSearchFocus: () => this.setState({ searchDrop: true }),
       onSearchBlur: () => setTimeout(() => this.setState({ searchDrop: false }), 160),
       goInicio: () => this.goTo('inicio'),
