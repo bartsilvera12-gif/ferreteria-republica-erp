@@ -27,6 +27,11 @@ interface ProductoSearchHit {
   es_vendible: boolean;
   controla_stock: boolean;
   modo_receta: string;
+  // Descuento promocional (oferta)
+  discount_type: "percentage" | "fixed" | null;
+  discount_value: number | null;
+  discount_starts_at: string | null;
+  discount_ends_at: string | null;
 }
 
 const DEFAULT_LIMIT = 30;
@@ -59,6 +64,8 @@ export async function GET(request: NextRequest) {
       Math.min(MAX_LIMIT, Number.isFinite(limitParam) ? limitParam : DEFAULT_LIMIT)
     );
 
+    const conDescuento = url.searchParams.get("con_descuento") === "1";
+
     let query = supabase
       .from("productos")
       .select(
@@ -66,11 +73,20 @@ export async function GET(request: NextRequest) {
           "precio_venta, precio_mayorista, precio_distribuidor, costo_promedio, stock_actual, stock_minimo, " +
           "unidad_medida, metodo_valuacion, imagen_path, imagen_url, " +
           "categoria_principal_id, proveedor_principal_id, ubicacion_principal_id, " +
-          "es_vendible, controla_stock, modo_receta, activo"
+          "es_vendible, controla_stock, modo_receta, activo, " +
+          "discount_type, discount_value, discount_starts_at, discount_ends_at"
       )
       .eq("empresa_id", empresaId)
       .eq("activo", true)
       .eq("es_vendible", true);
+
+    // Filtro opcional para el picker de 'Ofertas del home': solo productos
+    // con descuento promocional configurado (tipo + valor > 0). No exige
+    // que la ventana temporal este activa AHORA — alcanza con que el
+    // descuento exista; la ventana se evalua en render.
+    if (conDescuento) {
+      query = query.not("discount_type", "is", null).gt("discount_value", 0);
+    }
 
     if (q.length > 0) {
       const pat = `%${escapeIlikePattern(q)}%`;
@@ -102,6 +118,13 @@ export async function GET(request: NextRequest) {
       es_vendible: r.es_vendible !== false,
       controla_stock: r.controla_stock !== false,
       modo_receta: typeof r.modo_receta === "string" ? r.modo_receta : "preparado_al_vender",
+      discount_type:
+        r.discount_type === "percentage" || r.discount_type === "fixed"
+          ? (r.discount_type as "percentage" | "fixed")
+          : null,
+      discount_value: r.discount_value != null ? Number(r.discount_value) : null,
+      discount_starts_at: (r.discount_starts_at as string | null) ?? null,
+      discount_ends_at: (r.discount_ends_at as string | null) ?? null,
     }));
 
     // Firmar URLs solo para los primeros 20 visibles (optimización).
@@ -135,6 +158,10 @@ export async function GET(request: NextRequest) {
       es_vendible: r.es_vendible,
       controla_stock: r.controla_stock,
       modo_receta: r.modo_receta,
+      discount_type: r.discount_type,
+      discount_value: r.discount_value,
+      discount_starts_at: r.discount_starts_at,
+      discount_ends_at: r.discount_ends_at,
     }));
 
     return NextResponse.json(successResponse({ items: hits, count: hits.length, q }));

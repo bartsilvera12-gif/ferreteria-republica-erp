@@ -1,15 +1,30 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { ArrowLeft, Calendar, Plus, X, Search, Loader2, Save } from "lucide-react";
+import {
+  Calendar,
+  Plus,
+  X,
+  Search,
+  Loader2,
+  Save,
+  Sparkles,
+  Tag,
+  Package,
+  AlertCircle,
+  Check,
+} from "lucide-react";
 
 interface ProductoLite {
   id: string;
   nombre: string;
   sku: string;
   precio_venta: number;
+  discount_type?: "percentage" | "fixed" | null;
+  discount_value?: number | null;
+  discount_starts_at?: string | null;
+  discount_ends_at?: string | null;
 }
 
 function isoToDatetimeLocal(iso: string | null): string {
@@ -22,6 +37,28 @@ function isoToDatetimeLocal(iso: string | null): string {
 
 function fmtGs(n: number): string {
   return "Gs. " + String(Math.round(Number(n) || 0)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+}
+
+/**
+ * Devuelve la etiqueta de descuento (-X% o -Gs. Y) y el precio final
+ * efectivo. Si el producto no tiene descuento configurado, retorna null.
+ */
+function getDiscountInfo(p: ProductoLite): {
+  label: string;
+  finalPrice: number;
+} | null {
+  if (!p.discount_type || !p.discount_value || p.discount_value <= 0) return null;
+  const base = Number(p.precio_venta) || 0;
+  let final = base;
+  let label = "";
+  if (p.discount_type === "percentage") {
+    final = base - (base * Number(p.discount_value)) / 100;
+    label = `-${Number(p.discount_value)}%`;
+  } else {
+    final = base - Number(p.discount_value);
+    label = `-${fmtGs(Number(p.discount_value))}`;
+  }
+  return { label, finalPrice: Math.max(0, Math.round(final)) };
 }
 
 export default function OfertasHomePage() {
@@ -61,7 +98,8 @@ export default function OfertasHomePage() {
     };
   }, []);
 
-  // Buscar productos en el picker (debounce 300ms)
+  // Buscar productos en el picker (debounce 300ms).
+  // con_descuento=1 → solo trae productos que tienen descuento configurado.
   useEffect(() => {
     if (!pickerOpen) return;
     const q = pickerQuery.trim();
@@ -73,17 +111,32 @@ export default function OfertasHomePage() {
     const t = setTimeout(async () => {
       try {
         const res = await fetchWithSupabaseSession(
-          `/api/productos/search?q=${encodeURIComponent(q)}&limit=15`
+          `/api/productos/search?q=${encodeURIComponent(q)}&limit=20&con_descuento=1`
         );
         const json = await res.json();
-        const rows: ProductoLite[] = Array.isArray(json?.data)
-          ? json.data.map((r: { id: string; nombre: string; sku: string; precio_venta: number }) => ({
-              id: r.id,
-              nombre: r.nombre,
-              sku: r.sku,
-              precio_venta: Number(r.precio_venta) || 0,
-            }))
-          : [];
+        // El endpoint envuelve la respuesta: { success, data: { items, count, q } }
+        const items = Array.isArray(json?.data?.items) ? json.data.items : [];
+        const rows: ProductoLite[] = items.map(
+          (r: {
+            id: string;
+            nombre: string;
+            sku: string;
+            precio_venta: number;
+            discount_type?: "percentage" | "fixed" | null;
+            discount_value?: number | null;
+            discount_starts_at?: string | null;
+            discount_ends_at?: string | null;
+          }) => ({
+            id: r.id,
+            nombre: r.nombre,
+            sku: r.sku,
+            precio_venta: Number(r.precio_venta) || 0,
+            discount_type: r.discount_type ?? null,
+            discount_value: r.discount_value ?? null,
+            discount_starts_at: r.discount_starts_at ?? null,
+            discount_ends_at: r.discount_ends_at ?? null,
+          })
+        );
         setPickerResults(rows);
       } catch {
         setPickerResults([]);
@@ -103,6 +156,7 @@ export default function OfertasHomePage() {
     setSelected([...selected, p]);
     setPickerQuery("");
     setPickerOpen(false);
+    setError(null);
   }
   function removeProducto(id: string) {
     setSelected(selected.filter((s) => s.id !== id));
@@ -114,9 +168,7 @@ export default function OfertasHomePage() {
     setOkMsg(null);
     try {
       const body = {
-        countdownEnd: countdownEnd
-          ? new Date(countdownEnd).toISOString()
-          : null,
+        countdownEnd: countdownEnd ? new Date(countdownEnd).toISOString() : null,
         productosIds: selected.map((s) => s.id),
       };
       const res = await fetchWithSupabaseSession("/api/configuracion/ofertas-home", {
@@ -126,8 +178,8 @@ export default function OfertasHomePage() {
       });
       const json = await res.json();
       if (!res.ok || !json?.success) throw new Error(json?.error || "Error al guardar");
-      setOkMsg("Cambios guardados ✓");
-      setTimeout(() => setOkMsg(null), 2500);
+      setOkMsg("Cambios guardados correctamente");
+      setTimeout(() => setOkMsg(null), 2800);
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -138,125 +190,227 @@ export default function OfertasHomePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <Loader2 className="h-6 w-6 animate-spin text-gray-400" />
+        <Loader2 className="h-7 w-7 animate-spin text-[#021F5F]" />
       </div>
     );
   }
 
   return (
-    <div className="max-w-3xl mx-auto py-8 px-4">
-      <Link
-        href="/configuracion"
-        className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 mb-4"
-      >
-        <ArrowLeft className="h-4 w-4" /> Volver a Configuración
-      </Link>
-
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Ofertas de la semana (home)</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          Configurá el banner &quot;Descuentos por tiempo limitado&quot; del sitio público. Elegí
-          hasta 3 productos y la fecha en que termina la promoción.
+    <div className="max-w-4xl mx-auto py-10 px-4 sm:px-6">
+      {/* Header con eyebrow + gradient sutil */}
+      <header className="mb-10">
+        <div className="inline-flex items-center gap-2 rounded-full bg-gradient-to-r from-[#021F5F]/8 to-[#E97932]/8 border border-[#021F5F]/15 px-3 py-1 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#021F5F] mb-4">
+          <Sparkles className="h-3 w-3 text-[#E97932]" />
+          Sitio público · Home
+        </div>
+        <h1 className="text-3xl sm:text-4xl font-bold text-[#021F5F] tracking-tight leading-tight">
+          Ofertas de la semana
+        </h1>
+        <p className="text-[15px] text-slate-500 mt-2 leading-relaxed max-w-2xl">
+          Configurá el banner{" "}
+          <span className="font-semibold text-slate-700">
+            &quot;Descuentos por tiempo limitado&quot;
+          </span>{" "}
+          del sitio público. Elegí hasta 3 productos con descuento activo y la fecha en que
+          termina la promoción.
         </p>
-      </div>
+      </header>
 
+      {/* Alertas flotantes */}
       {error && (
-        <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          {error}
+        <div className="mb-5 flex items-start gap-3 rounded-xl border border-red-200/70 bg-red-50/80 backdrop-blur px-4 py-3.5 text-sm text-red-800 shadow-sm">
+          <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+          <span className="flex-1">{error}</span>
+          <button
+            onClick={() => setError(null)}
+            className="text-red-400 hover:text-red-700"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
       )}
       {okMsg && (
-        <div className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+        <div className="mb-5 flex items-center gap-3 rounded-xl border border-emerald-200/70 bg-emerald-50/80 backdrop-blur px-4 py-3.5 text-sm font-medium text-emerald-800 shadow-sm">
+          <div className="h-5 w-5 rounded-full bg-emerald-600 flex items-center justify-center shrink-0">
+            <Check className="h-3 w-3 text-white" strokeWidth={3} />
+          </div>
           {okMsg}
         </div>
       )}
 
-      {/* Countdown */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 flex items-center gap-2">
-          <Calendar className="h-4 w-4 text-amber-600" />
-          Fin del countdown
-        </h2>
-        <div className="flex gap-3 items-center">
-          <input
-            type="datetime-local"
-            value={countdownEnd}
-            onChange={(e) => setCountdownEnd(e.target.value)}
-            className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
-          />
-          {countdownEnd && (
-            <button
-              type="button"
-              onClick={() => setCountdownEnd("")}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              Quitar (sin countdown)
-            </button>
-          )}
+      {/* Card: Countdown */}
+      <section className="bg-white rounded-2xl border border-slate-200/70 shadow-[0_2px_8px_-2px_rgba(2,31,95,0.06)] overflow-hidden mb-6">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center gap-3">
+          <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#E97932] to-[#F4552A] flex items-center justify-center shadow-sm">
+            <Calendar className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <h2 className="text-[15px] font-bold text-[#021F5F] leading-none">
+              Fin del countdown
+            </h2>
+            <p className="text-xs text-slate-500 mt-1">
+              Define el contador que se muestra en el banner
+            </p>
+          </div>
         </div>
-        <p className="mt-2 text-xs text-gray-500">
-          Si lo dejás vacío, el contador no se muestra en el banner. Si lo configurás en el
-          pasado, también queda oculto.
-        </p>
-      </div>
+        <div className="px-6 py-5">
+          <div className="flex flex-wrap gap-3 items-center">
+            <input
+              type="datetime-local"
+              value={countdownEnd}
+              onChange={(e) => setCountdownEnd(e.target.value)}
+              className="rounded-xl border border-slate-200 bg-slate-50/50 px-4 py-2.5 text-sm font-medium text-slate-800 focus:ring-2 focus:ring-[#E97932]/40 focus:border-[#E97932] focus:bg-white transition-all outline-none"
+            />
+            {countdownEnd && (
+              <button
+                type="button"
+                onClick={() => setCountdownEnd("")}
+                className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-red-600 transition-colors"
+              >
+                <X className="h-3.5 w-3.5" />
+                Quitar countdown
+              </button>
+            )}
+          </div>
+          <p className="mt-3 text-xs text-slate-500 leading-relaxed">
+            Si lo dejás vacío, el contador no se muestra en el banner. Si lo configurás en
+            el pasado, también queda oculto.
+          </p>
+        </div>
+      </section>
 
-      {/* Productos */}
-      <div className="bg-white rounded-xl border border-gray-200 p-6 mb-6">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-sm font-semibold text-gray-700 uppercase tracking-wide">
-            Productos destacados ({selected.length}/3)
-          </h2>
+      {/* Card: Productos destacados */}
+      <section className="bg-white rounded-2xl border border-slate-200/70 shadow-[0_2px_8px_-2px_rgba(2,31,95,0.06)] overflow-hidden mb-6">
+        <div className="px-6 py-5 border-b border-slate-100 flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-[#021F5F] to-[#0a2f70] flex items-center justify-center shadow-sm">
+              <Package className="h-4 w-4 text-white" />
+            </div>
+            <div>
+              <h2 className="text-[15px] font-bold text-[#021F5F] leading-none flex items-center gap-2">
+                Productos destacados
+                <span className="inline-flex items-center justify-center min-w-[28px] h-[22px] px-2 rounded-full bg-[#021F5F] text-white text-[11px] font-bold tabular-nums">
+                  {selected.length}/3
+                </span>
+              </h2>
+              <p className="text-xs text-slate-500 mt-1">
+                Solo se listan productos con descuento configurado
+              </p>
+            </div>
+          </div>
           {selected.length < 3 && (
             <button
               type="button"
-              onClick={() => setPickerOpen(true)}
-              className="inline-flex items-center gap-1.5 text-sm font-medium text-amber-600 hover:text-amber-700"
+              onClick={() => {
+                setPickerOpen(true);
+                setPickerQuery("");
+                setPickerResults([]);
+              }}
+              className="inline-flex items-center gap-1.5 rounded-lg bg-[#E97932] hover:bg-[#F4552A] text-white text-xs font-bold px-3.5 py-2 transition-colors shadow-sm hover:shadow"
             >
-              <Plus className="h-4 w-4" /> Agregar producto
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              Agregar producto
             </button>
           )}
         </div>
 
-        {selected.length === 0 ? (
-          <p className="text-sm text-gray-500 py-4 text-center bg-gray-50 rounded-lg">
-            Sin productos seleccionados todavía. El banner del home se ocultará.
-          </p>
-        ) : (
-          <ul className="divide-y divide-gray-100">
-            {selected.map((p) => (
-              <li key={p.id} className="flex items-center justify-between gap-3 py-3">
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-gray-900 truncate">{p.nombre}</p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    SKU: {p.sku} · {fmtGs(p.precio_venta)}
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => removeProducto(p.id)}
-                  className="text-gray-400 hover:text-red-600 p-1"
-                  title="Quitar"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+        <div className="px-6 py-5">
+          {selected.length === 0 ? (
+            <div className="py-10 text-center">
+              <div className="inline-flex items-center justify-center h-12 w-12 rounded-full bg-slate-100 mb-3">
+                <Package className="h-5 w-5 text-slate-400" />
+              </div>
+              <p className="text-sm font-medium text-slate-600">
+                Sin productos seleccionados
+              </p>
+              <p className="text-xs text-slate-400 mt-1">
+                El banner del home se oculta hasta que agregues al menos uno.
+              </p>
+            </div>
+          ) : (
+            <ul className="space-y-2.5">
+              {selected.map((p, idx) => {
+                const disc = getDiscountInfo(p);
+                return (
+                  <li
+                    key={p.id}
+                    className="group flex items-center gap-4 rounded-xl border border-slate-200/80 bg-gradient-to-br from-white to-slate-50/40 p-3.5 hover:border-[#E97932]/40 hover:shadow-sm transition-all"
+                  >
+                    {/* Numerito */}
+                    <div className="flex-none h-9 w-9 rounded-lg bg-[#021F5F] text-white font-bold text-sm flex items-center justify-center shadow-sm tabular-nums">
+                      {idx + 1}
+                    </div>
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-bold text-[#021F5F] truncate leading-tight">
+                        {p.nombre}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1.5 flex-wrap">
+                        <span className="text-[11px] font-mono text-slate-500">
+                          {p.sku}
+                        </span>
+                        <span className="text-slate-300">·</span>
+                        {disc ? (
+                          <>
+                            <span className="text-[11px] text-slate-400 line-through tabular-nums">
+                              {fmtGs(p.precio_venta)}
+                            </span>
+                            <span className="text-[11px] font-bold text-[#021F5F] tabular-nums">
+                              {fmtGs(disc.finalPrice)}
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md bg-[#E97932]/10 text-[#E97932] px-1.5 py-0.5 text-[10px] font-bold">
+                              <Tag className="h-2.5 w-2.5" strokeWidth={2.8} />
+                              {disc.label}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-[11px] font-medium text-slate-600 tabular-nums">
+                              {fmtGs(p.precio_venta)}
+                            </span>
+                            <span className="inline-flex items-center gap-1 rounded-md bg-amber-100 text-amber-700 px-1.5 py-0.5 text-[10px] font-bold">
+                              <AlertCircle className="h-2.5 w-2.5" strokeWidth={2.8} />
+                              Sin descuento
+                            </span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                    {/* Quitar */}
+                    <button
+                      type="button"
+                      onClick={() => removeProducto(p.id)}
+                      className="flex-none h-8 w-8 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 flex items-center justify-center transition-colors"
+                      title="Quitar producto"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
 
-        <p className="mt-3 text-xs text-gray-500">
-          Asegurate de que cada producto seleccionado tenga un &quot;Descuento promocional&quot;
-          configurado en su edición. Si no, en el home se ve el precio normal sin tachado.
-        </p>
-      </div>
+          {selected.length > 0 && (
+            <div className="mt-4 flex items-start gap-2.5 rounded-lg border border-blue-200/60 bg-blue-50/50 px-3.5 py-2.5">
+              <AlertCircle className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-600" />
+              <p className="text-[11.5px] text-blue-900 leading-relaxed">
+                Cada producto que agregás ya tiene un descuento promocional configurado en
+                su edición. Lo verás reflejado con el precio tachado en el home del sitio
+                público.
+              </p>
+            </div>
+          )}
+        </div>
+      </section>
 
-      {/* Save */}
-      <div className="flex justify-end gap-3">
+      {/* Save bar */}
+      <div className="flex items-center justify-end gap-3 mt-8">
         <button
           type="button"
           onClick={save}
           disabled={saving}
-          className="inline-flex items-center gap-2 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-5 py-2.5 text-sm transition-colors"
+          className="inline-flex items-center gap-2 rounded-xl bg-[#021F5F] hover:bg-[#0a2f70] disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold px-6 py-3 text-sm transition-all shadow-md hover:shadow-lg"
         >
           {saving ? (
             <Loader2 className="h-4 w-4 animate-spin" />
@@ -267,45 +421,90 @@ export default function OfertasHomePage() {
         </button>
       </div>
 
-      {/* Picker modal */}
+      {/* Picker modal — alineado al estilo de la pagina */}
       {pickerOpen && (
         <div
-          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          className="fixed inset-0 bg-[#021F5F]/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
           onClick={() => setPickerOpen(false)}
         >
           <div
-            className="bg-white rounded-xl shadow-2xl w-full max-w-md max-h-[80vh] flex flex-col"
+            className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[85vh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
-            <div className="p-4 border-b border-gray-200">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-[#E97932] to-[#F4552A] flex items-center justify-center shrink-0">
+                  <Tag className="h-3.5 w-3.5 text-white" />
+                </div>
+                <div className="min-w-0">
+                  <h3 className="text-sm font-bold text-[#021F5F] leading-none">
+                    Productos con descuento
+                  </h3>
+                  <p className="text-[11px] text-slate-500 mt-1">
+                    Solo se listan los que tienen oferta configurada
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPickerOpen(false)}
+                className="h-8 w-8 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 flex items-center justify-center transition-colors shrink-0"
+              >
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            {/* Search */}
+            <div className="px-5 py-4 border-b border-slate-100">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
                 <input
                   type="text"
                   autoFocus
                   value={pickerQuery}
                   onChange={(e) => setPickerQuery(e.target.value)}
                   placeholder="Buscar por nombre o SKU..."
-                  className="w-full pl-10 pr-3 py-2 rounded-lg border border-gray-300 text-sm focus:ring-2 focus:ring-amber-500 focus:border-transparent"
+                  className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50/60 text-sm focus:ring-2 focus:ring-[#E97932]/40 focus:border-[#E97932] focus:bg-white outline-none transition-all"
                 />
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto p-2">
+
+            {/* Results */}
+            <div className="flex-1 overflow-y-auto px-2 py-2 min-h-[200px]">
               {pickerLoading && (
-                <div className="py-8 text-center">
-                  <Loader2 className="h-5 w-5 animate-spin text-gray-400 mx-auto" />
+                <div className="py-12 text-center">
+                  <Loader2 className="h-5 w-5 animate-spin text-[#021F5F] mx-auto" />
+                  <p className="text-xs text-slate-400 mt-2">Buscando...</p>
                 </div>
               )}
-              {!pickerLoading && pickerQuery.length < 2 && (
-                <p className="text-sm text-gray-500 py-8 text-center">
-                  Escribí al menos 2 caracteres para buscar.
-                </p>
-              )}
-              {!pickerLoading && pickerQuery.length >= 2 && pickerResults.length === 0 && (
-                <p className="text-sm text-gray-500 py-8 text-center">Sin resultados.</p>
+              {!pickerLoading && pickerQuery.trim().length < 2 && (
+                <div className="py-12 text-center">
+                  <Search className="h-7 w-7 text-slate-300 mx-auto mb-2" />
+                  <p className="text-sm font-medium text-slate-500">
+                    Escribí al menos 2 caracteres
+                  </p>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Solo aparecen productos con descuento activo
+                  </p>
+                </div>
               )}
               {!pickerLoading &&
+                pickerQuery.trim().length >= 2 &&
+                pickerResults.length === 0 && (
+                  <div className="py-12 text-center">
+                    <Tag className="h-7 w-7 text-slate-300 mx-auto mb-2" />
+                    <p className="text-sm font-medium text-slate-500">
+                      Sin resultados
+                    </p>
+                    <p className="text-xs text-slate-400 mt-1">
+                      Ningún producto con descuento coincide con &quot;{pickerQuery}&quot;
+                    </p>
+                  </div>
+                )}
+              {!pickerLoading &&
                 pickerResults.map((p) => {
+                  const disc = getDiscountInfo(p);
                   const yaSel = selected.some((s) => s.id === p.id);
                   return (
                     <button
@@ -313,22 +512,51 @@ export default function OfertasHomePage() {
                       type="button"
                       onClick={() => addProducto(p)}
                       disabled={yaSel}
-                      className="w-full text-left px-3 py-2.5 rounded-lg hover:bg-amber-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                      className="w-full text-left px-3 py-2.5 rounded-xl hover:bg-[#E97932]/5 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-transparent transition-colors flex items-center gap-3 group"
                     >
-                      <p className="text-sm font-medium text-gray-900 truncate">{p.nombre}</p>
-                      <p className="text-xs text-gray-500 mt-0.5">
-                        SKU: {p.sku} · {fmtGs(p.precio_venta)}{" "}
-                        {yaSel && <span className="text-amber-600 ml-2">(ya seleccionado)</span>}
-                      </p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-bold text-[#021F5F] truncate">
+                          {p.nombre}
+                        </p>
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                          <span className="text-[11px] font-mono text-slate-500">
+                            {p.sku}
+                          </span>
+                          {disc && (
+                            <>
+                              <span className="text-slate-300">·</span>
+                              <span className="text-[11px] text-slate-400 line-through tabular-nums">
+                                {fmtGs(p.precio_venta)}
+                              </span>
+                              <span className="text-[11px] font-bold text-[#021F5F] tabular-nums">
+                                {fmtGs(disc.finalPrice)}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      {disc && (
+                        <span className="inline-flex items-center gap-1 rounded-md bg-[#E97932] text-white px-2 py-1 text-[10.5px] font-bold shrink-0">
+                          <Tag className="h-2.5 w-2.5" strokeWidth={2.8} />
+                          {disc.label}
+                        </span>
+                      )}
+                      {yaSel && (
+                        <span className="text-[10.5px] font-bold text-slate-400 shrink-0">
+                          AGREGADO
+                        </span>
+                      )}
                     </button>
                   );
                 })}
             </div>
-            <div className="p-3 border-t border-gray-200 text-right">
+
+            {/* Footer */}
+            <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/50 flex items-center justify-end">
               <button
                 type="button"
                 onClick={() => setPickerOpen(false)}
-                className="text-sm text-gray-600 hover:text-gray-900 font-medium"
+                className="text-sm font-semibold text-slate-600 hover:text-[#021F5F] transition-colors"
               >
                 Cerrar
               </button>
