@@ -105,6 +105,11 @@ export async function GET(request: NextRequest) {
     query = query.order("nombre");
     if (limit > 0) {
       query = query.range(offset, offset + limit - 1);
+    } else {
+      // limit=0 = "sin paginar". PostgREST capa silenciosamente a 1000 filas
+      // por default si no se setea .range() explicito. Forzar un range alto
+      // garantiza traer realmente todo el catalogo (hasta 100k productos).
+      query = query.range(0, 99999);
     }
 
     const { data, error, count } = await query;
