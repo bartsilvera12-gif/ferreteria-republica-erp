@@ -47,8 +47,24 @@ export async function middleware(request: NextRequest) {
       url.pathname = "/sitio/catalogo.html";
     } else if (pathname === "/favicon.ico") {
       url.pathname = "/sitio/assets/republica-icon.png";
-    } else if (!pathname.startsWith("/sitio/")) {
-      url.pathname = `/sitio${pathname}`;
+    } else if (
+      pathname.startsWith("/assets/") ||
+      pathname.startsWith("/uploads/") ||
+      pathname.startsWith("/sitio/") ||
+      pathname === "/support.js" ||
+      pathname === "/image-slot.js"
+    ) {
+      // Assets servidos desde public/sitio/. Si el path ya empieza con
+      // /sitio/ lo dejamos pasar; sino lo prefijamos.
+      if (!pathname.startsWith("/sitio/")) {
+        url.pathname = `/sitio${pathname}`;
+      }
+    } else {
+      // Path desconocido bajo host del sitio (ej. /login, /dashboard, etc.):
+      // redirigir al home en vez de mostrar el 404 default de Next.
+      // Es UX-friendlier para visitas accidentales del ERP.
+      url.pathname = "/";
+      return NextResponse.redirect(url, 302);
     }
     return NextResponse.rewrite(url);
   }
