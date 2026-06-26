@@ -1357,7 +1357,9 @@ class Component extends DCLogic {
       desc: c.descripcion || '',
       tag: '',
       slotId: 'cat-img-' + (c.id || i),
-      img: defaultPhoto,
+      // Si la categoria tiene imagen_url cargada desde el ERP la usamos,
+      // sino fallback al header-bg.png como placeholder.
+      img: c.imagen_url || defaultPhoto,
       iconPath: this.iconPath(defaultIcons[i % defaultIcons.length]),
       tileBg: this.tileBg(i),
       go: () => this.openCatalog(c.nombre)

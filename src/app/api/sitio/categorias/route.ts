@@ -21,7 +21,7 @@ export async function GET() {
   const { data, error } = await supabase
     .from("categorias_productos")
     .select(
-      `id, nombre, codigo, descripcion, parent_id,
+      `id, nombre, codigo, descripcion, parent_id, imagen_url,
        productos:productos!categoria_principal_id ( id )`
     )
     .eq("empresa_id", SITIO_EMPRESA_ID)
@@ -43,6 +43,7 @@ export async function GET() {
       nombre: c.nombre,
       codigo: c.codigo,
       descripcion: c.descripcion,
+      imagen_url: c.imagen_url ?? null,
       count: Array.isArray(c.productos) ? c.productos.length : 0,
     }))
     .filter((c) => c.count > 0);

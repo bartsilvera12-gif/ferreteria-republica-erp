@@ -13,6 +13,7 @@ interface Categoria {
   descripcion: string | null;
   parent_id: string | null;
   activo: boolean;
+  imagen_url: string | null;
 }
 
 export default function CategoriasProductosPage() {
@@ -26,6 +27,40 @@ export default function CategoriasProductosPage() {
   const [codigo, setCodigo] = useState("");
   const [parentId, setParentId] = useState("");
   const [creating, setCreating] = useState(false);
+
+  // Modal de imagen
+  const [imgEditing, setImgEditing] = useState<Categoria | null>(null);
+  const [imgUrl, setImgUrl] = useState("");
+  const [imgSaving, setImgSaving] = useState(false);
+
+  function openImg(cat: Categoria) {
+    setImgEditing(cat);
+    setImgUrl(cat.imagen_url ?? "");
+  }
+  async function saveImg() {
+    if (!imgEditing) return;
+    setImgSaving(true);
+    try {
+      const r = await fetch(`/api/inventario/categorias/${imgEditing.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ imagen_url: imgUrl.trim() || null }),
+      });
+      const j = await r.json();
+      if (!r.ok || !j?.success) {
+        setError(j?.error ?? "No se pudo actualizar la imagen.");
+      } else {
+        setImgEditing(null);
+        setImgUrl("");
+        await load();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Error de red");
+    } finally {
+      setImgSaving(false);
+    }
+  }
 
   async function load() {
     setLoading(true);
@@ -177,6 +212,7 @@ export default function CategoriasProductosPage() {
           <table className="w-full text-sm">
             <thead className="bg-slate-50 text-slate-600 text-xs uppercase tracking-wide">
               <tr>
+                <th className="text-left px-4 py-2">Imagen</th>
                 <th className="text-left px-4 py-2">Nombre</th>
                 <th className="text-left px-4 py-2">Código</th>
                 <th className="text-left px-4 py-2">Padre</th>
@@ -189,6 +225,20 @@ export default function CategoriasProductosPage() {
                 const parent = items.find((i) => i.id === c.parent_id);
                 return (
                   <tr key={c.id} className="border-t border-slate-100">
+                    <td className="px-4 py-2">
+                      {c.imagen_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={c.imagen_url}
+                          alt={c.nombre}
+                          className="h-10 w-10 rounded-md object-cover bg-slate-100 border border-slate-200"
+                        />
+                      ) : (
+                        <div className="h-10 w-10 rounded-md bg-slate-100 border border-dashed border-slate-300 flex items-center justify-center text-[10px] text-slate-400">
+                          sin
+                        </div>
+                      )}
+                    </td>
                     <td className="px-4 py-2 font-medium">{c.nombre}</td>
                     <td className="px-4 py-2 text-gray-500">{c.codigo ?? "—"}</td>
                     <td className="px-4 py-2 text-gray-500">{parent?.nombre ?? "—"}</td>
@@ -199,7 +249,13 @@ export default function CategoriasProductosPage() {
                         <span className="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded">Inactivo</span>
                       )}
                     </td>
-                    <td className="px-4 py-2 text-right">
+                    <td className="px-4 py-2 text-right space-x-3">
+                      <button
+                        onClick={() => openImg(c)}
+                        className="text-xs text-sky-700 hover:text-sky-900 underline"
+                      >
+                        {c.imagen_url ? "Cambiar imagen" : "Agregar imagen"}
+                      </button>
                       <button
                         onClick={() => toggleActivo(c)}
                         className="text-xs text-sky-700 hover:text-sky-900 underline"
@@ -214,6 +270,64 @@ export default function CategoriasProductosPage() {
           </table>
         )}
       </div>
+
+      {/* Modal imagen */}
+      {imgEditing && (
+        <div
+          className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
+          onClick={() => !imgSaving && setImgEditing(null)}
+        >
+          <div
+            className="bg-white rounded-xl shadow-2xl w-full max-w-md p-6"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-lg font-semibold text-gray-900 mb-1">Imagen de categoría</h3>
+            <p className="text-xs text-gray-500 mb-4">
+              Categoría: <strong>{imgEditing.nombre}</strong>
+            </p>
+            <label className="block text-xs text-gray-600 mb-1">URL de la imagen</label>
+            <input
+              type="url"
+              value={imgUrl}
+              onChange={(e) => setImgUrl(e.target.value)}
+              placeholder="https://..."
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm mb-3"
+              autoFocus
+            />
+            {imgUrl && (
+              <div className="mb-3">
+                <p className="text-xs text-gray-500 mb-1">Preview:</p>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={imgUrl}
+                  alt="preview"
+                  className="h-32 w-full object-cover rounded-lg bg-slate-50 border border-slate-200"
+                />
+              </div>
+            )}
+            <p className="text-[11px] text-gray-400 mb-4">
+              Pegá una URL pública (ej. Unsplash, Imgur, o cualquier CDN). Si dejás vacío y
+              guardás, se quita la imagen.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => setImgEditing(null)}
+                disabled={imgSaving}
+                className="text-sm text-gray-600 hover:text-gray-900 px-3 py-2"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={saveImg}
+                disabled={imgSaving}
+                className="bg-sky-600 hover:bg-sky-700 disabled:opacity-50 text-white text-sm px-4 py-2 rounded-lg"
+              >
+                {imgSaving ? "Guardando..." : "Guardar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
