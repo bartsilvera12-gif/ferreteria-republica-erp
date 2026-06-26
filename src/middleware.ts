@@ -44,7 +44,10 @@ export async function middleware(request: NextRequest) {
     if (pathname === "/") {
       url.pathname = "/sitio/index.html";
     } else if (pathname === "/catalogo" || pathname === "/catalogo/") {
-      url.pathname = "/sitio/catalogo.html";
+      // El catalogo ahora vive embebido en el home como vista SPA.
+      // Servimos index.html y el JS detecta el path /catalogo para arrancar
+      // directo en la vista catalogo. Preserva ?cat= y ?q= en la URL.
+      url.pathname = "/sitio/index.html";
     } else if (pathname === "/favicon.ico") {
       url.pathname = "/sitio/assets/republica-icon.png";
     } else if (
