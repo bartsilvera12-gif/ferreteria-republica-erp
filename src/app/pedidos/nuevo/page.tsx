@@ -480,8 +480,8 @@ export default function NuevoPedidoPage() {
         </div>
 
         {/* Columna derecha: carrito sticky */}
-        <aside className="bg-white rounded-2xl border-2 border-[#4FAEB2]/20 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] overflow-hidden h-fit lg:sticky lg:top-4">
-          <div className="px-5 py-4 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent">
+        <aside className="bg-white rounded-2xl border-2 border-[#4FAEB2]/20 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] overflow-hidden flex flex-col lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)]">
+          <div className="shrink-0 px-5 py-4 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent">
             <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2">
               <Receipt className="h-4 w-4 text-[#4FAEB2]" />
               Pedido a armar
@@ -510,7 +510,7 @@ export default function NuevoPedidoPage() {
             </div>
           ) : (
             <>
-              <ul className="px-3 py-3 space-y-2 max-h-[420px] overflow-y-auto">
+              <ul className="flex-1 min-h-0 px-3 py-3 space-y-2 overflow-y-auto">
                 {cart.map((it) => {
                   const cantBase = it.presentacion_cantidad_base ?? 1;
                   return (
@@ -699,7 +699,7 @@ export default function NuevoPedidoPage() {
               </ul>
 
               {/* Cliente + Total + CTA */}
-              <div className="border-t border-slate-200 px-4 py-4 space-y-3 bg-slate-50/30">
+              <div className="shrink-0 border-t border-slate-200 px-4 py-4 space-y-3 bg-slate-50/30">
                 <div>
                   <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1">
                     <User className="h-3 w-3" />
