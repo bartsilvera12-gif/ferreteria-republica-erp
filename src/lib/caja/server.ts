@@ -4,6 +4,9 @@
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 import type {
   Caja,
+  CajaDetalle,
+  CajaDetalleVenta,
+  CajaDetalleMovimiento,
   CajaMovimiento,
   CajaResumen,
   CajaReporteRow,
@@ -285,6 +288,174 @@ export async function getReporteCajas(
   }
 
   return { desde: rango.desde, hasta: rango.hasta, totales, cajas: filas };
+}
+
+/**
+ * Detalle de UN turno de caja para el reporte: cabecera agregada (misma forma
+ * que una fila de getReporteCajas) + las ventas y movimientos manuales
+ * individuales realizados durante el turno (para el "Ver detalles").
+ */
+export async function getDetalleCaja(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  cajaId: string
+): Promise<CajaDetalle | null> {
+  const cQ = await sb
+    .from("cajas")
+    .select(CAJA_COLS)
+    .eq("empresa_id", empresaId)
+    .eq("id", cajaId)
+    .maybeSingle();
+  if (cQ.error) throw new Error(cQ.error.message);
+  if (!cQ.data) return null;
+  const caja = mapCaja(cQ.data as unknown as CajaRow);
+
+  // Ventas individuales del turno (cronológico).
+  const vQ = await sb
+    .from("ventas")
+    .select("id, numero_control, fecha, metodo_pago, tipo_venta, total, estado")
+    .eq("empresa_id", empresaId)
+    .eq("caja_id", cajaId)
+    .order("fecha", { ascending: true });
+  if (vQ.error) throw new Error(vQ.error.message);
+  const ventasRaw = (vQ.data ?? []) as unknown as Array<{
+    id: string;
+    numero_control: string | null;
+    fecha: string;
+    metodo_pago: string | null;
+    tipo_venta: string | null;
+    total: number | string;
+    estado: string | null;
+  }>;
+  const ventas: CajaDetalleVenta[] = ventasRaw.map((v) => ({
+    id: v.id,
+    numero_control: v.numero_control,
+    fecha: v.fecha,
+    metodo_pago: (v.metodo_pago ?? "efectivo") as MedioPagoCaja,
+    tipo_venta: v.tipo_venta,
+    total: num(v.total),
+    estado: v.estado,
+  }));
+
+  // Movimientos manuales activos del turno (cronológico).
+  const mQ = await sb
+    .from("caja_movimientos")
+    .select(
+      "id, caja_id, tipo, concepto, monto, medio_pago, usuario_id, usuario_email, observacion, created_at"
+    )
+    .eq("empresa_id", empresaId)
+    .eq("caja_id", cajaId)
+    .is("anulado_at", null)
+    .order("created_at", { ascending: true });
+  if (mQ.error) throw new Error(mQ.error.message);
+  const movsRaw = (mQ.data ?? []) as unknown as Array<{
+    id: string;
+    caja_id: string;
+    tipo: string;
+    concepto: string;
+    monto: number | string;
+    medio_pago: string | null;
+    usuario_id: string | null;
+    usuario_email: string | null;
+    observacion: string | null;
+    created_at: string;
+  }>;
+
+  // Acumuladores para la cabecera (misma lógica que getReporteCajas).
+  let cantidadVentas = 0,
+    totalVendido = 0,
+    totalEfectivo = 0,
+    totalTarjeta = 0,
+    totalTransferencia = 0;
+  for (const v of ventas) {
+    if (v.estado === "anulada") continue;
+    cantidadVentas++;
+    totalVendido += v.total;
+    if (v.metodo_pago === "tarjeta") totalTarjeta += v.total;
+    else if (v.metodo_pago === "transferencia") totalTransferencia += v.total;
+    else totalEfectivo += v.total;
+  }
+  let ingresosEf = 0,
+    egresosEf = 0,
+    retirosEf = 0,
+    ajustesEf = 0;
+  for (const m of movsRaw) {
+    if ((m.medio_pago ?? "efectivo") !== "efectivo") continue;
+    const monto = num(m.monto);
+    if (m.tipo === "ingreso") ingresosEf += monto;
+    else if (m.tipo === "egreso") egresosEf += monto;
+    else if (m.tipo === "retiro") retirosEf += monto;
+    else if (m.tipo === "ajuste") ajustesEf += monto;
+  }
+  const efectivoEsperado =
+    caja.monto_apertura +
+    totalEfectivo +
+    ingresosEf -
+    egresosEf -
+    retirosEf +
+    ajustesEf;
+
+  // Nombres de usuarios (quién abrió/cerró + autores de movimientos).
+  const userIds = [
+    ...new Set(
+      [caja.abierta_por, caja.cerrada_por, ...movsRaw.map((m) => m.usuario_id)].filter(
+        (x): x is string => !!x
+      )
+    ),
+  ];
+  const nombrePorUsuario = new Map<string, string>();
+  if (userIds.length > 0) {
+    const uQ = await sb
+      .from("usuarios")
+      .select("id, nombre, email")
+      .eq("empresa_id", empresaId)
+      .in("id", userIds);
+    if (!uQ.error) {
+      for (const u of (uQ.data ?? []) as Array<{ id: string; nombre: string | null; email: string | null }>) {
+        nombrePorUsuario.set(u.id, (u.nombre?.trim() || u.email?.trim() || "—") as string);
+      }
+    }
+  }
+
+  const movimientos: CajaDetalleMovimiento[] = movsRaw.map((m) => ({
+    id: m.id,
+    caja_id: m.caja_id,
+    tipo: m.tipo as TipoMovimientoCaja,
+    concepto: m.concepto,
+    monto: num(m.monto),
+    medio_pago: (m.medio_pago ?? "efectivo") as MedioPagoCaja,
+    usuario_id: m.usuario_id,
+    observacion: m.observacion,
+    created_at: m.created_at,
+    usuario_email: m.usuario_email,
+    usuario_nombre: m.usuario_id ? nombrePorUsuario.get(m.usuario_id) ?? null : null,
+  }));
+
+  const row: CajaReporteRow = {
+    id: caja.id,
+    estado: caja.estado,
+    fecha_apertura: caja.fecha_apertura,
+    fecha_cierre: caja.fecha_cierre,
+    abierta_por_nombre: caja.abierta_por ? nombrePorUsuario.get(caja.abierta_por) ?? null : null,
+    cerrada_por_nombre: caja.cerrada_por ? nombrePorUsuario.get(caja.cerrada_por) ?? null : null,
+    monto_apertura: caja.monto_apertura,
+    cantidad_ventas: cantidadVentas,
+    total_vendido: totalVendido,
+    total_efectivo: totalEfectivo,
+    total_tarjeta: totalTarjeta,
+    total_transferencia: totalTransferencia,
+    ingresos_efectivo: ingresosEf,
+    egresos_efectivo: egresosEf,
+    retiros_efectivo: retirosEf,
+    ajustes_efectivo: ajustesEf,
+    efectivo_esperado: efectivoEsperado,
+    monto_esperado_efectivo: caja.monto_esperado_efectivo,
+    monto_cierre_contado: caja.monto_cierre_contado,
+    diferencia: caja.diferencia,
+    observacion_cierre: caja.observacion_cierre,
+  };
+
+  return { caja: row, ventas, movimientos };
 }
 
 /** Resumen/arqueo de UNA caja (ventas + movs + efectivo esperado). */

@@ -95,6 +95,34 @@ export interface CajaReporteRow {
   observacion_cierre: string | null;
 }
 
+/** Una venta individual realizada durante un turno de caja. */
+export interface CajaDetalleVenta {
+  id: string;
+  numero_control: string | null;
+  fecha: string;
+  metodo_pago: MedioPagoCaja;
+  tipo_venta: string | null;
+  total: number;
+  estado: string | null;
+}
+
+/** Un movimiento manual del turno, con el autor resuelto (nombre/email). */
+export interface CajaDetalleMovimiento extends CajaMovimiento {
+  usuario_email: string | null;
+  usuario_nombre: string | null;
+}
+
+/**
+ * Detalle completo de un turno de caja: la fila agregada del reporte
+ * (cabecera + arqueo) más las ventas y los movimientos manuales realizados
+ * durante el turno, en orden cronológico.
+ */
+export interface CajaDetalle {
+  caja: CajaReporteRow;
+  ventas: CajaDetalleVenta[];
+  movimientos: CajaDetalleMovimiento[];
+}
+
 /** Reporte de cierres de caja por rango de fechas. */
 export interface CajasReporte {
   desde: string;
