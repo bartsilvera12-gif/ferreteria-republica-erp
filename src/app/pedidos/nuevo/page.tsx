@@ -276,6 +276,22 @@ export default function NuevoPedidoPage() {
     [cart]
   );
 
+  // Liquidacion de IVA (IVA INCLUIDO, modelo PY): el precio ya contiene el IVA,
+  // se desglosa desde adentro. base = total / factor; iva = total - base.
+  const ivaResumen = useMemo(() => {
+    let exentas = 0, grav5 = 0, iva5 = 0, grav10 = 0, iva10 = 0;
+    for (const it of cart) {
+      const total = Math.round(it.cantidad * it.precio_venta);
+      if (it.tipo_iva === "EXENTA") { exentas += total; continue; }
+      const factor = it.tipo_iva === "5%" ? 1.05 : 1.10;
+      const base = Math.round(total / factor);
+      const iva = total - base;
+      if (it.tipo_iva === "5%") { grav5 += base; iva5 += iva; }
+      else { grav10 += base; iva10 += iva; }
+    }
+    return { exentas, grav5, iva5, grav10, iva10, totalIva: iva5 + iva10 };
+  }, [cart]);
+
   async function enviar() {
     if (cart.length === 0) {
       setErrMsg("El pedido está vacío.");
@@ -701,6 +717,50 @@ export default function NuevoPedidoPage() {
                       </option>
                     ))}
                   </select>
+                </div>
+
+                {/* Liquidacion de IVA (IVA incluido en el precio) */}
+                <div className="border-t border-slate-200 pt-3">
+                  <p className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                    <Receipt className="h-3 w-3 text-[#4FAEB2]" />
+                    Liquidación de IVA
+                  </p>
+                  <div className="space-y-1 text-xs">
+                    {ivaResumen.exentas > 0 && (
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-500">Exentas</span>
+                        <span className="tabular-nums font-medium text-slate-700">{fmtGs(ivaResumen.exentas)}</span>
+                      </div>
+                    )}
+                    {ivaResumen.iva5 > 0 && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Gravado 5%</span>
+                          <span className="tabular-nums font-medium text-slate-700">{fmtGs(ivaResumen.grav5)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">IVA 5%</span>
+                          <span className="tabular-nums font-medium text-slate-700">{fmtGs(ivaResumen.iva5)}</span>
+                        </div>
+                      </>
+                    )}
+                    {ivaResumen.iva10 > 0 && (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">Gravado 10%</span>
+                          <span className="tabular-nums font-medium text-slate-700">{fmtGs(ivaResumen.grav10)}</span>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-slate-500">IVA 10%</span>
+                          <span className="tabular-nums font-medium text-slate-700">{fmtGs(ivaResumen.iva10)}</span>
+                        </div>
+                      </>
+                    )}
+                    <div className="flex items-center justify-between border-t border-dashed border-slate-200 pt-1.5">
+                      <span className="font-semibold text-slate-600">Total IVA</span>
+                      <span className="tabular-nums font-bold text-[#3F8E91]">{fmtGs(ivaResumen.totalIva)}</span>
+                    </div>
+                  </div>
                 </div>
 
                 <div className="flex items-center justify-between border-t border-slate-200 pt-3">
