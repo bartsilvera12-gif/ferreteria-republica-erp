@@ -930,6 +930,44 @@ export default function NuevaVentaPage() {
             </div>
 
           </div>
+
+          {/* Datos para factura: si no hay cliente seleccionado y se completan,
+              al confirmar se crea (o reutiliza por RUC) un cliente. */}
+          {!clienteSel && (
+            <div className="mt-4 border-t border-slate-100 pt-4">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Datos para factura</p>
+              <p className="mt-0.5 text-[11px] text-gray-400">
+                Sin cliente seleccionado: completá estos datos y se creará un cliente al confirmar la venta.
+              </p>
+              <div className="mt-3 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <label className={labelClass}>Nombre / Razón social</label>
+                  <input
+                    type="text"
+                    value={facturaNombre}
+                    onChange={(e) => setFacturaNombre(e.target.value)}
+                    placeholder="Nombre del cliente"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>RUC / CI</label>
+                  <input
+                    type="text"
+                    value={facturaRuc}
+                    onChange={(e) => setFacturaRuc(e.target.value)}
+                    placeholder="RUC o documento"
+                    className={inputClass}
+                  />
+                </div>
+              </div>
+              {clienteConMismoRuc && (
+                <p className="mt-2 text-[11px] text-amber-600">
+                  Ya existe un cliente con ese RUC ({clienteConMismoRuc.label}); se usará ese en vez de crear uno nuevo.
+                </p>
+              )}
+            </div>
+          )}
         </div>
 
         {/* ── SECCIÓN 3: Carrito + totales + confirmar ─────────────────────── */}
@@ -1110,42 +1148,6 @@ export default function NuevaVentaPage() {
                             <p className="text-slate-500">Titular: <span className="text-slate-700">{pagoTitular}</span></p>
                           )}
                         </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Datos para factura: si no hay cliente seleccionado y se
-                      completan, al confirmar se crea (o reutiliza por RUC) un cliente. */}
-                  {!clienteSel && (
-                    <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Datos para factura</p>
-                      <p className="-mt-1 text-[11px] text-gray-400">
-                        Sin cliente seleccionado: completá estos datos y se creará un cliente al confirmar la venta.
-                      </p>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">Nombre / Razón social</label>
-                        <input
-                          type="text"
-                          value={facturaNombre}
-                          onChange={(e) => setFacturaNombre(e.target.value)}
-                          placeholder="Nombre del cliente"
-                          className={inputClass}
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs text-gray-600 mb-1">RUC / CI</label>
-                        <input
-                          type="text"
-                          value={facturaRuc}
-                          onChange={(e) => setFacturaRuc(e.target.value)}
-                          placeholder="RUC o documento"
-                          className={inputClass}
-                        />
-                      </div>
-                      {clienteConMismoRuc && (
-                        <p className="text-[11px] text-amber-600">
-                          Ya existe un cliente con ese RUC ({clienteConMismoRuc.label}); se usará ese en vez de crear uno nuevo.
-                        </p>
                       )}
                     </div>
                   )}
