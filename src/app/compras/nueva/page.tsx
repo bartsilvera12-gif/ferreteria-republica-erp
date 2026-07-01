@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Trash2 } from "lucide-react";
+import { Search, Trash2, X } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import { saveCompraMulti, uploadComprobante, type CompraItemPayload } from "@/lib/compras/storage";
 import { getProveedores, proveedorExiste, createProveedor } from "@/lib/proveedores/storage";
@@ -401,14 +401,11 @@ export default function NuevaCompraPage() {
               </div>
               <div>
                 <label className={labelClass}>Proveedor <span className="text-red-500">*</span></label>
-                <select value={cab.proveedor_id}
-                  onChange={(e) => { setCab((p) => ({ ...p, proveedor_id: e.target.value })); setProveedorCreado(null); }}
-                  className={inputClass} required>
-                  <option value="">Seleccionar proveedor...</option>
-                  {proveedores.map((p) => (
-                    <option key={p.id} value={p.id}>{p.nombre} — RUC {p.ruc}</option>
-                  ))}
-                </select>
+                <ProveedorBuscador
+                  proveedores={proveedores}
+                  value={cab.proveedor_id}
+                  onSelect={(id) => { setCab((p) => ({ ...p, proveedor_id: id })); setProveedorCreado(null); }}
+                />
               </div>
               <div className="sm:col-span-2">
                 <label className={labelClass}>Comprobante / factura <span className="text-gray-400 font-normal">(opcional)</span></label>
@@ -823,6 +820,121 @@ function ProductoBuscador({
               <li className="px-3 py-1.5 text-center text-[11px] text-slate-400">
                 Mostrando 50 · escribí para filtrar entre {(productos.length).toLocaleString("es-PY")} productos
               </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Buscador de proveedor (una sola selección). Filtra por nombre o RUC. Al
+ * elegir muestra un "chip" con el proveedor; la X vuelve a la búsqueda.
+ */
+function ProveedorBuscador({
+  proveedores,
+  value,
+  onSelect,
+}: {
+  proveedores: Proveedor[];
+  value: string;
+  onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [hl, setHl] = useState(-1);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const selected = useMemo(() => proveedores.find((p) => String(p.id) === value) ?? null, [proveedores, value]);
+
+  const resultados = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filt = q
+      ? proveedores.filter((p) => p.nombre.toLowerCase().includes(q) || String(p.ruc ?? "").toLowerCase().includes(q))
+      : proveedores;
+    return filt.slice(0, 50);
+  }, [proveedores, query]);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  useEffect(() => {
+    if (open && hl >= 0) listRef.current?.querySelector(`[data-idx="${hl}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [open, hl]);
+
+  function pick(p: Proveedor) {
+    onSelect(String(p.id));
+    setQuery("");
+    setOpen(false);
+    setHl(-1);
+  }
+
+  if (selected) {
+    return (
+      <div className="flex h-[42px] items-center justify-between gap-2 rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.06] px-3 shadow-sm">
+        <span className="min-w-0 flex-1 truncate text-sm">
+          <span className="font-semibold text-slate-800">{selected.nombre}</span>
+          {selected.ruc && <span className="ml-2 text-xs text-slate-500">RUC {selected.ruc}</span>}
+        </span>
+        <button
+          type="button"
+          onClick={() => { onSelect(""); setQuery(""); setOpen(true); setTimeout(() => inputRef.current?.focus(), 0); }}
+          className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-white hover:text-slate-700"
+          aria-label="Cambiar proveedor"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={boxRef} className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => { setQuery(e.target.value); setOpen(true); setHl(-1); }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setHl((h) => Math.min(h + 1, resultados.length - 1)); }
+          else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
+          else if (e.key === "Enter") { e.preventDefault(); if (open && hl >= 0 && resultados[hl]) pick(resultados[hl]); }
+          else if (e.key === "Escape") { setOpen(false); }
+        }}
+        placeholder="Buscar proveedor por nombre o RUC…"
+        autoComplete="off"
+        className="h-[42px] w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-[#4FAEB2]/60 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20"
+      />
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1.5">
+          <ul ref={listRef} className="max-h-[260px] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-[#4FAEB2]/15">
+            {resultados.length === 0 ? (
+              <li className="px-3 py-3 text-center text-xs text-slate-400">
+                {proveedores.length === 0 ? "No hay proveedores. Creá uno abajo." : "Sin proveedores que coincidan."}
+              </li>
+            ) : (
+              resultados.map((p, i) => (
+                <li key={p.id}>
+                  <button type="button" data-idx={i}
+                    onMouseEnter={() => setHl(i)} onClick={() => pick(p)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      i === hl ? "bg-[#4FAEB2]/10 text-[#2F6E71]" : "text-slate-700 hover:bg-slate-50"
+                    }`}>
+                    <span className="min-w-0 flex-1 truncate font-medium">{p.nombre}</span>
+                    {p.ruc && <span className="shrink-0 text-xs text-slate-400">RUC {p.ruc}</span>}
+                  </button>
+                </li>
+              ))
             )}
           </ul>
         </div>
