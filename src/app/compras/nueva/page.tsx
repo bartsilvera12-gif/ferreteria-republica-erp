@@ -1,7 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Search, X } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import { saveCompraMulti, uploadComprobante, type CompraItemPayload } from "@/lib/compras/storage";
 import { getProveedores, proveedorExiste, createProveedor } from "@/lib/proveedores/storage";
@@ -220,8 +221,7 @@ export default function NuevaCompraPage() {
     setLineas((prev) => prev.filter((_, i) => i !== idx));
   }
 
-  function handleProductoSelectChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const id = e.target.value;
+  function selectProducto(id: string) {
     const p = productos.find((x) => x.id === id);
     setProductoCreado(null);
     const insumoNoVendible = !!p && p.es_insumo === true && p.es_vendible !== true;
@@ -553,12 +553,7 @@ export default function NuevaCompraPage() {
 
               <div>
                 <label className={labelSmClass}>Producto <span className="text-red-500">*</span></label>
-                <select value={nl.producto_id} onChange={handleProductoSelectChange} className={inputSmClass}>
-                  <option value="">Seleccionar producto...</option>
-                  {productos.map((p) => (
-                    <option key={p.id} value={p.id}>{p.nombre} — {p.sku} (stock: {p.stock_actual})</option>
-                  ))}
-                </select>
+                <ProductoCombobox productos={productos} value={nl.producto_id} onSelect={selectProducto} />
                 {productoSel && !productoCreado && (
                   <p className="mt-1.5 text-xs text-gray-400">
                     Costo promedio actual: {formatGs(productoSel.costo_promedio)} · Precio venta actual: {formatGs(productoSel.precio_venta)}
@@ -736,6 +731,156 @@ export default function NuevaCompraPage() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{children}</h3>;
+}
+
+/**
+ * Buscador de productos (typeahead). Reemplaza al <select> nativo: con miles de
+ * productos, filtra por nombre/SKU en cliente. Al seleccionar muestra un "chip";
+ * la X vuelve a la búsqueda para cargar el siguiente producto de la compra.
+ */
+function ProductoCombobox({
+  productos,
+  value,
+  onSelect,
+}: {
+  productos: Producto[];
+  value: string;
+  onSelect: (id: string) => void;
+}) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [hl, setHl] = useState(-1);
+  const boxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const selected = useMemo(() => productos.find((p) => p.id === value) ?? null, [productos, value]);
+
+  const resultados = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const base = q
+      ? productos.filter((p) => p.nombre.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q))
+      : productos;
+    return base.slice(0, 50);
+  }, [productos, query]);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  useEffect(() => {
+    if (open && hl >= 0) listRef.current?.querySelector(`[data-idx="${hl}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [open, hl]);
+
+  function pick(p: Producto) {
+    onSelect(p.id);
+    setQuery("");
+    setOpen(false);
+    setHl(-1);
+  }
+
+  if (selected) {
+    return (
+      <div className="flex h-10 items-center justify-between gap-2 rounded-xl border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.06] px-3.5 shadow-sm">
+        <span className="min-w-0 flex-1 truncate text-sm">
+          <span className="font-semibold text-slate-800">{selected.nombre}</span>
+          <span className="ml-2 font-mono text-xs text-slate-500">{selected.sku}</span>
+          <span className="ml-2 text-xs text-slate-400">stock: {selected.stock_actual}</span>
+        </span>
+        <button
+          type="button"
+          onClick={() => {
+            onSelect("");
+            setQuery("");
+            setOpen(true);
+            setTimeout(() => inputRef.current?.focus(), 0);
+          }}
+          className="shrink-0 rounded-md p-1 text-slate-400 transition-colors hover:bg-white hover:text-slate-700"
+          aria-label="Cambiar producto"
+        >
+          <X className="h-4 w-4" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div ref={boxRef} className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
+      <input
+        ref={inputRef}
+        type="text"
+        value={query}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setOpen(true);
+          setHl(-1);
+        }}
+        onFocus={() => setOpen(true)}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowDown") {
+            e.preventDefault();
+            setOpen(true);
+            setHl((h) => Math.min(h + 1, resultados.length - 1));
+          } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHl((h) => Math.max(h - 1, 0));
+          } else if (e.key === "Enter") {
+            e.preventDefault();
+            if (open && hl >= 0 && resultados[hl]) pick(resultados[hl]);
+          } else if (e.key === "Escape") {
+            setOpen(false);
+          }
+        }}
+        placeholder="Buscar producto por nombre o SKU…"
+        autoComplete="off"
+        className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-[#4FAEB2]/60 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20"
+      />
+      {open && (
+        <div className="absolute left-0 right-0 z-50 mt-1.5">
+          <ul
+            ref={listRef}
+            className="max-h-[280px] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-[#4FAEB2]/15"
+          >
+            {resultados.length === 0 ? (
+              <li className="px-3 py-3 text-center text-xs text-slate-400">Sin productos que coincidan.</li>
+            ) : (
+              resultados.map((p, i) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    data-idx={i}
+                    onMouseEnter={() => setHl(i)}
+                    onClick={() => pick(p)}
+                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
+                      i === hl ? "bg-[#4FAEB2]/10 text-[#2F6E71]" : "text-slate-700 hover:bg-slate-50"
+                    }`}
+                  >
+                    <span className="min-w-0 flex-1 truncate">
+                      <span className="font-medium">{p.nombre}</span>
+                      <span className="ml-2 font-mono text-xs text-slate-400">{p.sku}</span>
+                    </span>
+                    <span className={`shrink-0 text-xs ${p.stock_actual <= 0 ? "text-red-500" : "text-slate-400"}`}>
+                      stock: {p.stock_actual}
+                    </span>
+                  </button>
+                </li>
+              ))
+            )}
+            {query.trim() === "" && productos.length > 50 && (
+              <li className="px-3 py-1.5 text-center text-[11px] text-slate-400">
+                Mostrando 50 · escribí para filtrar entre {productos.length.toLocaleString("es-PY")} productos
+              </li>
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function InlineFormBox({
