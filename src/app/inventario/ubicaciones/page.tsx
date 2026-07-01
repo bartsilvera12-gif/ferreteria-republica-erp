@@ -148,9 +148,9 @@ export default function UbicacionesPage() {
         </div>
       </header>
 
-      {/* Nueva ubicación */}
-      <section className="bg-white rounded-2xl border-2 border-[#4FAEB2]/20 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] overflow-hidden">
-        <div className="px-5 py-4 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent">
+      {/* Nueva ubicación — sin overflow-hidden para que el menú del FancySelect no se corte */}
+      <section className="bg-white rounded-2xl border-2 border-[#4FAEB2]/20 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)]">
+        <div className="rounded-t-[14px] px-5 py-4 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent">
           <h2 className="flex items-center gap-2 text-[13px] font-bold uppercase tracking-wider text-slate-700">
             <span className="inline-block h-3.5 w-1 rounded-full bg-[#4FAEB2]" />
             Nueva ubicación
