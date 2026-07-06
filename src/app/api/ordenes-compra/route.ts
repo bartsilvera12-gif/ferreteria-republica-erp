@@ -9,6 +9,7 @@ import {
   type OrdenCompraHeaderInput,
   type OrdenCompraItemInput,
 } from "@/lib/ordenes-compra/server/ordenes-compra-pg";
+import { enviarConfirmacionOrdenCompra } from "@/lib/ordenes-compra/server/orden-compra-email";
 
 /** GET /api/ordenes-compra — lista todas las líneas de OC. */
 export async function GET(request: NextRequest) {
@@ -85,6 +86,16 @@ export async function POST(request: NextRequest) {
 
     try {
       const out = await insertOrdenCompra(schema, empresaId, header, items);
+
+      // Email de confirmación (best-effort: solo si la OC se creó OK; no bloquea
+      // ni rompe la respuesta si el SMTP no está configurado o falla).
+      try {
+        const r = await enviarConfirmacionOrdenCompra(out.ordenes);
+        if (!r.ok && !r.skipped) console.error("[ordenes-compra] email:", r.error);
+      } catch (mailErr) {
+        console.error("[ordenes-compra] email throw:", mailErr instanceof Error ? mailErr.message : mailErr);
+      }
+
       return NextResponse.json(successResponse({ numero_oc: out.numero_oc, ordenes: out.ordenes }));
     } catch (e) {
       const code = (e as { code?: string })?.code;
