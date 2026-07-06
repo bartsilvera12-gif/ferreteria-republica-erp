@@ -3,6 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
+import { applyTokenSearch } from "@/lib/productos/token-search";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 
 /**
@@ -98,9 +99,8 @@ export async function GET(request: NextRequest) {
       .eq("activo", true);
 
     if (q) {
-      // Buscar en nombre o sku
-      const safe = q.replace(/[%_]/g, "\\$&");
-      query = query.or(`nombre.ilike.%${safe}%,sku.ilike.%${safe}%`);
+      // Búsqueda por tokens (palabras en cualquier orden) en nombre o sku.
+      query = applyTokenSearch(query, q, ["nombre", "sku"]);
     }
     if (categoria === "__sin__") {
       query = query.is("categoria_principal_id", null);

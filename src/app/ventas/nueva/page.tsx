@@ -9,6 +9,7 @@ import { getProductos } from "@/lib/inventario/storage";
 import { saveCliente } from "@/lib/clientes/storage";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
+import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type { Producto } from "@/lib/inventario/types";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -549,10 +550,7 @@ export default function NuevaVentaPage() {
   const productosVendibles = productos.filter((p) => p.es_vendible !== false);
   const comboFiltrados = comboQuery.trim() === ""
     ? productosVendibles
-    : productosVendibles.filter((p) => {
-        const q = comboQuery.toLowerCase();
-        return p.nombre.toLowerCase().includes(q) || p.sku.toLowerCase().includes(q);
-      });
+    : productosVendibles.filter((p) => productoMatchesQuery(comboQuery, p.nombre, p.sku));
 
   // ── Selección de un producto desde el combobox ────────────────────────────
   function seleccionarProducto(p: Producto) {

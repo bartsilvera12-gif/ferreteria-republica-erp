@@ -3,6 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { signProductoImagen } from "@/lib/inventario/imagen-storage";
+import { applyTokenSearch } from "@/lib/productos/token-search";
 
 interface ProductoSearchHit {
   id: string;
@@ -37,16 +38,12 @@ interface ProductoSearchHit {
 const DEFAULT_LIMIT = 30;
 const MAX_LIMIT = 100;
 
-/** Escape pattern para ILIKE evitando interpretación de % y _ del usuario. */
-function escapeIlikePattern(s: string): string {
-  return s.replace(/\\/g, "\\\\").replace(/%/g, "\\%").replace(/_/g, "\\_");
-}
-
 /**
  * GET /api/productos/search?q=...&limit=30
  *
- * Búsqueda case-insensitive en nombre/sku/codigo_barras vía PostgREST
- * (compatible Hostinger sin pool PG). Filtra a vendibles únicamente.
+ * Búsqueda por TOKENS (palabras clave en cualquier orden) case-insensitive en
+ * nombre/sku/codigo_barras vía PostgREST (compatible Hostinger sin pool PG).
+ * Filtra a vendibles únicamente.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -89,8 +86,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (q.length > 0) {
-      const pat = `%${escapeIlikePattern(q)}%`;
-      query = query.or(`nombre.ilike.${pat},sku.ilike.${pat},codigo_barras.ilike.${pat}`);
+      // Cada palabra debe aparecer en nombre/sku/codigo_barras (AND entre
+      // tokens, OR entre columnas) → matching orden-independiente.
+      query = applyTokenSearch(query, q, ["nombre", "sku", "codigo_barras"]);
     }
 
     query = query.order("nombre").limit(limit);
