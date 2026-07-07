@@ -26,6 +26,7 @@ import {
   Minus,
   User,
   Package,
+  ImageIcon,
 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
@@ -49,6 +50,7 @@ type ProductoHit = {
   precio_distribuidor?: number | null;
   stock_actual: number;
   unidad_medida: string;
+  imagen_url: string | null;
 };
 
 type CartItem = {
@@ -63,6 +65,7 @@ type CartItem = {
   precio_venta: number;
   precio_mayorista: number;
   precio_distribuidor: number;
+  imagen_url: string | null;
   // Presentacion (siempre presente — al menos la default 'Unidad')
   presentacion_id: string | null;
   presentacion_nombre: string | null;
@@ -83,6 +86,20 @@ function precioPorTipoBase(
   if (tipo === "mayorista") return p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
   if (tipo === "distribuidor") return p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
   return p.precio_venta;
+}
+
+/** Miniatura de producto con fallback a un placeholder si no hay imagen o falla. */
+function ProductoThumb({ url, alt, size = "h-10 w-10" }: { url?: string | null; alt: string; size?: string }) {
+  const [err, setErr] = useState(false);
+  if (!url || err) {
+    return (
+      <div className={`flex ${size} shrink-0 items-center justify-center rounded-md border border-slate-100 bg-slate-50 text-slate-300`}>
+        <ImageIcon className="h-4 w-4" />
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} loading="lazy" onError={() => setErr(true)} className={`${size} shrink-0 rounded-md border border-slate-100 object-cover`} />;
 }
 
 export default function NuevoPedidoPage() {
@@ -128,6 +145,7 @@ export default function NuevoPedidoPage() {
               p.precio_distribuidor == null ? null : Number(p.precio_distribuidor),
             stock_actual: Number(p.stock_actual) || 0,
             unidad_medida: String(p.unidad_medida ?? "Unidad"),
+            imagen_url: (p.imagen_url as string | null) ?? null,
           })
         );
         setHits(items);
@@ -203,6 +221,7 @@ export default function NuevoPedidoPage() {
         precio_venta: p.precio_venta,
         precio_mayorista: p.precio_mayorista,
         precio_distribuidor: p.precio_distribuidor ?? 0,
+        imagen_url: p.imagen_url,
         presentacion_id: def ? def.id : null,
         presentacion_nombre: def ? def.nombre : null,
         presentacion_cantidad_base: def ? def.cantidad_base : null,
@@ -443,6 +462,7 @@ export default function NuevoPedidoPage() {
                         onClick={() => selectFromSearch(p)}
                         className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[#4FAEB2]/8"
                       >
+                        <ProductoThumb url={p.imagen_url} alt={p.nombre} />
                         <div className="min-w-0 flex-1">
                           <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
                           <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
@@ -523,11 +543,16 @@ export default function NuevoPedidoPage() {
                     <tr key={it.producto_id} className="align-middle transition-colors hover:bg-[#4FAEB2]/5">
                       {/* Producto */}
                       <td className="px-4 py-3">
-                        <p className="font-semibold text-slate-900 leading-snug">{it.producto_nombre}</p>
-                        <p className="text-[11px] font-mono text-slate-500">{it.sku}</p>
-                        {cantBase !== 1 && (
-                          <p className="text-[11px] text-slate-500 tabular-nums">= {it.cantidad * cantBase} {it.unidad_medida}</p>
-                        )}
+                        <div className="flex items-center gap-3">
+                          <ProductoThumb url={it.imagen_url} alt={it.producto_nombre} />
+                          <div className="min-w-0">
+                            <p className="font-semibold text-slate-900 leading-snug">{it.producto_nombre}</p>
+                            <p className="text-[11px] font-mono text-slate-500">{it.sku}</p>
+                            {cantBase !== 1 && (
+                              <p className="text-[11px] text-slate-500 tabular-nums">= {it.cantidad * cantBase} {it.unidad_medida}</p>
+                            )}
+                          </div>
+                        </div>
                       </td>
                       {/* Presentación */}
                       <td className="px-3 py-3">
