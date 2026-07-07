@@ -111,3 +111,6 @@ export const getProyeccionInventario = (opts: ProyeccionQuery) => {
   if (opts.q && opts.q.trim()) p.set("q", opts.q.trim());
   return getReporte<ProyeccionInventario>(`/api/reportes/proyeccion-inventario?${p.toString()}`);
 };
+export interface ProyeccionProducto extends ProyeccionRowCli { desde: string; hasta: string; dias: number; }
+export const getProyeccionProducto = (id: string, dias: number) =>
+  getReporte<ProyeccionProducto>(`/api/reportes/proyeccion-inventario/${encodeURIComponent(id)}?dias=${dias}`);

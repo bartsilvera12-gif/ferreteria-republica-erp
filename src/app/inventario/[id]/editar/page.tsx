@@ -6,6 +6,7 @@ import { useRouter, useParams } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import PresentacionesEditor from "@/components/inventario/PresentacionesEditor";
 import { getProducto, productoExiste, updateProducto } from "@/lib/inventario/storage";
+import ProyeccionProductoCard from "@/components/inventario/ProyeccionProductoCard";
 import type { MetodoValuacion } from "@/lib/inventario/types";
 import ProductImageUploader from "@/components/inventario/ProductImageUploader";
 import SelectFromList from "@/components/inventario/SelectFromList";
@@ -442,6 +443,8 @@ export default function EditarProductoPage() {
         <h1 className="text-3xl font-bold text-gray-800">Editar producto</h1>
         <p className="text-gray-600">Modifica los datos del producto</p>
       </div>
+
+      {id && <ProyeccionProductoCard productoId={id} />}
 
       {/* Selector de tipo de producto OCULTO en ferreteria (solo reventa).
           Logica de Modo de receta tambien oculta porque solo aplica a menu. */}
