@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
+import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import RangoFechasSelector from "@/components/reportes/RangoFechasSelector";
 import { getComprasPanel } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
@@ -114,7 +115,12 @@ export default function ComprasReportePage() {
         description="Compras confirmadas y órdenes pendientes de recibir"
         backHref="/reportes"
         backLabel="Reportes"
-        actions={<RangoFechasSelector desde={desde} hasta={hasta} onChange={(r) => { setDesde(r.desde); setHasta(r.hasta); }} />}
+        actions={
+          <div className="flex items-center gap-3">
+            <RangoFechasSelector desde={desde} hasta={hasta} onChange={(r) => { setDesde(r.desde); setHasta(r.hasta); }} />
+            <ExportExcelButton url={`/api/reportes/compras-panel/export?desde=${desde}&hasta=${hasta}`} />
+          </div>
+        }
       />
 
       {/* Cards resumen del período */}
