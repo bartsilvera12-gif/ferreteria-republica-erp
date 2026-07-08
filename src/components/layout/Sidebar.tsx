@@ -159,23 +159,21 @@ const MENU_STRUCTURE: MenuItem[] = [
   //   key: "notas_credito", slug: "notas_credito", label: "Notas de crédito",
   //   href: "/notas-credito", icon: ScrollText,
   // },
-  // Modulos de Administracion ocultos del sidebar (codigo conservado y rutas
-  // siguen accesibles por URL directa):
-  // - Usuarios: gestion interna, no necesaria para ferreteria desde sidebar.
-  // - Configuracion: facturacion + equipos omnicanal, no se usan en el flujo
-  //   diario de la ferreteria.
+  // Usuarios oculto del sidebar (codigo conservado, ruta accesible por URL).
   // { key: "usuarios", slug: "usuarios", label: "Usuarios", href: "/usuarios", icon: UserCog },
-  // {
-  //   key: "configuracion",
-  //   slug: "configuracion",
-  //   label: "Configuración",
-  //   href: "/configuracion",
-  //   icon: Settings,
-  //   children: [
-  //     { label: "Facturación", href: "/configuracion/facturacion" },
-  //     { label: "Equipos y supervisión", href: "/configuracion/omnicanal-equipos" },
-  //   ],
-  // },
+  // Configuracion: reactivado a pedido. Da acceso al panel de facturacion
+  // (modo / autoimpresor) y demas subpaginas de configuracion.
+  {
+    key: "configuracion",
+    slug: "configuracion",
+    label: "Configuración",
+    href: "/configuracion",
+    icon: Settings,
+    children: [
+      { label: "Facturación", href: "/configuracion/facturacion" },
+      { label: "Equipos y supervisión", href: "/configuracion/omnicanal-equipos" },
+    ],
+  },
   // Ofertas del home: modulo standalone para configurar el banner "Ofertas
   // de la semana" del sitio publico (countdown + 3 productos destacados).
   // La ruta sigue siendo /configuracion/ofertas-home; el slug es
