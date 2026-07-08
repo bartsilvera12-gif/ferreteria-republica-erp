@@ -3,6 +3,7 @@ import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { cerrarCaja, getCajaAbierta } from "@/lib/caja/server";
+import { normalizarArqueo } from "@/lib/caja/denominaciones";
 
 /**
  * POST /api/caja/cerrar — cierra la caja con efectivo contado y calcula
@@ -20,8 +21,22 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("JSON inválido."), { status: 400 });
     }
     const o = (body ?? {}) as Record<string, unknown>;
+
+    // Arqueo por denominaciones (opcional). Si viene, el saldo contado se
+    // calcula desde el detalle; si no, se usa monto_cierre_contado manual.
+    let arqueoCierre = null;
+    if (o.arqueo_cierre != null) {
+      arqueoCierre = normalizarArqueo(o.arqueo_cierre);
+      if (arqueoCierre == null) {
+        return NextResponse.json(
+          errorResponse("Arqueo inválido: revisá las denominaciones y cantidades (no negativas, enteras)."),
+          { status: 400 }
+        );
+      }
+    }
+
     const montoCierre = Number(o.monto_cierre_contado);
-    if (!Number.isFinite(montoCierre) || montoCierre < 0) {
+    if (arqueoCierre == null && (!Number.isFinite(montoCierre) || montoCierre < 0)) {
       return NextResponse.json(errorResponse("Monto contado inválido."), { status: 400 });
     }
     const observacion =
@@ -42,9 +57,10 @@ export async function POST(request: NextRequest) {
     const resumen = await cerrarCaja(ctx.supabase, {
       empresaId: ctx.auth.empresa_id,
       cajaId,
-      montoCierreContado: montoCierre,
+      montoCierreContado: Number.isFinite(montoCierre) ? montoCierre : 0,
       observacion,
       usuarioId: ctx.auth.usuarioCatalogId ?? null,
+      arqueoCierre,
     });
     return NextResponse.json(successResponse({ resumen }));
   } catch (err) {

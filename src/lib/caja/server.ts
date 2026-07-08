@@ -15,6 +15,7 @@ import type {
   MedioPagoCaja,
   TipoMovimientoCaja,
 } from "./types";
+import { calcularTotalArqueo, type ArqueoItem } from "./denominaciones";
 
 function num(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v ?? 0);
@@ -24,7 +25,7 @@ function num(v: unknown): number {
 const CAJA_COLS =
   "id, numero_caja, estado, abierta_por, cerrada_por, fecha_apertura, fecha_cierre, " +
   "monto_apertura, monto_cierre_contado, monto_esperado_efectivo, diferencia, " +
-  "observacion_apertura, observacion_cierre";
+  "observacion_apertura, observacion_cierre, arqueo_apertura_json, arqueo_cierre_json";
 
 interface CajaRow {
   id: string;
@@ -40,6 +41,8 @@ interface CajaRow {
   diferencia: number | string | null;
   observacion_apertura: string | null;
   observacion_cierre: string | null;
+  arqueo_apertura_json: ArqueoItem[] | null;
+  arqueo_cierre_json: ArqueoItem[] | null;
 }
 
 /** Normaliza el estado del turno a uno de los 3 válidos. */
@@ -64,6 +67,8 @@ function mapCaja(r: CajaRow): Caja {
     diferencia: r.diferencia == null ? null : num(r.diferencia),
     observacion_apertura: r.observacion_apertura,
     observacion_cierre: r.observacion_cierre,
+    arqueo_apertura_json: r.arqueo_apertura_json ?? null,
+    arqueo_cierre_json: r.arqueo_cierre_json ?? null,
   };
 }
 
@@ -311,6 +316,8 @@ export async function getReporteCajas(
       monto_cierre_contado: c.monto_cierre_contado,
       diferencia: c.diferencia,
       observacion_cierre: c.observacion_cierre,
+      arqueo_apertura_json: c.arqueo_apertura_json,
+      arqueo_cierre_json: c.arqueo_cierre_json,
     };
   });
 
@@ -498,6 +505,8 @@ export async function getDetalleCaja(
     monto_cierre_contado: caja.monto_cierre_contado,
     diferencia: caja.diferencia,
     observacion_cierre: caja.observacion_cierre,
+    arqueo_apertura_json: caja.arqueo_apertura_json,
+    arqueo_cierre_json: caja.arqueo_cierre_json,
   };
 
   return { caja: row, ventas, movimientos };
@@ -534,6 +543,13 @@ export async function abrirCaja(
     observacion: string | null;
     usuarioId: string | null;
     numeroCaja?: number | null;
+    /**
+     * Detalle del conteo físico (monedas/billetes). Si viene (incluso con
+     * total 0), el saldo inicial se CALCULA desde acá — el monto manual se
+     * ignora — y se persiste el detalle para auditoría. Si es null/undefined,
+     * se usa `montoApertura` tal cual (flujo manual de siempre).
+     */
+    arqueoApertura?: ArqueoItem[] | null;
   }
 ): Promise<Caja> {
   const activos = await numerosActivos(sb, params.empresaId);
@@ -547,6 +563,9 @@ export async function abrirCaja(
     while (activos.includes(numero)) numero++;
   }
 
+  const usaArqueo = params.arqueoApertura != null;
+  const montoFinal = usaArqueo ? calcularTotalArqueo(params.arqueoApertura!) : params.montoApertura;
+
   const ins = await sb
     .from("cajas")
     .insert({
@@ -554,8 +573,9 @@ export async function abrirCaja(
       numero_caja: numero,
       estado: "abierta",
       abierta_por: params.usuarioId,
-      monto_apertura: Math.round(params.montoApertura),
+      monto_apertura: Math.round(montoFinal),
       observacion_apertura: params.observacion,
+      arqueo_apertura_json: usaArqueo ? params.arqueoApertura : null,
     })
     .select(CAJA_COLS)
     .single();
@@ -597,6 +617,12 @@ export async function cerrarCaja(
     montoCierreContado: number;
     observacion: string | null;
     usuarioId: string | null;
+    /**
+     * Detalle del conteo físico al cerrar. Si viene, el saldo contado se
+     * CALCULA desde acá (el monto manual se ignora) y se persiste el
+     * detalle. Si es null/undefined, se usa `montoCierreContado` tal cual.
+     */
+    arqueoCierre?: ArqueoItem[] | null;
   }
 ): Promise<CajaResumen> {
   const resumen = await getResumenCaja(sb, params.empresaId, params.cajaId);
@@ -604,7 +630,8 @@ export async function cerrarCaja(
   if (resumen.caja.estado === "cerrada") {
     throw new Error("La caja ya está cerrada.");
   }
-  const contado = Math.round(params.montoCierreContado);
+  const usaArqueo = params.arqueoCierre != null;
+  const contado = Math.round(usaArqueo ? calcularTotalArqueo(params.arqueoCierre!) : params.montoCierreContado);
   const esperado = Math.round(resumen.efectivo_esperado);
   const diferencia = contado - esperado;
 
@@ -618,6 +645,7 @@ export async function cerrarCaja(
       monto_esperado_efectivo: esperado,
       diferencia,
       observacion_cierre: params.observacion,
+      arqueo_cierre_json: usaArqueo ? params.arqueoCierre : null,
     })
     .eq("empresa_id", params.empresaId)
     .eq("id", params.cajaId)

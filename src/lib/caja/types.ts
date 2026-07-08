@@ -5,13 +5,23 @@
  * abierta se le asocian ventas (ventas.caja_id) y movimientos manuales,
  * y se cierra contando el efectivo (arqueo).
  *
- * En esta instancia hay UNA sola caja por empresa (sin numero_caja). El
- * indice unique parcial en DB garantiza que solo haya una abierta a la vez.
+ * Soporta MULTIPLES cajas activas por empresa (Caja 1, Caja 2, …) via
+ * `numero_caja`; el indice unique parcial en DB solo evita dos turnos
+ * activos sobre el mismo numero.
+ *
+ * El conteo de apertura/cierre se puede cargar como monto directo o, si el
+ * cajero usa el arqueo por denominaciones (monedas y billetes), el sistema
+ * calcula monto_apertura/monto_cierre_contado desde ese detalle y lo persiste
+ * en arqueo_apertura_json/arqueo_cierre_json para auditoría (ver ArqueoItem).
  */
+
+import type { ArqueoItem } from "./denominaciones";
 
 export type EstadoCaja = "abierta" | "en_cierre" | "cerrada";
 export type TipoMovimientoCaja = "ingreso" | "egreso" | "retiro" | "ajuste";
 export type MedioPagoCaja = "efectivo" | "tarjeta" | "transferencia" | "otro";
+
+export type { ArqueoItem, TipoDenominacion, Denominacion } from "./denominaciones";
 
 export interface Caja {
   id: string;
@@ -27,6 +37,10 @@ export interface Caja {
   diferencia: number | null;
   observacion_apertura: string | null;
   observacion_cierre: string | null;
+  /** Detalle del conteo físico al abrir (null si se cargó el monto directo). */
+  arqueo_apertura_json: ArqueoItem[] | null;
+  /** Detalle del conteo físico al cerrar (null si se cargó el monto directo). */
+  arqueo_cierre_json: ArqueoItem[] | null;
 }
 
 export interface CajaMovimiento {
@@ -95,6 +109,9 @@ export interface CajaReporteRow {
   monto_cierre_contado: number | null;
   diferencia: number | null;
   observacion_cierre: string | null;
+  /** Detalle del arqueo (auditoría). Null si el turno usó monto directo o es previo a esta función. */
+  arqueo_apertura_json: ArqueoItem[] | null;
+  arqueo_cierre_json: ArqueoItem[] | null;
 }
 
 /** Una venta individual realizada durante un turno de caja. */
