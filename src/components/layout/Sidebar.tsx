@@ -110,9 +110,9 @@ const MENU_STRUCTURE: MenuItem[] = [
   // muestra el listado "Pedidos por cobrar" embebido. Slug 'ventas' para
   // heredar acceso del modulo. La ruta vieja /consulta redirige a /pedidos.
   { key: "pedidos", slug: "ventas", label: "Pedidos", href: "/pedidos", icon: Receipt },
-  // Presupuestos oculto en ferreteria (la tienda publica + WhatsApp manejan
-  // cotizaciones manualmente, no se usa el modulo).
-  // { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
+  // Presupuestos: cotizaciones al cliente con PDF (logo + membrete Ferreteria
+  // Republica). Reactivado a pedido.
+  { key: "presupuestos", slug: "presupuestos", label: "Presupuestos", href: "/presupuestos", icon: FileText },
   // Items gastro/legacy ocultados para ferreteria (codigo conservado por si se reactivan):
   // - Pedidos (proyectos): kanban de cocina, no aplica.
   // - Recetas: combos/insumos, no aplica.
