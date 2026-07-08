@@ -295,6 +295,15 @@ export default function VentasPage() {
                           >
                             Imprimir
                           </a>
+                          <a
+                            href={`/api/ventas/${v.id}/factura`}
+                            target="_blank"
+                            rel="noopener"
+                            className="inline-flex items-center justify-center rounded-md border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-3 py-1.5 text-xs font-medium text-[#3F8E91] hover:bg-[#4FAEB2]/[0.16] transition-colors"
+                            title="Factura autoimpresor (formato ticket)"
+                          >
+                            Factura
+                          </a>
                           {v.genera_nota_remision && (
                             <a
                               href={`/api/ventas/${v.id}/ticket?tipo=remision`}
