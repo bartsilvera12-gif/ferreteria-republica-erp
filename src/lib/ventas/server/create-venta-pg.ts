@@ -88,6 +88,9 @@ export interface CreateVentaPgParams {
   generaNotaRemision?: boolean;
   /** Caja (turno) a la que se asocia la venta. La elige el cajero cuando hay varias abiertas. */
   cajaId?: string | null;
+  /** Usuario que registra la venta (auditoría de movimientos de inventario). */
+  usuarioId?: string | null;
+  usuarioNombre?: string | null;
 }
 
 function recalcTotals(items: CreateVentaItemInput[]) {
@@ -627,6 +630,8 @@ export async function createVentaTransaccionalPg(
         referencia: numeroControl,
         fecha: fechaIso,
         venta_id: ventaId,
+        created_by: params.usuarioId ?? null,
+        usuario_nombre: params.usuarioNombre ?? null,
       });
       if (mov.error) throw new Error(mov.error.message);
     }
@@ -659,6 +664,8 @@ export async function createVentaTransaccionalPg(
         referencia: numeroControl,
         fecha: fechaIso,
         venta_id: ventaId,
+        created_by: params.usuarioId ?? null,
+        usuario_nombre: params.usuarioNombre ?? null,
       });
       if (mov.error) throw new Error(mov.error.message);
     }

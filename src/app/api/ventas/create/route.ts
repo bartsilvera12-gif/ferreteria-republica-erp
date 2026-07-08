@@ -245,6 +245,8 @@ export async function POST(request: NextRequest) {
       permitirSinStock,
       generaNotaRemision: o.genera_nota_remision === true,
       cajaId: o.caja_id != null && String(o.caja_id).trim() !== "" ? String(o.caja_id) : null,
+      usuarioId: auth.usuarioCatalogId ?? null,
+      usuarioNombre: auth.nombre ?? auth.user?.email ?? null,
     });
 
     // Vincular el pedido facturado con la venta creada (Caja). Trazabilidad:
