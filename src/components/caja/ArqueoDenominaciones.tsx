@@ -95,7 +95,7 @@ function PanelDenom({
           const cantidad = Math.max(0, Math.floor(value[d.valor] || 0));
           return (
             <div key={d.valor} className="flex items-center gap-2 px-3 py-2">
-              <span className="w-20 shrink-0 text-sm font-semibold tabular-nums text-slate-700">{fmtGs(d.valor)}</span>
+              <span className="w-24 shrink-0 whitespace-nowrap text-sm font-semibold tabular-nums text-slate-700">{fmtGs(d.valor)}</span>
               <input
                 type="number"
                 min={0}
@@ -108,7 +108,7 @@ function PanelDenom({
                 onFocus={(e) => e.target.select()}
                 className="w-16 shrink-0 rounded-lg border-2 border-slate-200 px-2 py-1.5 text-center text-sm font-semibold tabular-nums outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 disabled:bg-slate-50 disabled:text-slate-400"
               />
-              <span className="ml-auto text-right text-sm tabular-nums font-semibold text-slate-800">
+              <span className="ml-auto whitespace-nowrap text-right text-sm tabular-nums font-semibold text-slate-800">
                 {fmtGs(d.valor * cantidad)}
               </span>
             </div>
