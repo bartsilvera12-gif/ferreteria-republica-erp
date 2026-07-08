@@ -444,15 +444,10 @@ export async function createVentaTransaccionalPg(
     throw new StockInsuficienteError(faltantes);
   }
 
-  // Auditoría: si se autorizó vender sin stock y hubo faltantes, dejar constancia en la venta.
-  let observacionesFinal = params.observaciones;
-  if (faltantes.length > 0 && params.permitirSinStock) {
-    const detalle = faltantes
-      .map((f) => `${f.nombre} (stock ${f.stock_actual}, pedido ${f.solicitado}, falta ${f.faltante})`)
-      .join("; ");
-    const nota = `Venta con stock insuficiente autorizada: ${detalle}`;
-    observacionesFinal = (observacionesFinal ? `${observacionesFinal} | ${nota}` : nota).slice(0, 4000);
-  }
+  // La venta guarda solo la observación que ingresó el usuario. No se agrega
+  // ninguna nota automática (la venta sin stock ya queda trazada por el stock
+  // negativo y el movimiento de inventario).
+  const observacionesFinal = params.observaciones;
 
   // 4) Numero control VTA-XXXXXX (best-effort: race posible en entorno multi-usuario).
   const maxQ = await sb

@@ -10,6 +10,7 @@
  *    la secuencia). Sirve para previsualizar antes de activar el autoimpresor.
  */
 import type { LiquidacionIva } from "./emitir-factura";
+import { membreteTicket } from "@/lib/documentos/membrete";
 
 export interface FacturaTicketData {
   borrador: boolean;
@@ -54,7 +55,7 @@ function esc(s: string): string {
 }
 
 function gs(v: number): string {
-  return Math.round(v || 0).toLocaleString("es-PY");
+  return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`;
 }
 
 function fechaHora(iso: string): string {
@@ -134,7 +135,6 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
   const fontPx = d.widthMm === 58 ? 11 : 12;
   const totalIva = d.liq.iva_5 + d.liq.iva_10;
   const cond = d.condicion === "credito" ? "CRÉDITO" : "CONTADO";
-  const logo = d.origin ? `${d.origin}${d.emisor.logoUrl}` : d.emisor.logoUrl;
 
   const itemsHtml = d.items
     .map((it) => {
@@ -191,11 +191,9 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
 </style></head>
 <body>
   <section class="paper">
-    <div class="logo"><img src="${esc(logo)}" alt="${esc(d.emisor.razon_social)}" /></div>
+    ${membreteTicket(d.origin)}
     <div class="rs">${esc(d.emisor.razon_social)}</div>
     <div class="em">RUC: ${esc(d.emisor.ruc)}</div>
-    ${d.emisor.direccion ? `<div class="em">${esc(d.emisor.direccion)}</div>` : ""}
-    ${d.emisor.telefono ? `<div class="em">Tel: ${esc(d.emisor.telefono)}</div>` : ""}
     <hr>
     <div class="doc-title">FACTURA</div>
     <div class="doc-num">${esc(d.numeroCompleto)}</div>
@@ -217,7 +215,7 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
       <div><span>Exentas</span><span>${gs(d.liq.exentas)}</span></div>
       <div><span>Gravadas 5%</span><span>${gs(d.liq.gravado_5)}</span></div>
       <div><span>Gravadas 10%</span><span>${gs(d.liq.gravado_10)}</span></div>
-      <div class="big"><span>TOTAL Gs.</span><span>${gs(d.liq.total)}</span></div>
+      <div class="big"><span>TOTAL</span><span>${gs(d.liq.total)}</span></div>
     </div>
     <hr>
     <div class="liq">
@@ -227,6 +225,7 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
     </div>
     <div class="letras">Son: ${esc(numeroALetras(d.liq.total))} guaraníes.</div>
     ${avisoBorrador}
+    ${!d.borrador ? `<div class="foot" style="font-style:italic;">¡Gracias por su compra!</div>` : ""}
     <div class="foot">
       Venta ${esc(d.ventaNumeroControl)}${d.borrador ? " · DOCUMENTO DE PRUEBA" : ""}
     </div>
