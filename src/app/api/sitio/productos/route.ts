@@ -1,5 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
+import { resolverImagenesPublicas } from "@/lib/inventario/imagen-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -56,7 +57,7 @@ export async function GET(request: NextRequest) {
   let query = supabase
     .from("productos")
     .select(
-      `id, nombre, sku, precio_venta, imagen_url, descripcion,
+      `id, nombre, sku, precio_venta, imagen_url, imagen_path, descripcion,
        unidad_medida, stock_actual, categoria_principal_id, destacado,
        discount_type, discount_value, discount_starts_at, discount_ends_at,
        categoria:categoria_principal_id ( id, nombre )`,
@@ -98,9 +99,17 @@ export async function GET(request: NextRequest) {
     );
   }
 
+  // El ERP guarda la imagen en imagen_path (bucket privado) con imagen_url en
+  // null. Firmamos el path y lo devolvemos como imagen_url, que es lo que lee el
+  // sitio. Sin esto, la imagen cargada nunca se refleja en la web.
+  const productos = await resolverImagenesPublicas(
+    supabase,
+    (data ?? []) as Array<{ imagen_url?: string | null; imagen_path?: string | null }>
+  );
+
   return NextResponse.json(
     {
-      productos: data ?? [],
+      productos,
       total: count ?? 0,
       limit,
       offset,

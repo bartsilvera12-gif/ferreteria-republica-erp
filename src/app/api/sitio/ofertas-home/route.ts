@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
+import { resolverImagenesPublicas } from "@/lib/inventario/imagen-storage";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ export async function GET() {
     supabase
       .from("productos")
       .select(
-        `id, nombre, sku, precio_venta, imagen_url, descripcion,
+        `id, nombre, sku, precio_venta, imagen_url, imagen_path, descripcion,
          unidad_medida, stock_actual,
          discount_type, discount_value, discount_starts_at, discount_ends_at,
          categoria:categoria_principal_id ( id, nombre )`
@@ -53,10 +54,16 @@ export async function GET() {
     );
   }
 
+  // Firmar imagen_path (bucket privado) → imagen_url que lee el sitio.
+  const productos = await resolverImagenesPublicas(
+    supabase,
+    (prods.data ?? []) as Array<{ imagen_url?: string | null; imagen_path?: string | null }>
+  );
+
   return NextResponse.json(
     {
       countdownEnd: emp.data?.ofertas_countdown_end ?? null,
-      productos: prods.data ?? [],
+      productos,
     },
     {
       headers: {
