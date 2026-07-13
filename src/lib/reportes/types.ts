@@ -235,3 +235,72 @@ export interface ComprasPanel {
     monto_pendiente: number;    // suma de subtotales pendientes estimados
   };
 }
+
+// ── Créditos por cliente (ventas a crédito / cuentas por cobrar) ────────────
+
+/** Resumen de la deuda a crédito de un cliente (agregado de sus cuentas). */
+export interface CreditoClienteFila {
+  cliente_id: string;
+  cliente_nombre: string;
+  cliente_ruc: string | null;
+  ventas_credito: number;    // cantidad de ventas a crédito
+  total: number;             // suma de los totales
+  cobrado: number;           // total - saldo
+  saldo: number;             // saldo pendiente
+  vencido: number;           // saldo cuyas cuotas ya vencieron
+  proximo_vencimiento: string | null;
+  ultima_venta: string | null;
+}
+
+export interface CreditosReporte {
+  totales: {
+    clientes_con_saldo: number;
+    ventas_credito: number;
+    total_credito: number;
+    total_cobrado: number;
+    saldo_pendiente: number;
+    monto_vencido: number;
+  };
+  clientes: CreditoClienteFila[];
+}
+
+/** Una venta a crédito (cuenta por cobrar) del extracto de un cliente. */
+export interface ExtractoCuentaFila {
+  id: string;
+  numero_venta: string | null;
+  fecha_emision: string;
+  fecha_vencimiento: string | null;
+  total: number;
+  saldo: number;
+  cobrado: number;
+  estado: string;
+  dias_vencido: number; // >0 si venció y tiene saldo
+}
+
+/** Un cobro registrado del cliente (pago contra una cuenta). */
+export interface ExtractoCobroFila {
+  id: string;
+  fecha_pago: string;
+  numero_venta: string | null;
+  monto: number;
+  metodo_pago: string | null;
+  referencia: string | null;
+}
+
+export interface ExtractoCliente {
+  cliente: {
+    id: string;
+    nombre: string;
+    ruc: string | null;
+    telefono: string | null;
+    direccion: string | null;
+  };
+  cuentas: ExtractoCuentaFila[];
+  cobros: ExtractoCobroFila[];
+  totales: {
+    total: number;
+    cobrado: number;
+    saldo: number;
+    vencido: number;
+  };
+}

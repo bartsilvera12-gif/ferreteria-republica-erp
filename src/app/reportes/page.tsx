@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -31,6 +31,15 @@ export default function ReportesPage() {
             icon={ShoppingCart}
             description="Ventas del mes, desglose por tipo de precio (minorista/mayorista/al costo) y por producto."
             href="/reportes/ventas"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Créditos por cliente"
+            subtitle="Ventas a crédito y cobranzas"
+            icon={CreditCard}
+            description="Clientes con ventas a crédito: saldo pendiente, vencido y próximo vencimiento. Extracto por cliente imprimible para seguimiento."
+            href="/reportes/creditos"
           />
         </li>
         <li>
