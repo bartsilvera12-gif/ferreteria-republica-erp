@@ -1000,54 +1000,58 @@ export default function ClienteDetailPage() {
 
       {/* ── Panel resumen ─────────────────────────────────────────────────── */}
       <div className="bg-white rounded-xl border border-gray-200 shadow-sm overflow-hidden">
-        <div className="bg-gradient-to-r from-[#4FAEB2] to-[#3F8E91] px-6 py-5">
-          <div className="flex items-start justify-between gap-4">
+        {/* Franja de acento (marca) */}
+        <div className="h-1.5 bg-gradient-to-r from-[#4FAEB2] to-[#3F8E91]" />
+
+        <div className="px-6 py-5">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="flex items-center gap-4">
               {/* Avatar */}
-              <div className={`w-14 h-14 rounded-xl flex items-center justify-center text-xl font-bold text-white shrink-0 ${
-                cliente.tipo_cliente === "empresa" ? "bg-[#3F8E91]/80" : "bg-violet-500/80"
-              }`}>
+              <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#E5F4F4] text-lg font-bold text-[#3F8E91] ring-1 ring-[#4FAEB2]/30">
                 {nombre.slice(0, 2).toUpperCase()}
               </div>
-              <div>
-                <h1 className="text-xl font-bold text-white leading-tight">{nombre}</h1>
-                <div className="flex items-center gap-3 mt-1 flex-wrap">
-                  <span className="text-gray-300 font-mono text-xs">{cliente.codigo_cliente}</span>
-                  {cliente.ruc && (
-                    <span className="text-gray-300 text-xs">RUC: {cliente.ruc}</span>
-                  )}
-                  <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <h1 className="text-xl font-bold leading-tight text-slate-900">{nombre}</h1>
+                  <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold ${
                     cliente.estado === "activo"
-                      ? "bg-green-500/20 text-green-300"
-                      : "bg-gray-500/30 text-gray-300"
+                      ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"
+                      : "bg-slate-100 text-slate-500 ring-1 ring-slate-200"
                   }`}>
-                    ● {cliente.estado === "activo" ? "Activo" : "Inactivo"}
+                    <span className={`h-1.5 w-1.5 rounded-full ${cliente.estado === "activo" ? "bg-emerald-500" : "bg-slate-400"}`} />
+                    {cliente.estado === "activo" ? "Activo" : "Inactivo"}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-[#E5F4F4] px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#3F8E91]">
+                    {cliente.tipo_cliente === "empresa" ? "Empresa" : "Persona"}
                   </span>
                   {cliente.perfil_tributario_activo && (
-                    <span className="text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-white/15 text-white border border-white/25">
+                    <span className="inline-flex items-center rounded-full bg-violet-50 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-violet-700 ring-1 ring-violet-200">
                       Tributario
                     </span>
                   )}
-                  <span className="text-xs text-gray-400">
-                    Cliente desde {formatFecha(cliente.created_at)}
-                  </span>
+                </div>
+                <div className="mt-1.5 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-500">
+                  <span className="font-mono text-slate-600">{cliente.codigo_cliente}</span>
+                  {cliente.ruc && <span><span className="text-slate-400">RUC/CI:</span> <span className="font-medium text-slate-700">{cliente.ruc}</span></span>}
+                  <span>Cliente desde {formatFecha(cliente.created_at)}</span>
                 </div>
               </div>
             </div>
-            {/* Acciones del header */}
-            <div className="flex items-center gap-2 shrink-0">
+
+            {/* Acciones secundarias */}
+            <div className="flex shrink-0 items-center gap-2">
               {cliente.estado === "activo" ? (
                 esAdmin ? (
                   <button
                     onClick={abrirModalBajaOperativa}
-                    className="text-xs font-medium border border-amber-400/60 text-amber-200 hover:bg-amber-500/20 px-3 py-1.5 rounded-lg transition-colors"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
                   >
-                    Dar de baja cliente
+                    Dar de baja
                   </button>
                 ) : (
                   <button
                     onClick={handleToggleEstado}
-                    className="text-xs font-medium border border-white/20 text-white/80 hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors"
+                    className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50"
                   >
                     Desactivar
                   </button>
@@ -1055,7 +1059,7 @@ export default function ClienteDetailPage() {
               ) : (
                 <button
                   onClick={handleToggleEstado}
-                  className="text-xs font-medium border border-white/20 text-white/80 hover:bg-white/10 px-3 py-1.5 rounded-lg transition-colors"
+                  className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-1.5 text-xs font-semibold text-emerald-700 transition-colors hover:bg-emerald-100"
                 >
                   Reactivar
                 </button>
@@ -1064,10 +1068,10 @@ export default function ClienteDetailPage() {
                 <button
                   type="button"
                   onClick={() => void abrirModalEliminar()}
-                  className="text-red-200 hover:text-white hover:bg-red-900/40 border border-red-400/40 flex items-center gap-1.5 px-2 py-1.5 rounded-lg transition-colors text-xs font-medium"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-600 transition-colors hover:bg-red-50"
                   title="Eliminar cliente (baja lógica)"
                 >
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-4 h-4 shrink-0" aria-hidden>
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="h-4 w-4 shrink-0" aria-hidden>
                     <path fillRule="evenodd" d="M8.75 1A2.75 2.75 0 0 0 6 3.75v.443c-.795.077-1.584.176-2.365.298a.75.75 0 1 0 .23 1.482l.149-.022.841 10.518A2.75 2.75 0 0 0 7.596 19h4.807a2.75 2.75 0 0 0 2.742-2.53l.841-10.52.149.023a.75.75 0 0 0 .23-1.482A41.03 41.03 0 0 0 14 4.193V3.75A2.75 2.75 0 0 0 11.25 1h-2.5ZM10 4c.84 0 1.673.025 2.5.075V3.75c0-.69-.56-1.25-1.25-1.25h-2.5c-.69 0-1.25.56-1.25 1.25v.325C8.327 4.025 9.16 4 10 4ZM8.58 7.72a.75.75 0 0 0-1.5.06l.3 7.5a.75.75 0 1 0 1.5-.06l-.3-7.5Zm4.34.06a.75.75 0 1 0-1.5-.06l-.3 7.5a.75.75 0 1 0 1.5.06l.3-7.5Z" clipRule="evenodd" />
                   </svg>
                   Eliminar
@@ -1075,7 +1079,33 @@ export default function ClienteDetailPage() {
               )}
             </div>
           </div>
-          <div className="mt-4 pt-4 border-t border-white/15 flex flex-wrap gap-2">
+
+          {/* Acciones principales */}
+          <div className="mt-5 flex flex-wrap gap-2 border-t border-slate-100 pt-4">
+            <button
+              type="button"
+              onClick={abrirRegistrarPago}
+              className="rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#4FAEB2]/30 transition-colors hover:bg-[#3F8E91]"
+            >
+              Registrar pago
+            </button>
+            <Link
+              href={`/clientes/${id}/estado-cuenta`}
+              className="rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-4 py-2 text-sm font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/[0.16]"
+            >
+              Estado de cuenta
+            </Link>
+            <button
+              type="button"
+              onClick={() => {
+                setFormFacturaContado({ monto: "", descripcion: "Venta al contado", iva_tipo: "iva_10" });
+                setErrorFacturaContado(null);
+                setModalFacturaContado(true);
+              }}
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            >
+              Factura al contado
+            </button>
             <button
               type="button"
               onClick={() => {
@@ -1090,27 +1120,9 @@ export default function ClienteDetailPage() {
                 });
                 setModalSuscripcion(true);
               }}
-              className="text-xs font-medium bg-white/15 hover:bg-white/25 text-white border border-white/30 px-3 py-1.5 rounded-lg transition-colors"
+              className="rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
             >
               Nueva suscripción
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setFormFacturaContado({ monto: "", descripcion: "Venta al contado", iva_tipo: "iva_10" });
-                setErrorFacturaContado(null);
-                setModalFacturaContado(true);
-              }}
-              className="text-xs font-medium bg-white/15 hover:bg-white/25 text-white border border-white/30 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              Factura al contado
-            </button>
-            <button
-              type="button"
-              onClick={abrirRegistrarPago}
-              className="text-xs font-medium bg-white/15 hover:bg-white/25 text-white border border-white/30 px-3 py-1.5 rounded-lg transition-colors"
-            >
-              Registrar pago
             </button>
           </div>
         </div>
