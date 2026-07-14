@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ArrowLeft, Printer } from "lucide-react";
+import { ArrowLeft, Download } from "lucide-react";
 import { getExtractoCliente } from "@/lib/reportes/storage";
 import { EMPRESA_DOC } from "@/lib/documentos/membrete";
 import type { ExtractoCliente } from "@/lib/reportes/types";
@@ -69,9 +69,12 @@ export default function ExtractoClientePage() {
         <Link href="/reportes/creditos" className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-[#3F8E91]">
           <ArrowLeft className="h-4 w-4" /> Créditos por cliente
         </Link>
-        <button onClick={() => window.print()} className="inline-flex items-center gap-2 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#3F8E91]">
-          <Printer className="h-4 w-4" /> Imprimir / Guardar PDF
-        </button>
+        <a
+          href={`/api/reportes/creditos/${encodeURIComponent(clienteId)}/pdf`}
+          className="inline-flex items-center gap-2 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#3F8E91]"
+        >
+          <Download className="h-4 w-4" /> Descargar PDF
+        </a>
       </div>
 
       {/* Documento */}
