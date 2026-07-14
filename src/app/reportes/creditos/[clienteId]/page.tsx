@@ -73,7 +73,7 @@ export default function ExtractoClientePage() {
           href={`/api/reportes/creditos/${encodeURIComponent(clienteId)}/pdf`}
           className="inline-flex items-center gap-2 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white transition-colors hover:bg-[#3F8E91]"
         >
-          <Download className="h-4 w-4" /> Descargar PDF
+          <Download className="h-4 w-4" /> Generar PDF
         </a>
       </div>
 
