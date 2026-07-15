@@ -2,12 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { FileText, Plus, Loader2, Lock, ChevronDown } from "lucide-react";
+import { FileText, Plus, Loader2, Lock } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ESTADO_LABEL, type EstadoPresupuesto } from "@/lib/presupuestos/types";
-
-/** Estados que el usuario puede elegir manualmente desde el listado (nunca 'convertido'). */
-const ESTADOS_EDITABLES: EstadoPresupuesto[] = ["creado", "enviado", "aprobado", "rechazado"];
+import EstadoSelect from "@/components/presupuestos/EstadoSelect";
 
 type PresupuestoRow = {
   id: string;
@@ -26,14 +24,6 @@ const ESTADO_BADGE: Record<EstadoPresupuesto, string> = {
   rechazado: "bg-red-100 text-red-700",
   convertido: "bg-violet-100 text-violet-700",
 };
-const ESTADO_DOT: Record<EstadoPresupuesto, string> = {
-  creado: "bg-slate-400",
-  enviado: "bg-sky-500",
-  aprobado: "bg-emerald-500",
-  rechazado: "bg-red-500",
-  convertido: "bg-violet-500",
-};
-
 function fmtGs(n: number | string, moneda: string) {
   const v = Number(n) || 0;
   return (moneda === "USD" ? "USD " : "Gs. ") + v.toLocaleString("es-PY", { maximumFractionDigits: moneda === "USD" ? 2 : 0 });
@@ -219,25 +209,12 @@ export default function PresupuestosPage() {
                           <Lock className="h-3.5 w-3.5" /> {ESTADO_LABEL.convertido}
                         </span>
                       ) : (
-                        <div className="relative inline-flex h-8 w-36 items-center">
-                          <span className={`pointer-events-none absolute left-3 h-2 w-2 rounded-full ${ESTADO_DOT[r.estado]}`} aria-hidden />
-                          <select
-                            value={r.estado}
-                            disabled={actualizando.has(r.id)}
-                            onChange={(e) => cambiarEstado(r.id, r.estado, e.target.value as EstadoPresupuesto)}
-                            className={`h-8 w-36 cursor-pointer appearance-none rounded-lg pl-7 pr-7 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-[#4FAEB2]/40 disabled:opacity-60 ${ESTADO_BADGE[r.estado]}`}
-                            aria-label={`Estado de ${r.numero_control}`}
-                          >
-                            {ESTADOS_EDITABLES.map((s) => (
-                              <option key={s} value={s} className="bg-white text-slate-700">{ESTADO_LABEL[s]}</option>
-                            ))}
-                          </select>
-                          {actualizando.has(r.id) ? (
-                            <Loader2 className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 animate-spin text-current opacity-70" />
-                          ) : (
-                            <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5 opacity-70" />
-                          )}
-                        </div>
+                        <EstadoSelect
+                          value={r.estado}
+                          updating={actualizando.has(r.id)}
+                          onChange={(nuevo) => cambiarEstado(r.id, r.estado, nuevo)}
+                          label={`Estado de ${r.numero_control}`}
+                        />
                       )}
                     </td>
                     <td className="py-3 px-4 text-right">
