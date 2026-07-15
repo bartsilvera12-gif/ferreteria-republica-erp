@@ -227,7 +227,6 @@ export async function buildPresupuestoPdf(
   c.page.drawRectangle({ x: rx, y: boxTop - 5, width: colW, height: 0.8, color: GRIS_CLARO });
   let ry = boxTop - 20;
   const det: Array<[string, string]> = [
-    ["Condición", data.condicion === "credito" ? "Crédito" : "Contado"],
     ["Moneda", moneda === "USD" ? "Dólares (USD)" : "Guaraníes (PYG)"],
   ];
   if (data.validez_dias != null) det.push(["Validez", `${data.validez_dias} día(s)`]);
@@ -308,27 +307,27 @@ export async function buildPresupuestoPdf(
   }
 
   // ── Totales ─────────────────────────────────────────────────────────────────
-  c.y -= 6;
-  const totW = 230;
+  const totW = 250;
   const totX = A4[0] - MX - totW;
-  const line = (k: string, v: string, boldRow = false) => {
-    c.page.drawText(k, { x: totX, y: c.y, size: boldRow ? 10 : 9, font: boldRow ? bold : reg, color: boldRow ? TINTA : GRIS });
-    const f = boldRow ? bold : reg;
-    const size = boldRow ? 10 : 9;
-    c.page.drawText(v, { x: A4[0] - MX - f.widthOfTextAtSize(v, size), y: c.y, size, font: f, color: boldRow ? TINTA : SLATE });
-    c.y -= boldRow ? 16 : 14;
+  if (c.y < BOTTOM + 96) { c.page = doc.addPage(A4); c.y = TOP; membrete(c); }
+  c.y -= 22; // aire después de la tabla
+  const totLine = (k: string, v: string) => {
+    c.page.drawText(k, { x: totX, y: c.y, size: 9.5, font: reg, color: GRIS });
+    c.page.drawText(v, { x: A4[0] - MX - reg.widthOfTextAtSize(v, 9.5), y: c.y, size: 9.5, font: reg, color: SLATE });
+    c.y -= 16;
   };
-  if (c.y < BOTTOM + 70) { c.page = doc.addPage(A4); c.y = TOP; membrete(c); }
-  line("Subtotal (sin IVA)", money(data.subtotal, moneda));
-  line("IVA", money(data.monto_iva, moneda));
-  if (Number(data.descuento_total) > 0) line("Descuentos", "- " + money(data.descuento_total, moneda));
-  // Barra TOTAL con acento.
-  c.y -= 2;
-  c.page.drawRectangle({ x: totX - 12, y: c.y - 6, width: totW + 12, height: 26, color: ACENTO });
-  c.page.drawText("TOTAL", { x: totX, y: c.y + 3, size: 12, font: bold, color: rgb(1, 1, 1) });
+  totLine("Subtotal (sin IVA)", money(data.subtotal, moneda));
+  totLine("IVA", money(data.monto_iva, moneda));
+  if (Number(data.descuento_total) > 0) totLine("Descuentos", "- " + money(data.descuento_total, moneda));
+  // Barra TOTAL: se dibuja HACIA ABAJO desde c.y, sin pisar las líneas de arriba.
+  c.y -= 6;
+  const barH = 32;
+  c.page.drawRectangle({ x: totX - 14, y: c.y - barH, width: totW + 14, height: barH, color: ACENTO });
+  const barMid = c.y - barH / 2;
+  c.page.drawText("TOTAL", { x: totX, y: barMid - 4.5, size: 12, font: bold, color: rgb(1, 1, 1) });
   const totalTxt = money(data.total, moneda);
-  c.page.drawText(totalTxt, { x: A4[0] - MX - bold.widthOfTextAtSize(totalTxt, 13) - 2, y: c.y + 2, size: 13, font: bold, color: rgb(1, 1, 1) });
-  c.y -= 34;
+  c.page.drawText(totalTxt, { x: A4[0] - MX - bold.widthOfTextAtSize(totalTxt, 14), y: barMid - 5, size: 14, font: bold, color: rgb(1, 1, 1) });
+  c.y -= barH + 24;
 
   // ── Condiciones + observaciones ─────────────────────────────────────────────
   const condiciones: string[] = [];
