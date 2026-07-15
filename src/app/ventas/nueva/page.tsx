@@ -756,10 +756,14 @@ export default function NuevaVentaPage() {
       const v = resultado.venta;
       const generaNota = v.genera_nota_remision === true || !!v.nota_remision_numero;
       const ticketUrl = `/api/ventas/${v.id}/ticket?mode=comandas&auto=1`;
+      const facturaUrl = `/api/ventas/${v.id}/factura?auto=1`;
       const remisionUrl = `/api/ventas/${v.id}/ticket?tipo=remision&auto=1`;
-      // Intento de apertura automática del ticket (popup; el navegador puede
-      // bloquearlo). Si pasa, el cajero puede reimprimirlo desde el listado.
-      try { window.open(ticketUrl, "_blank", "noopener"); } catch {}
+      // Si se seleccionó cliente, la venta se factura: abrimos la FACTURA (mismo
+      // ticket pero con los datos fiscales). Sin cliente, el ticket interno.
+      const docUrl = clienteId ? facturaUrl : ticketUrl;
+      // Intento de apertura automática (popup; el navegador puede bloquearlo).
+      // Si pasa, el cajero puede reimprimir el documento desde el listado.
+      try { window.open(docUrl, "_blank", "noopener"); } catch {}
       if (generaNota) { try { window.open(remisionUrl, "_blank", "noopener"); } catch {} }
       // Redirige directo al listado de ventas en lugar de mostrar el modal
       // post-venta. El cajero queda libre para registrar otra venta de
