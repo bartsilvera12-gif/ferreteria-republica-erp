@@ -265,10 +265,13 @@ export async function buildPresupuestoPdf(
   };
   drawHeader();
 
-  let zebra = false;
+  const NAME_LH = 12; // alto de línea del nombre
+  const SKU_LH = 11;  // alto de la línea del SKU
+  const PAD = 9;      // padding vertical de la fila
   for (const it of data.items) {
-    const descLines = wrap(it.producto_nombre + (it.sku ? `  ·  ${it.sku}` : ""), reg, 9, cw[1] - 16);
-    const rowH = Math.max(descLines.length * 11 + 8, 20);
+    const nameLines = wrap(it.producto_nombre, reg, 9.5, cw[1] - 16);
+    const skuTxt = it.sku ? String(it.sku) : "";
+    const rowH = nameLines.length * NAME_LH + (skuTxt ? SKU_LH : 0) + PAD;
     // salto de página (el pie y la numeración se dibujan al final, en pie()).
     if (c.y - rowH < BOTTOM + 40) {
       c.page = doc.addPage(A4);
@@ -276,41 +279,41 @@ export async function buildPresupuestoPdf(
       membrete(c);
       drawHeader();
     }
-    if (zebra) c.page.drawRectangle({ x: MX, y: c.y - rowH + 12, width: W, height: rowH, color: rgb(0.975, 0.98, 0.985) });
-    zebra = !zebra;
 
-    const cellY = c.y + 2;
-    // Cant
-    const cantTxt = `${Number(it.cantidad).toLocaleString("es-PY", { maximumFractionDigits: 3 })}${it.unidad_medida ? " " + it.unidad_medida : ""}`;
-    c.page.drawText(fit(cantTxt, reg, 8.5, cw[0] - 8), { x: cx[0] + (cw[0] - reg.widthOfTextAtSize(fit(cantTxt, reg, 8.5, cw[0] - 8), 8.5)) / 2, y: cellY, size: 8.5, font: reg, color: SLATE });
-    // Descripción (multilínea)
-    let dy = cellY;
-    descLines.forEach((ln, i) => {
-      c.page.drawText(ln, { x: cx[1] + 8, y: dy, size: 9, font: i === 0 ? bold : reg, color: i === 0 ? TINTA : GRIS });
-      dy -= 11;
-    });
+    // Línea base de la primera fila (las columnas numéricas se alinean con el nombre).
+    const baseY = c.y - 3;
+    // Cant (centrada)
+    const cantTxt = fit(`${Number(it.cantidad).toLocaleString("es-PY", { maximumFractionDigits: 3 })}${it.unidad_medida ? " " + it.unidad_medida : ""}`, reg, 8.5, cw[0] - 8);
+    c.page.drawText(cantTxt, { x: cx[0] + (cw[0] - reg.widthOfTextAtSize(cantTxt, 8.5)) / 2, y: baseY, size: 8.5, font: reg, color: SLATE });
+    // Descripción: nombre en negrita (una o más líneas) + SKU en gris debajo.
+    let dy = baseY;
+    for (const ln of nameLines) {
+      c.page.drawText(ln, { x: cx[1] + 8, y: dy, size: 9.5, font: bold, color: TINTA });
+      dy -= NAME_LH;
+    }
+    if (skuTxt) c.page.drawText(fit(skuTxt, reg, 8, cw[1] - 16), { x: cx[1] + 8, y: dy, size: 8, font: reg, color: GRIS });
     // P.Unit
     const pu = money(it.precio_unitario, moneda);
-    c.page.drawText(pu, { x: cx[2] + cw[2] - reg.widthOfTextAtSize(pu, 8.5) - 8, y: cellY, size: 8.5, font: reg, color: SLATE });
+    c.page.drawText(pu, { x: cx[2] + cw[2] - reg.widthOfTextAtSize(pu, 8.5) - 8, y: baseY, size: 8.5, font: reg, color: SLATE });
     // IVA
     const iva = IVA_LABEL[String(it.iva_tipo)] ?? String(it.iva_tipo);
-    c.page.drawText(iva, { x: cx[3] + (cw[3] - reg.widthOfTextAtSize(iva, 8.5)) / 2, y: cellY, size: 8.5, font: reg, color: SLATE });
+    c.page.drawText(iva, { x: cx[3] + (cw[3] - reg.widthOfTextAtSize(iva, 8.5)) / 2, y: baseY, size: 8.5, font: reg, color: SLATE });
     // Desc
     const desc = Number(it.descuento) > 0 ? money(it.descuento, moneda) : "—";
-    c.page.drawText(desc, { x: cx[4] + cw[4] - reg.widthOfTextAtSize(desc, 8.5) - 8, y: cellY, size: 8.5, font: reg, color: SLATE });
+    c.page.drawText(desc, { x: cx[4] + cw[4] - reg.widthOfTextAtSize(desc, 8.5) - 8, y: baseY, size: 8.5, font: reg, color: SLATE });
     // Total
     const tot = money(it.total, moneda);
-    c.page.drawText(tot, { x: cx[5] + cw[5] - bold.widthOfTextAtSize(tot, 8.5) - 8, y: cellY, size: 8.5, font: bold, color: TINTA });
+    c.page.drawText(tot, { x: cx[5] + cw[5] - bold.widthOfTextAtSize(tot, 8.5) - 8, y: baseY, size: 8.5, font: bold, color: TINTA });
 
     c.y -= rowH;
-    c.page.drawRectangle({ x: MX, y: c.y + 10, width: W, height: 0.6, color: GRIS_LINEA });
+    c.page.drawRectangle({ x: MX, y: c.y + 4, width: W, height: 0.6, color: GRIS_LINEA });
   }
 
   // ── Totales ─────────────────────────────────────────────────────────────────
   const totW = 250;
   const totX = A4[0] - MX - totW;
   if (c.y < BOTTOM + 96) { c.page = doc.addPage(A4); c.y = TOP; membrete(c); }
-  c.y -= 22; // aire después de la tabla
+  c.y -= 16; // aire después de la tabla
   const totLine = (k: string, v: string) => {
     c.page.drawText(k, { x: totX, y: c.y, size: 9.5, font: reg, color: GRIS });
     c.page.drawText(v, { x: A4[0] - MX - reg.widthOfTextAtSize(v, 9.5), y: c.y, size: 9.5, font: reg, color: SLATE });
