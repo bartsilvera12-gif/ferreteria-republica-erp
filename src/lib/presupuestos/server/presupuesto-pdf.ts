@@ -359,18 +359,6 @@ export async function buildPresupuestoPdf(
     }
   }
 
-  // ── Firmas ──────────────────────────────────────────────────────────────────
-  if (c.y - 70 < BOTTOM) { c.page = doc.addPage(A4); c.y = TOP; membrete(c); }
-  c.y -= 40;
-  const half = (W - 40) / 2;
-  const sign = (x: number, quien: string, sub: string) => {
-    c.page.drawRectangle({ x, y: c.y, width: half, height: 0.8, color: SLATE });
-    c.page.drawText(quien, { x, y: c.y - 12, size: 8.5, font: bold, color: TINTA });
-    c.page.drawText(sub, { x, y: c.y - 23, size: 7.5, font: reg, color: GRIS });
-  };
-  sign(MX, emisor.nombre, "Firma y aclaración — Proveedor");
-  sign(MX + half + 40, data.cliente.nombre, "Firma y aclaración — Conformidad del cliente");
-
   pie(doc, reg);
   return await doc.save();
 }
