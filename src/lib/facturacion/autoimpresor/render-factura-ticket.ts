@@ -10,7 +10,7 @@
  *    la secuencia). Sirve para previsualizar antes de activar el autoimpresor.
  */
 import type { LiquidacionIva } from "./emitir-factura";
-import { membreteTicket } from "@/lib/documentos/membrete";
+import { EMPRESA_DOC } from "@/lib/documentos/membrete";
 
 export interface FacturaTicketData {
   borrador: boolean;
@@ -135,6 +135,8 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
   const fontPx = d.widthMm === 58 ? 11 : 12;
   const totalIva = d.liq.iva_5 + d.liq.iva_10;
   const cond = d.condicion === "credito" ? "CRÉDITO" : "CONTADO";
+  const logoSrc = d.emisor.logoUrl ? (d.origin ? `${d.origin}${d.emisor.logoUrl}` : d.emisor.logoUrl) : "";
+  const actividad = EMPRESA_DOC.actividad[0] ?? "";
 
   const itemsHtml = d.items
     .map((it) => {
@@ -162,10 +164,11 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
   * { box-sizing: border-box; }
   body { font-family: ui-monospace, "Courier New", monospace; font-size: ${fontPx}px; color:#000; background:#f1f1f1; margin:0; padding:20px; }
   .paper { background:#fff; width:${d.widthMm}mm; margin:0 auto; padding:6mm 4mm; box-shadow:0 1px 4px rgba(0,0,0,.1); }
+  .head { text-align:center; }
   .logo { text-align:center; }
   .logo img { max-width:${d.widthMm === 58 ? 130 : 150}px; max-height:70px; width:auto; height:auto; object-fit:contain; display:inline-block; margin:0 auto 3px; }
-  .rs { text-align:center; font-weight:700; font-size:${fontPx + 1}px; }
-  .em { text-align:center; font-size:${fontPx - 1}px; }
+  .rs { text-align:center; font-weight:700; font-size:${fontPx + 1}px; line-height:1.2; }
+  .em { text-align:center; font-size:${fontPx - 1}px; line-height:1.3; }
   hr { border:none; border-top:1px dashed #000; margin:2mm 0; }
   .doc-title { text-align:center; font-weight:800; font-size:${fontPx + 2}px; letter-spacing:1px; }
   .doc-num { text-align:center; font-weight:700; font-size:${fontPx + 1}px; }
@@ -191,9 +194,14 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
 </style></head>
 <body>
   <section class="paper">
-    ${membreteTicket(d.origin)}
-    <div class="rs">${esc(d.emisor.razon_social)}</div>
-    <div class="em">RUC: ${esc(d.emisor.ruc)}</div>
+    <div class="head">
+      ${logoSrc ? `<div class="logo"><img src="${esc(logoSrc)}" alt="${esc(d.emisor.razon_social)}" /></div>` : ""}
+      <div class="rs">${esc(d.emisor.razon_social)}</div>
+      ${actividad ? `<div class="em">${esc(actividad)}</div>` : ""}
+      <div class="em">RUC: ${esc(d.emisor.ruc)}</div>
+      ${d.emisor.direccion ? `<div class="em">${esc(d.emisor.direccion)}</div>` : ""}
+      ${d.emisor.telefono ? `<div class="em">Tel: ${esc(d.emisor.telefono)}</div>` : ""}
+    </div>
     <hr>
     <div class="doc-title">FACTURA</div>
     <div class="doc-num">${esc(d.numeroCompleto)}</div>
