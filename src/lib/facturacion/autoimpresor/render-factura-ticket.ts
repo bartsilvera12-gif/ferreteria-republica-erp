@@ -135,7 +135,11 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
   const fontPx = d.widthMm === 58 ? 11 : 12;
   const totalIva = d.liq.iva_5 + d.liq.iva_10;
   const cond = d.condicion === "credito" ? "CRÉDITO" : "CONTADO";
-  const logoSrc = d.emisor.logoUrl ? (d.origin ? `${d.origin}${d.emisor.logoUrl}` : d.emisor.logoUrl) : "";
+  // URL RELATIVA a propósito (no anteponer d.origin): en producción, detrás del
+  // proxy, url.origin puede ser una dirección interna que el navegador no alcanza
+  // y el logo sale roto. Relativa resuelve contra el origen real de la página
+  // (igual que el ticket interno con membreteTicket()).
+  const logoSrc = d.emisor.logoUrl || "";
   const actividad = EMPRESA_DOC.actividad[0] ?? "";
 
   const itemsHtml = d.items
