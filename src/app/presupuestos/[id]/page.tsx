@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import { FileText, ArrowLeft, Loader2, Download, FileCheck2 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -72,7 +72,6 @@ function fmtFecha(iso: string | null) {
 
 export default function PresupuestoDetallePage() {
   const params = useParams<{ id: string }>();
-  const router = useRouter();
   const id = params.id;
 
   const [presu, setPresu] = useState<Presu | null>(null);
@@ -152,10 +151,6 @@ export default function PresupuestoDetallePage() {
     }
   }
 
-  function abrirPdf() {
-    window.open(`/api/presupuestos/${id}/pdf?auto=1`, "_blank", "noopener");
-  }
-
   if (loading) {
     return <div className="p-6 flex items-center gap-2 text-sm text-gray-500"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</div>;
   }
@@ -168,129 +163,156 @@ export default function PresupuestoDetallePage() {
     );
   }
 
-  return (
-    <div className="space-y-6 max-w-5xl">
-      <Link href="/presupuestos" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700">
-        <ArrowLeft className="h-4 w-4" /> Volver a presupuestos
-      </Link>
+  const condicionCredito = presu.condicion === "credito";
 
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <FileText className="h-7 w-7 text-[#4FAEB2]" />
-          <div>
-            <h1 className="text-2xl font-bold text-gray-800">{presu.numero_control}</h1>
-            <span className={`inline-block mt-1 rounded-full px-2 py-0.5 text-xs font-semibold ${ESTADO_BADGE[presu.estado]}`}>
-              {ESTADO_LABEL[presu.estado]}
-            </span>
-          </div>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <button onClick={abrirPdf} className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
-            <Download className="h-4 w-4" /> Descargar PDF
-          </button>
-          {presu.estado === "aprobado" && (
-            <button onClick={convertir} disabled={busy} className="inline-flex items-center gap-1.5 rounded-md bg-[#4FAEB2] px-4 py-2 text-sm font-medium text-white hover:bg-[#3F8E91] disabled:opacity-50">
-              <FileCheck2 className="h-4 w-4" /> Crear pedido
-            </button>
-          )}
-        </div>
+  return (
+    <div className="mx-auto max-w-5xl space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Link href="/presupuestos" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
+          <ArrowLeft className="h-4 w-4" /> Volver a presupuestos
+        </Link>
+        <a
+          href={`/api/presupuestos/${id}/pdf`}
+          className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#4FAEB2]/30 transition-colors hover:bg-[#3F8E91]"
+        >
+          <Download className="h-4 w-4" /> Descargar PDF
+        </a>
       </div>
 
-      {error && <div className="rounded-md bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>}
-      {ok && <div className="rounded-md bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700">✓ {ok}</div>}
+      {error && <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>}
+      {ok && <div className="rounded-lg bg-emerald-50 border border-emerald-200 p-3 text-sm text-emerald-700">✓ {ok}</div>}
 
+      {/* Documento */}
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        {/* Encabezado */}
+        <div className="flex flex-wrap items-start justify-between gap-4 border-b border-slate-100 bg-gradient-to-br from-slate-50 to-white px-6 py-5">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#E5F4F4] ring-1 ring-[#4FAEB2]/30">
+              <FileText className="h-6 w-6 text-[#3F8E91]" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-slate-900">{presu.numero_control}</h1>
+              <div className="mt-1 flex flex-wrap items-center gap-2">
+                <span className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-semibold ${ESTADO_BADGE[presu.estado]}`}>
+                  {ESTADO_LABEL[presu.estado]}
+                </span>
+                <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${condicionCredito ? "bg-amber-100 text-amber-700" : "bg-[#E5F4F4] text-[#3F8E91]"}`}>
+                  {condicionCredito ? "Crédito" : "Contado"}
+                </span>
+              </div>
+            </div>
+          </div>
+          <div className="text-right text-sm">
+            <p className="text-slate-500">Emitido: <span className="font-medium text-slate-700">{fmtFecha(presu.fecha)}</span></p>
+            {presu.fecha_vencimiento && (
+              <p className="text-slate-500">Válido hasta: <span className="font-medium text-slate-700">{fmtFecha(presu.fecha_vencimiento)}</span></p>
+            )}
+          </div>
+        </div>
+
+        {/* Cliente + datos */}
+        <div className="grid grid-cols-1 gap-px bg-slate-100 sm:grid-cols-2">
+          <div className="bg-white px-6 py-5">
+            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#3F8E91]">Preparado para</h3>
+            <p className="text-base font-semibold text-slate-900">{presu.cliente_nombre}</p>
+            <div className="mt-1 space-y-0.5 text-sm text-slate-600">
+              {presu.cliente_ruc && <p>RUC / CI: {presu.cliente_ruc}</p>}
+              {presu.cliente_telefono && <p>Tel: {presu.cliente_telefono}</p>}
+              {presu.cliente_direccion && <p>{presu.cliente_direccion}</p>}
+            </div>
+          </div>
+          <div className="bg-white px-6 py-5">
+            <h3 className="mb-2 text-[11px] font-bold uppercase tracking-wider text-[#3F8E91]">Detalles</h3>
+            <dl className="space-y-1 text-sm">
+              <div className="flex justify-between gap-4"><dt className="text-slate-500">Condición</dt><dd className={`font-semibold ${condicionCredito ? "text-amber-700" : "text-[#3F8E91]"}`}>{condicionCredito ? "Crédito" : "Contado"}</dd></div>
+              <div className="flex justify-between gap-4"><dt className="text-slate-500">Moneda</dt><dd className="font-medium text-slate-700">{presu.moneda === "USD" ? "Dólares (USD)" : "Guaraníes (PYG)"}</dd></div>
+              {presu.validez_dias != null && <div className="flex justify-between gap-4"><dt className="text-slate-500">Validez</dt><dd className="font-medium text-slate-700">{presu.validez_dias} día(s)</dd></div>}
+              {presu.forma_pago && <div className="flex justify-between gap-4"><dt className="text-slate-500">Forma de pago</dt><dd className="font-medium text-slate-700">{presu.forma_pago}</dd></div>}
+              {presu.plazo_entrega && <div className="flex justify-between gap-4"><dt className="text-slate-500">Plazo de entrega</dt><dd className="font-medium text-slate-700">{presu.plazo_entrega}</dd></div>}
+            </dl>
+          </div>
+        </div>
+
+        {/* Items */}
+        <div className="overflow-x-auto border-t border-slate-100">
+          <table className="w-full min-w-[680px] text-sm">
+            <thead>
+              <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
+                <th className="py-3 pl-6 pr-4 text-left font-bold">Descripción</th>
+                <th className="px-4 py-3 text-center font-bold">Cant.</th>
+                <th className="px-4 py-3 text-right font-bold">Precio unit.</th>
+                <th className="px-4 py-3 text-center font-bold">IVA</th>
+                <th className="px-4 py-3 text-right font-bold">Desc.</th>
+                <th className="py-3 pl-4 pr-6 text-right font-bold">Total</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {items.map((it) => (
+                <tr key={it.id} className="transition-colors hover:bg-slate-50/60">
+                  <td className="py-3 pl-6 pr-4">
+                    <span className="font-medium text-slate-800">{it.producto_nombre}</span>
+                    {it.sku ? <span className="text-xs text-slate-400"> · {it.sku}</span> : null}
+                  </td>
+                  <td className="px-4 py-3 text-center tabular-nums text-slate-600">{Number(it.cantidad).toLocaleString("es-PY")} {it.unidad_medida ?? ""}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtGs(it.precio_unitario, presu.moneda)}</td>
+                  <td className="px-4 py-3 text-center text-slate-500">{it.iva_tipo}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-500">{Number(it.descuento) > 0 ? fmtGs(it.descuento, presu.moneda) : "—"}</td>
+                  <td className="py-3 pl-4 pr-6 text-right font-semibold tabular-nums text-slate-900">{fmtGs(it.total, presu.moneda)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Totales */}
+        <div className="flex justify-end border-t border-slate-100 px-6 py-5">
+          <div className="w-full sm:w-80 space-y-1.5 text-sm">
+            <div className="flex justify-between"><span className="text-slate-500">Subtotal (sin IVA)</span><span className="tabular-nums text-slate-700">{fmtGs(presu.subtotal, presu.moneda)}</span></div>
+            <div className="flex justify-between"><span className="text-slate-500">IVA</span><span className="tabular-nums text-slate-700">{fmtGs(presu.monto_iva, presu.moneda)}</span></div>
+            {Number(presu.descuento_total) > 0 && <div className="flex justify-between"><span className="text-slate-500">Descuentos</span><span className="tabular-nums text-slate-700">- {fmtGs(presu.descuento_total, presu.moneda)}</span></div>}
+            <div className="mt-2 flex items-center justify-between rounded-lg bg-[#4FAEB2] px-4 py-2.5 text-white">
+              <span className="text-sm font-bold uppercase tracking-wide">Total</span>
+              <span className="text-lg font-bold tabular-nums">{fmtGs(presu.total, presu.moneda)}</span>
+            </div>
+          </div>
+        </div>
+
+        {presu.observaciones && (
+          <div className="border-t border-slate-100 px-6 py-5">
+            <h3 className="mb-1.5 text-[11px] font-bold uppercase tracking-wider text-[#3F8E91]">Observaciones</h3>
+            <p className="whitespace-pre-wrap text-sm text-slate-700">{presu.observaciones}</p>
+          </div>
+        )}
+      </div>
+
+      {/* Acciones */}
       {presu.estado === "convertido" && presu.convertido_pedido_id && (
-        <div className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-violet-50 border border-violet-200 p-3 text-sm text-violet-800">
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-violet-200 bg-violet-50 p-4 text-sm text-violet-800">
           <span>Este presupuesto ya fue convertido en pedido.</span>
           <Link
             href={`/dashboard/proyectos/${presu.convertido_pedido_id}`}
-            className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-violet-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-violet-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-violet-700"
           >
             <FileCheck2 className="h-3.5 w-3.5" /> Abrir pedido
           </Link>
         </div>
       )}
 
-      {/* Estados */}
-      {SIGUIENTES[presu.estado].length > 0 && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-          <h2 className="text-sm font-semibold text-gray-700 mb-3">Cambiar estado</h2>
+      {(SIGUIENTES[presu.estado].length > 0 || presu.estado === "aprobado") && (
+        <div className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
+          <h2 className="mb-3 text-sm font-semibold text-slate-700">Acciones</h2>
           <div className="flex flex-wrap gap-2">
             {SIGUIENTES[presu.estado].map((s) => (
-              <button key={s} onClick={() => cambiarEstado(s)} disabled={busy} className="rounded-md border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-50">
+              <button key={s} onClick={() => cambiarEstado(s)} disabled={busy} className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50">
                 Marcar como {ESTADO_LABEL[s]}
               </button>
             ))}
+            {presu.estado === "aprobado" && (
+              <button onClick={convertir} disabled={busy} className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-[#3F8E91] disabled:opacity-50">
+                <FileCheck2 className="h-4 w-4" /> Crear pedido
+              </button>
+            )}
           </div>
-        </div>
-      )}
-
-      {/* Cliente + datos */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-          <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Cliente</h3>
-          <p className="font-semibold text-gray-800">{presu.cliente_nombre}</p>
-          {presu.cliente_ruc && <p className="text-sm text-gray-600">RUC/CI: {presu.cliente_ruc}</p>}
-          {presu.cliente_telefono && <p className="text-sm text-gray-600">Tel: {presu.cliente_telefono}</p>}
-          {presu.cliente_direccion && <p className="text-sm text-gray-600">{presu.cliente_direccion}</p>}
-        </div>
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-          <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Datos</h3>
-          <p className="text-sm text-gray-600">Fecha: {fmtFecha(presu.fecha)}</p>
-          <p className="text-sm text-gray-600">
-            Condición:{" "}
-            <span className={`font-semibold ${presu.condicion === "credito" ? "text-amber-700" : "text-[#3F8E91]"}`}>
-              {presu.condicion === "credito" ? "Crédito" : "Contado"}
-            </span>
-          </p>
-          {presu.validez_dias != null && <p className="text-sm text-gray-600">Validez: {presu.validez_dias} día(s){presu.fecha_vencimiento ? ` (vence ${fmtFecha(presu.fecha_vencimiento)})` : ""}</p>}
-          {presu.forma_pago && <p className="text-sm text-gray-600">Forma de pago: {presu.forma_pago}</p>}
-          {presu.plazo_entrega && <p className="text-sm text-gray-600">Plazo de entrega: {presu.plazo_entrega}</p>}
-        </div>
-      </div>
-
-      {/* Items */}
-      <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[680px] text-sm">
-            <thead className="bg-slate-50 text-xs uppercase text-gray-500">
-              <tr>
-                <th className="py-3 px-4 text-left font-medium">Descripción</th>
-                <th className="py-3 px-4 text-center font-medium">Cant.</th>
-                <th className="py-3 px-4 text-right font-medium">Precio unit.</th>
-                <th className="py-3 px-4 text-center font-medium">IVA</th>
-                <th className="py-3 px-4 text-right font-medium">Desc.</th>
-                <th className="py-3 px-4 text-right font-medium">Total</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100">
-              {items.map((it) => (
-                <tr key={it.id}>
-                  <td className="py-2.5 px-4 text-gray-800">{it.producto_nombre}{it.sku ? <span className="text-gray-400 text-xs"> · {it.sku}</span> : null}</td>
-                  <td className="py-2.5 px-4 text-center tabular-nums">{Number(it.cantidad).toLocaleString("es-PY")} {it.unidad_medida ?? ""}</td>
-                  <td className="py-2.5 px-4 text-right tabular-nums">{fmtGs(it.precio_unitario, presu.moneda)}</td>
-                  <td className="py-2.5 px-4 text-center">{it.iva_tipo}</td>
-                  <td className="py-2.5 px-4 text-right tabular-nums">{Number(it.descuento) > 0 ? fmtGs(it.descuento, presu.moneda) : "—"}</td>
-                  <td className="py-2.5 px-4 text-right tabular-nums font-medium">{fmtGs(it.total, presu.moneda)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="border-t border-slate-200 p-4">
-          <div className="ml-auto w-full sm:w-72 text-sm space-y-1">
-            <div className="flex justify-between"><span className="text-gray-500">Subtotal (sin IVA)</span><span className="tabular-nums">{fmtGs(presu.subtotal, presu.moneda)}</span></div>
-            <div className="flex justify-between"><span className="text-gray-500">IVA</span><span className="tabular-nums">{fmtGs(presu.monto_iva, presu.moneda)}</span></div>
-            {Number(presu.descuento_total) > 0 && <div className="flex justify-between"><span className="text-gray-500">Descuentos</span><span className="tabular-nums">- {fmtGs(presu.descuento_total, presu.moneda)}</span></div>}
-            <div className="flex justify-between border-t border-slate-200 pt-1 font-semibold text-base"><span>Total</span><span className="tabular-nums text-[#4FAEB2]">{fmtGs(presu.total, presu.moneda)}</span></div>
-          </div>
-        </div>
-      </div>
-
-      {presu.observaciones && (
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-          <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Observaciones</h3>
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{presu.observaciones}</p>
         </div>
       )}
     </div>
