@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { FileText, ArrowLeft, Plus, Trash2, Loader2, Search, ImageIcon } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { calcMontoIvaIncluido, type IvaTipoPresupuesto } from "@/lib/presupuestos/types";
+import { calcMontoIvaIncluido, type IvaTipoPresupuesto, type CondicionPresupuesto } from "@/lib/presupuestos/types";
 
 /** Miniatura de producto con fallback a un placeholder si no hay imagen o falla. */
 function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
@@ -93,6 +93,7 @@ export default function NuevoPresupuestoPage() {
   const [items, setItems] = useState<Item[]>([]);
 
   // Condiciones
+  const [condicion, setCondicion] = useState<CondicionPresupuesto>("contado");
   const [validezDias, setValidezDias] = useState("15");
   const [formaPago, setFormaPago] = useState("");
   const [plazoEntrega, setPlazoEntrega] = useState("");
@@ -288,6 +289,7 @@ export default function NuevoPresupuestoPage() {
           cliente_telefono: clienteTel.trim() || null,
           cliente_direccion: clienteDir.trim() || null,
           moneda: "PYG",
+          condicion,
           validez_dias: validezDias.trim() === "" ? null : parseInt(validezDias, 10),
           forma_pago: formaPago.trim() || null,
           plazo_entrega: plazoEntrega.trim() || null,
@@ -497,6 +499,25 @@ export default function NuevoPresupuestoPage() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Condiciones comerciales</h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div>
+            <label className={labelClass}>Condición</label>
+            <div className="flex gap-2">
+              {(["contado", "credito"] as const).map((c) => (
+                <button
+                  key={c}
+                  type="button"
+                  onClick={() => setCondicion(c)}
+                  className={`flex-1 rounded-md border px-3 py-2 text-sm font-medium transition-colors ${
+                    condicion === c
+                      ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.10] text-[#3F8E91]"
+                      : "border-gray-300 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {c === "contado" ? "Contado" : "Crédito"}
+                </button>
+              ))}
+            </div>
+          </div>
           <div>
             <label className={labelClass}>Validez (días)</label>
             <input type="number" min="0" value={validezDias} onChange={(e) => setValidezDias(e.target.value)} className={inputClass} />

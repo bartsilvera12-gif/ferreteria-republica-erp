@@ -104,6 +104,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     .join("");
 
   const condiciones: string[] = [];
+  condiciones.push(`Condición: ${p.condicion === "credito" ? "Crédito" : "Contado"}`);
   if (p.validez_dias) condiciones.push(`Validez: ${esc(p.validez_dias)} día(s)${p.fecha_vencimiento ? ` (vence ${fmtFecha(p.fecha_vencimiento)})` : ""}`);
   if (p.forma_pago) condiciones.push(`Forma de pago: ${esc(p.forma_pago)}`);
   if (p.plazo_entrega) condiciones.push(`Plazo de entrega: ${esc(p.plazo_entrega)}`);
@@ -181,6 +182,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
       </div>
       <div class="box">
         <h3>Datos del presupuesto</h3>
+        <p>Condición: ${p.condicion === "credito" ? "Crédito" : "Contado"}</p>
         <p>Moneda: ${moneda === "USD" ? "Dólares (USD)" : "Guaraníes (PYG)"}</p>
         ${p.validez_dias ? `<p>Validez: ${esc(p.validez_dias)} día(s)</p>` : ""}
         ${p.forma_pago ? `<p>Forma de pago: ${esc(p.forma_pago)}</p>` : ""}

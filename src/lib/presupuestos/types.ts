@@ -2,6 +2,13 @@ export type EstadoPresupuesto = "creado" | "enviado" | "aprobado" | "rechazado" 
 
 export type IvaTipoPresupuesto = "EXENTA" | "5%" | "10%";
 
+export type CondicionPresupuesto = "contado" | "credito";
+
+export const CONDICION_LABEL: Record<CondicionPresupuesto, string> = {
+  contado: "Contado",
+  credito: "Crédito",
+};
+
 export const ESTADOS_PRESUPUESTO: EstadoPresupuesto[] = [
   "creado",
   "enviado",
@@ -51,6 +58,7 @@ export interface Presupuesto {
   validez_dias: number | null;
   fecha: string;
   fecha_vencimiento: string | null;
+  condicion: CondicionPresupuesto;
   forma_pago: string | null;
   plazo_entrega: string | null;
   observaciones: string | null;

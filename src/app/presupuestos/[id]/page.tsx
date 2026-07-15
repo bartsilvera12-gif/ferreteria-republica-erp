@@ -23,6 +23,7 @@ type Presu = {
   validez_dias: number | null;
   fecha: string;
   fecha_vencimiento: string | null;
+  condicion: "contado" | "credito" | null;
   forma_pago: string | null;
   plazo_entrega: string | null;
   observaciones: string | null;
@@ -236,6 +237,12 @@ export default function PresupuestoDetallePage() {
         <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
           <h3 className="text-xs uppercase tracking-wide text-gray-500 mb-2">Datos</h3>
           <p className="text-sm text-gray-600">Fecha: {fmtFecha(presu.fecha)}</p>
+          <p className="text-sm text-gray-600">
+            Condición:{" "}
+            <span className={`font-semibold ${presu.condicion === "credito" ? "text-amber-700" : "text-[#3F8E91]"}`}>
+              {presu.condicion === "credito" ? "Crédito" : "Contado"}
+            </span>
+          </p>
           {presu.validez_dias != null && <p className="text-sm text-gray-600">Validez: {presu.validez_dias} día(s){presu.fecha_vencimiento ? ` (vence ${fmtFecha(presu.fecha_vencimiento)})` : ""}</p>}
           {presu.forma_pago && <p className="text-sm text-gray-600">Forma de pago: {presu.forma_pago}</p>}
           {presu.plazo_entrega && <p className="text-sm text-gray-600">Plazo de entrega: {presu.plazo_entrega}</p>}

@@ -7,7 +7,7 @@ import { crearPresupuesto, type PresupuestoItemInput } from "@/lib/presupuestos/
 const PRESU_COLS =
   "id, cliente_id, cliente_nombre, cliente_ruc, cliente_telefono, cliente_direccion, " +
   "numero_control, estado, moneda, subtotal, monto_iva, descuento_total, total, validez_dias, " +
-  "fecha, fecha_vencimiento, forma_pago, plazo_entrega, observaciones, " +
+  "fecha, fecha_vencimiento, condicion, forma_pago, plazo_entrega, observaciones, " +
   "convertido_pedido_id, convertido_venta_id, created_at, updated_at";
 
 function asIva(v: unknown): "EXENTA" | "5%" | "10%" {
@@ -95,6 +95,7 @@ export async function POST(request: NextRequest) {
       cliente_direccion: body.cliente_direccion ? String(body.cliente_direccion) : null,
       moneda: body.moneda === "USD" ? "USD" : "PYG",
       validez_dias: validez,
+      condicion: body.condicion === "credito" ? "credito" : "contado",
       forma_pago: body.forma_pago ? String(body.forma_pago) : null,
       plazo_entrega: body.plazo_entrega ? String(body.plazo_entrega) : null,
       observaciones: body.observaciones ? String(body.observaciones).slice(0, 4000) : null,

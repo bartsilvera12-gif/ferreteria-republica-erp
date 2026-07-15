@@ -1,5 +1,5 @@
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
-import { calcMontoIvaIncluido, type IvaTipoPresupuesto } from "@/lib/presupuestos/types";
+import { calcMontoIvaIncluido, type IvaTipoPresupuesto, type CondicionPresupuesto } from "@/lib/presupuestos/types";
 
 /** Item crudo que llega del cliente; los totales se recalculan en el server. */
 export interface PresupuestoItemInput {
@@ -21,6 +21,7 @@ export interface CrearPresupuestoInput {
   cliente_direccion: string | null;
   moneda: string;
   validez_dias: number | null;
+  condicion: CondicionPresupuesto;
   forma_pago: string | null;
   plazo_entrega: string | null;
   observaciones: string | null;
@@ -129,6 +130,7 @@ export async function crearPresupuesto(
       validez_dias: input.validez_dias ?? null,
       fecha: fechaIso,
       fecha_vencimiento: vencimiento,
+      condicion: input.condicion === "credito" ? "credito" : "contado",
       forma_pago: input.forma_pago?.trim() || null,
       plazo_entrega: input.plazo_entrega?.trim() || null,
       observaciones: input.observaciones?.trim() || null,
