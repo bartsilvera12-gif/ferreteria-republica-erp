@@ -1,19 +1,36 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { FileText, ArrowLeft, Plus, Trash2, Loader2 } from "lucide-react";
+import { FileText, ArrowLeft, Plus, Trash2, Loader2, Search, ImageIcon } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import SelectFromList from "@/components/inventario/SelectFromList";
 import { calcMontoIvaIncluido, type IvaTipoPresupuesto } from "@/lib/presupuestos/types";
 
-type ProductoLite = {
+/** Miniatura de producto con fallback a un placeholder si no hay imagen o falla. */
+function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
+  const [err, setErr] = useState(false);
+  if (!url || err) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-100 bg-slate-50 text-slate-300">
+        <ImageIcon className="h-4 w-4" />
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} loading="lazy" onError={() => setErr(true)} className="h-10 w-10 shrink-0 rounded-md border border-slate-100 object-cover" />;
+}
+
+/** Resultado del autocomplete de productos (búsqueda server-side, todo el catálogo). */
+type ComboHit = {
   id: string;
   nombre: string;
   sku: string;
   precio_venta: number;
   unidad_medida: string;
+  stock_actual: number;
+  controla_stock: boolean;
+  imagen_url: string | null;
 };
 type ClienteLite = {
   id: string;
@@ -52,8 +69,18 @@ const inputClass = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 
 export default function NuevoPresupuestoPage() {
   const router = useRouter();
-  const [productos, setProductos] = useState<ProductoLite[]>([]);
   const [clientes, setClientes] = useState<ClienteLite[]>([]);
+
+  // Autocomplete de productos (mismo comportamiento que el buscador de Caja):
+  // búsqueda server-side por tokens sobre TODO el catálogo, agrega al instante.
+  const [comboQuery, setComboQuery] = useState("");
+  const [comboOpen, setComboOpen] = useState(false);
+  const [comboHits, setComboHits] = useState<ComboHit[]>([]);
+  const [comboBuscando, setComboBuscando] = useState(false);
+  const [comboHighlight, setComboHighlight] = useState(-1);
+  const comboInputRef = useRef<HTMLInputElement>(null);
+  const comboContainerRef = useRef<HTMLDivElement>(null);
+  const comboTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Cliente
   const [clienteId, setClienteId] = useState("");
@@ -64,7 +91,6 @@ export default function NuevoPresupuestoPage() {
 
   // Items
   const [items, setItems] = useState<Item[]>([]);
-  const [selProd, setSelProd] = useState("");
 
   // Condiciones
   const [validezDias, setValidezDias] = useState("15");
@@ -76,25 +102,6 @@ export default function NuevoPresupuestoPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchWithSupabaseSession("/api/productos", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.success) {
-          const list = (j.data?.productos ?? []) as Record<string, unknown>[];
-          setProductos(
-            list
-              .filter((p) => p.es_vendible !== false)
-              .map((p) => ({
-                id: String(p.id),
-                nombre: String(p.nombre),
-                sku: String(p.sku ?? ""),
-                precio_venta: Number(p.precio_venta) || 0,
-                unidad_medida: String(p.unidad_medida ?? "UNIDAD"),
-              }))
-          );
-        }
-      })
-      .catch(() => {});
     fetchWithSupabaseSession("/api/clientes", { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
@@ -125,24 +132,102 @@ export default function NuevoPresupuestoPage() {
     }
   }
 
-  function agregarProducto() {
-    const p = productos.find((x) => x.id === selProd);
-    if (!p) return;
-    if (items.some((it) => it.producto_id === p.id)) return;
-    setItems((prev) => [
-      ...prev,
-      {
-        producto_id: p.id,
-        producto_nombre: p.nombre,
-        sku: p.sku || null,
-        cantidad: 1,
-        unidad_medida: p.unidad_medida,
-        precio_unitario: p.precio_venta,
-        iva_tipo: "10%",
-        descuento: 0,
-      },
-    ]);
-    setSelProd("");
+  // Autocomplete: búsqueda server-side por tokens (todo el catálogo), con debounce.
+  useEffect(() => {
+    const q = comboQuery.trim();
+    if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    if (q.length < 2) {
+      setComboHits([]);
+      setComboBuscando(false);
+      return;
+    }
+    setComboBuscando(true);
+    comboTimerRef.current = setTimeout(async () => {
+      try {
+        const res = await fetchWithSupabaseSession(
+          `/api/productos/search?q=${encodeURIComponent(q)}&limit=20`,
+          { cache: "no-store" }
+        );
+        const j = await res.json();
+        const items = ((j?.data?.items ?? []) as Record<string, unknown>[]).map((p): ComboHit => ({
+          id: String(p.id),
+          nombre: String(p.nombre ?? ""),
+          sku: String(p.sku ?? ""),
+          precio_venta: Number(p.precio_venta) || 0,
+          unidad_medida: String(p.unidad_medida ?? "UNIDAD"),
+          stock_actual: Number(p.stock_actual) || 0,
+          controla_stock: p.controla_stock !== false,
+          imagen_url: (p.imagen_url as string | null) ?? null,
+        }));
+        setComboHits(items);
+      } catch {
+        setComboHits([]);
+      } finally {
+        setComboBuscando(false);
+      }
+    }, 220);
+    return () => {
+      if (comboTimerRef.current) clearTimeout(comboTimerRef.current);
+    };
+  }, [comboQuery]);
+
+  // Cerrar el panel al hacer clic fuera.
+  useEffect(() => {
+    if (!comboOpen) return;
+    function onDoc(e: MouseEvent) {
+      if (comboContainerRef.current && !comboContainerRef.current.contains(e.target as Node)) {
+        setComboOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onDoc);
+    return () => document.removeEventListener("mousedown", onDoc);
+  }, [comboOpen]);
+
+  /** Agrega un producto del inventario al instante: si ya está, suma +1; si no, crea la línea. */
+  function agregarProductoRapido(p: ComboHit) {
+    setItems((prev) => {
+      const idx = prev.findIndex((it) => it.producto_id === p.id);
+      if (idx >= 0) {
+        return prev.map((it, i) => (i === idx ? { ...it, cantidad: (Number(it.cantidad) || 0) + 1 } : it));
+      }
+      return [
+        ...prev,
+        {
+          producto_id: p.id,
+          producto_nombre: p.nombre,
+          sku: p.sku || null,
+          cantidad: 1,
+          unidad_medida: p.unidad_medida,
+          precio_unitario: p.precio_venta,
+          iva_tipo: "10%",
+          descuento: 0,
+        },
+      ];
+    });
+    setComboQuery("");
+    setComboHits([]);
+    setComboOpen(false);
+    setComboHighlight(-1);
+    setTimeout(() => comboInputRef.current?.focus(), 0);
+  }
+
+  /** Teclado del autocomplete: ↑/↓ navega, Enter agrega el resaltado, Esc cierra. */
+  function onComboKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setComboOpen(true);
+      setComboHighlight((h) => Math.min(h + 1, comboHits.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setComboHighlight((h) => Math.max(h - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      const sel = comboHits[comboHighlight] ?? comboHits[0];
+      if (sel) agregarProductoRapido(sel);
+    } else if (e.key === "Escape") {
+      setComboOpen(false);
+      setComboHighlight(-1);
+    }
   }
 
   function agregarManual() {
@@ -279,29 +364,77 @@ export default function NuevoPresupuestoPage() {
 
       {/* Productos */}
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">Productos</h2>
-        <div className="flex flex-wrap items-end gap-2 mb-4">
-          <div className="flex-1 min-w-[260px]">
-            <label className={labelClass}>Agregar desde inventario</label>
-            <SelectFromList
-              value={selProd || null}
-              onChange={(v) => setSelProd(v ?? "")}
-              placeholder="— Buscá un producto por nombre o SKU —"
-              options={productos
-                .filter((p) => !items.some((it) => it.producto_id === p.id))
-                .map((p) => ({ id: p.id, label: p.nombre, sublabel: p.sku || undefined }))}
-            />
-          </div>
-          <button type="button" onClick={agregarProducto} disabled={!selProd} className="inline-flex items-center gap-1 rounded-md bg-[#4FAEB2] px-3 py-2 text-sm font-medium text-white hover:bg-[#3F8E91] disabled:opacity-50">
-            <Plus className="h-4 w-4" /> Agregar
-          </button>
-          <button type="button" onClick={agregarManual} className="inline-flex items-center gap-1 rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50">
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold text-gray-700">Productos</h2>
+          <button type="button" onClick={agregarManual} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
             <Plus className="h-4 w-4" /> Ítem manual
           </button>
         </div>
 
+        {/* Autocomplete: al elegir un producto se agrega solo y se limpia (igual que Caja). */}
+        <div ref={comboContainerRef} className="relative mb-4">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#4FAEB2]" />
+          <input
+            ref={comboInputRef}
+            type="text"
+            value={comboQuery}
+            onChange={(e) => { setComboQuery(e.target.value); setComboOpen(true); setComboHighlight(-1); }}
+            onFocus={() => setComboOpen(true)}
+            onKeyDown={onComboKeyDown}
+            placeholder="Buscar producto por nombre, SKU o palabras clave…"
+            className="h-12 w-full rounded-xl border-2 border-[#4FAEB2]/30 bg-white pl-12 pr-4 text-base text-slate-800 outline-none transition-all focus:border-[#4FAEB2] focus:ring-4 focus:ring-[#4FAEB2]/15"
+            autoComplete="off"
+          />
+          {comboOpen && comboQuery.trim().length >= 2 && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[56vh] overflow-y-auto rounded-xl border-2 border-[#4FAEB2]/20 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
+              {comboBuscando && comboHits.length === 0 ? (
+                <div className="px-4 py-5 text-center text-sm text-slate-400">Buscando…</div>
+              ) : comboHits.length === 0 ? (
+                <div className="px-4 py-5 text-center text-sm text-slate-400">Sin resultados para &quot;{comboQuery}&quot;.</div>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {comboHits.map((p, i) => {
+                    const sinStock = p.controla_stock && p.stock_actual <= 0;
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          onMouseEnter={() => setComboHighlight(i)}
+                          onClick={() => agregarProductoRapido(p)}
+                          className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${i === comboHighlight ? "bg-[#4FAEB2]/[0.08]" : "hover:bg-slate-50"}`}
+                        >
+                          <ProductoThumb url={p.imagen_url} alt={p.nombre} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
+                            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                              <span className="font-mono">{p.sku || "—"}</span>
+                              <span className="text-slate-300">·</span>
+                              <span className={`font-semibold ${!p.controla_stock ? "text-slate-400" : sinStock ? "text-red-600" : p.stock_actual < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                                {!p.controla_stock ? "Sin control" : sinStock ? "Sin stock" : `${p.stock_actual} ${p.unidad_medida ?? ""}`}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-slate-800">{fmtGs(p.precio_venta)}</span>
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[#4FAEB2]/10 px-2.5 py-1 text-xs font-bold text-[#3F8E91]">
+                            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Agregar
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {comboHits.length >= 20 && (
+                    <li className="px-4 py-2 text-center text-[11px] text-slate-400">
+                      Mostrando los primeros 20. Refiná la búsqueda para acotar.
+                    </li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
         {items.length === 0 ? (
-          <p className="text-sm text-gray-500">Sin ítems. Agregá productos del inventario o ítems manuales.</p>
+          <p className="text-sm text-gray-500">Buscá un producto arriba y se agrega al instante. También podés cargar un ítem manual.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[820px] text-sm">
