@@ -9,6 +9,7 @@ import { getVentas } from "@/lib/ventas/storage";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import PedidosConsultaPendientes from "./PedidosConsultaPendientes";
 import CajaControlPanel from "@/components/caja/CajaControlPanel";
+import DevolucionWizard from "@/components/devoluciones/DevolucionWizard";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
@@ -90,8 +91,21 @@ export default function VentasPage() {
   const [todas,      setTodas]      = useState<Venta[]>([]);
   const [busqueda,   setBusqueda]   = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
+  // Devoluciones: la UI solo aparece si el feature flag server-side está activo.
+  const [devolucionesOn, setDevolucionesOn] = useState(false);
+  const [devolverVentaId, setDevolverVentaId] = useState<string | null>(null);
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
   const [detalle,    setDetalle]    = useState<Venta | null>(null);
+
+  // Feature flag server-side: sin él, la UI de devoluciones no se muestra.
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/devoluciones/flag", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancelled) setDevolucionesOn(j?.data?.enabled === true); })
+      .catch(() => { if (!cancelled) setDevolucionesOn(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -141,8 +155,20 @@ export default function VentasPage() {
             Zentra · Operaciones
           </p>
         </div>
-        <h1 className="mt-1 text-lg font-semibold tracking-tight text-slate-900">Caja</h1>
-        <p className="mt-0.5 text-xs text-slate-500">Cobro, facturación y cierre de pedidos</p>
+        <div className="mt-1 flex flex-wrap items-center justify-between gap-2">
+          <div>
+            <h1 className="text-lg font-semibold tracking-tight text-slate-900">Caja</h1>
+            <p className="mt-0.5 text-xs text-slate-500">Cobro, facturación y cierre de pedidos</p>
+          </div>
+          {devolucionesOn && (
+            <Link
+              href="/ventas/devoluciones"
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:border-slate-300 hover:bg-slate-50"
+            >
+              Devoluciones
+            </Link>
+          )}
+        </div>
       </div>
 
       <CajaControlPanel />
@@ -287,6 +313,17 @@ export default function VentasPage() {
                       </td>
                       <td className="py-4 text-center align-middle" onClick={(e) => e.stopPropagation()}>
                         <div className="inline-flex items-center gap-1.5">
+                          {/* El motor rechaza ventas anuladas server-side con un mensaje claro. */}
+                          {devolucionesOn && (
+                            <button
+                              type="button"
+                              onClick={() => setDevolverVentaId(v.id)}
+                              className="inline-flex items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100"
+                              title="Ver detalle y registrar una devolución"
+                            >
+                              Ver / Devolver
+                            </button>
+                          )}
                           <a
                             href={`/api/ventas/${v.id}/ticket?mode=comandas`}
                             target="_blank"
@@ -332,6 +369,19 @@ export default function VentasPage() {
       <MobileFab href="/ventas/nueva" label="Nueva venta" />
 
       {detalle && <VentaDetalleModal venta={detalle} onClose={() => setDetalle(null)} />}
+
+      {devolucionesOn && devolverVentaId && (
+        <DevolucionWizard
+          ventaId={devolverVentaId}
+          onClose={() => setDevolverVentaId(null)}
+          onDone={(devId) => {
+            setDevolverVentaId(null);
+            // Comprobante no fiscal + refresco del listado (cambia el estado de la venta).
+            try { window.open(`/api/devoluciones/${devId}/comprobante?auto=1`, "_blank", "noopener"); } catch {}
+            window.location.reload();
+          }}
+        />
+      )}
     </div>
   );
 }
