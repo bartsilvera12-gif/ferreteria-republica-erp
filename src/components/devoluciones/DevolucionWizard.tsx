@@ -10,7 +10,7 @@
  * "Confirmar devolución" no puede crear dos devoluciones.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, Loader2, Plus, Minus, Trash2, Check } from "lucide-react";
+import { Search, X, Loader2, Plus, Trash2, Check } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type {
   CondicionProducto, MetodoReembolso, ResolucionDevolucion, VentaDevolvible,
@@ -118,19 +118,10 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
   }, [lineas, cant]);
 
   function setCantidad(id: string, v: number, max: number) {
-    const n = Math.max(1, Math.min(max, Number.isFinite(v) ? v : 1));
+    const n = Math.max(0, Math.min(max, Number.isFinite(v) ? v : 0));
     setCant((p) => ({ ...p, [id]: n }));
   }
-  /** Marca (con la cantidad disponible completa) o desmarca una línea. */
-  function toggleLinea(id: string, disponible: number) {
-    setCant((p) => {
-      const next = { ...p };
-      if ((next[id] ?? 0) > 0) delete next[id];
-      else next[id] = disponible;
-      return next;
-    });
-  }
-  /** Marca todo lo devolvible, o limpia la selección si ya estaba todo marcado. */
+  /** Carga todo lo devolvible, o limpia si ya estaba todo cargado. */
   function devolverTodo() {
     if (todoSeleccionado) { setCant({}); return; }
     const next: Record<string, number> = {};
@@ -230,73 +221,50 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
                 const c = cant[l.venta_item_id] ?? 0;
                 const cd = cond[l.venta_item_id] ?? "buen_estado";
                 const agotada = l.cantidad_disponible <= 0;
-                const marcada = c > 0;
                 return (
-                  <div key={l.venta_item_id}
-                    className={`rounded-xl border-2 transition-colors ${
-                      agotada ? "border-slate-100 bg-slate-50" : marcada ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.04]" : "border-slate-200"}`}>
-                    {/* Cabecera: toda la fila es clickeable para marcar/desmarcar */}
-                    <button type="button" disabled={agotada} onClick={() => toggleLinea(l.venta_item_id, l.cantidad_disponible)}
-                      className="flex w-full items-start gap-3 p-3 text-left disabled:cursor-not-allowed">
-                      <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border-2 transition-colors ${
-                        agotada ? "border-slate-200 bg-slate-100" : marcada ? "border-[#4FAEB2] bg-[#4FAEB2] text-white" : "border-slate-300 bg-white"}`}>
-                        {marcada && <Check className="h-3.5 w-3.5" strokeWidth={3} />}
-                      </span>
-                      <span className="min-w-0 flex-1">
-                        <span className={`block text-sm font-semibold ${agotada ? "text-slate-400" : "text-slate-800"}`}>{l.producto_nombre}</span>
-                        <span className="mt-0.5 block text-xs text-slate-500">
+                  <div key={l.venta_item_id} className={`rounded-xl border p-3 ${agotada ? "border-slate-100 bg-slate-50 opacity-60" : "border-slate-200"}`}>
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-slate-800">{l.producto_nombre}</p>
+                        <p className="mt-0.5 text-xs text-slate-500">
                           {l.sku && <span className="font-mono">{l.sku} · </span>}{gs(l.precio_unitario)} c/u
-                        </span>
-                        <span className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs">
-                          <span className="text-slate-500">Vendido: <strong className="text-slate-700">{l.cantidad_vendida}</strong></span>
-                          {l.cantidad_devuelta > 0 && <span className="text-slate-500">Ya devuelto: <strong className="text-amber-700">{l.cantidad_devuelta}</strong></span>}
-                          <span className={agotada ? "text-slate-400" : "text-emerald-700"}>
-                            Disponible: <strong>{l.cantidad_disponible}</strong>
+                        </p>
+                        {/* La cantidad disponible es el dato que importa: va destacada. */}
+                        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                          <span className={`inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-bold ${
+                            agotada ? "bg-slate-200 text-slate-500" : "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200"}`}>
+                            <span className="text-sm">{l.cantidad_disponible}</span>
+                            <span className="font-semibold">de {l.cantidad_vendida} disponible{l.cantidad_disponible === 1 ? "" : "s"}</span>
                           </span>
-                          {agotada && <span className="rounded-full bg-slate-200 px-2 py-0.5 font-semibold text-slate-500">Ya devuelto por completo</span>}
-                        </span>
-                      </span>
-                    </button>
-
-                    {/* Al marcar: cantidad + condición */}
-                    {marcada && (
-                      <div className="space-y-3 border-t border-[#4FAEB2]/20 px-3 py-3">
-                        <div className="flex flex-wrap items-center justify-between gap-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-xs font-semibold text-slate-600">Cantidad a devolver</span>
-                            <div className="inline-flex items-center overflow-hidden rounded-lg border border-slate-200 bg-white">
-                              <button type="button" aria-label="Restar"
-                                onClick={() => setCantidad(l.venta_item_id, c - 1, l.cantidad_disponible)}
-                                disabled={c <= 1}
-                                className="flex h-8 w-8 items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30">
-                                <Minus className="h-3.5 w-3.5" />
-                              </button>
-                              <input type="number" min={1} max={l.cantidad_disponible} step="any" value={c}
-                                onChange={(e) => setCantidad(l.venta_item_id, Number(e.target.value), l.cantidad_disponible)}
-                                className="h-8 w-14 border-x border-slate-200 text-center text-sm font-bold text-slate-800 outline-none focus:bg-[#4FAEB2]/[0.06]" />
-                              <button type="button" aria-label="Sumar"
-                                onClick={() => setCantidad(l.venta_item_id, c + 1, l.cantidad_disponible)}
-                                disabled={c >= l.cantidad_disponible}
-                                className="flex h-8 w-8 items-center justify-center text-slate-600 hover:bg-slate-50 disabled:opacity-30">
-                                <Plus className="h-3.5 w-3.5" />
-                              </button>
-                            </div>
-                            <span className="text-xs text-slate-400">de {l.cantidad_disponible}</span>
-                          </div>
-                          <span className="text-sm font-bold text-slate-800">{gs(l.precio_unitario * c)}</span>
+                          {l.cantidad_devuelta > 0 && (
+                            <span className="text-[11px] text-amber-700">({l.cantidad_devuelta} ya devuelto)</span>
+                          )}
                         </div>
-                        <div className="flex flex-wrap gap-2">
-                          {(["buen_estado", "danado"] as const).map((op) => (
-                            <button key={op} type="button"
-                              onClick={() => setCond((p) => ({ ...p, [l.venta_item_id]: op }))}
-                              className={`flex-1 rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
-                                cd === op
-                                  ? op === "danado" ? "border-red-300 bg-red-50 text-red-700" : "border-emerald-300 bg-emerald-50 text-emerald-700"
-                                  : "border-slate-200 bg-white text-slate-500 hover:bg-slate-50"}`}>
-                              {op === "buen_estado" ? "✓ Vuelve al stock" : "✕ Dañado / no vuelve al stock"}
-                            </button>
-                          ))}
-                        </div>
+                      </div>
+                      <div className="shrink-0 text-right">
+                        <label className="mb-1 block text-[10px] font-bold uppercase tracking-wide text-slate-400">A devolver</label>
+                        <input
+                          type="number" min={0} max={l.cantidad_disponible} step="any" value={c || ""}
+                          disabled={agotada}
+                          onChange={(e) => setCantidad(l.venta_item_id, Number(e.target.value), l.cantidad_disponible)}
+                          placeholder="0"
+                          className="w-24 rounded-lg border-2 border-slate-200 px-3 py-1.5 text-center text-base font-bold text-slate-800 outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 disabled:bg-slate-100"
+                        />
+                      </div>
+                    </div>
+                    {c > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-2 border-t border-slate-100 pt-2">
+                        {(["buen_estado", "danado"] as const).map((op) => (
+                          <button key={op} type="button"
+                            onClick={() => setCond((p) => ({ ...p, [l.venta_item_id]: op }))}
+                            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
+                              cd === op
+                                ? op === "danado" ? "border-red-300 bg-red-50 text-red-700" : "border-emerald-300 bg-emerald-50 text-emerald-700"
+                                : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"}`}>
+                            {op === "buen_estado" ? "Vuelve al stock" : "Dañado / no vuelve al stock"}
+                          </button>
+                        ))}
+                        <span className="ml-auto self-center text-sm font-bold text-slate-800">{gs(l.precio_unitario * c)}</span>
                       </div>
                     )}
                   </div>
