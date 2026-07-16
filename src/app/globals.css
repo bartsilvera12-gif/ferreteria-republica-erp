@@ -177,18 +177,30 @@ body {
    ============================================================================= */
 .zentra-sidebar-bg {
   background:
-    /* Velo direccional: opaco a la izquierda (donde vive el texto del menú) y
-       más abierto a la derecha, para que asomen las herramientas. */
-    linear-gradient(90deg, #0B3A3D 0%, #0B3A3D 34%, rgba(11, 58, 61, 0.86) 58%, rgba(8, 42, 45, 0.34) 100%),
-    /* Textura: herramientas sobre el borde derecho. */
+    /* Velo escalado JUNTO con la imagen (mismo 100% auto): tenue arriba, donde
+       están las herramientas, y opaco al llegar al pie de la imagen, para fundir
+       con el color base sin costura. Si se escalara al sidebar en vez de a la
+       imagen, al colapsar (80px) la imagen mide ~216px pero el velo seguiría
+       cerrando a los ~605px: aparecía una banda tonal. */
+    linear-gradient(
+      180deg,
+      rgba(11, 58, 61, 0.3) 0%,
+      rgba(11, 58, 61, 0.46) 30%,
+      rgba(11, 58, 61, 0.8) 62%,
+      #0B3A3D 88%,
+      #0B3A3D 100%
+    ),
+    /* Textura: herramientas ancladas arriba, a lo ancho del sidebar. */
     url("/brand/sidebar-herramientas.webp"),
-    radial-gradient(ellipse 120% 60% at 100% 0%, rgba(255, 255, 255, 0.06), transparent 55%),
-    radial-gradient(ellipse 120% 60% at 0% 0%, rgba(255, 255, 255, 0.04), transparent 55%),
-    linear-gradient(180deg, #104A4E 0%, #0B3A3D 35%, #082A2D 100%);
+    /* Base: arranca en el mismo color donde cierra el velo, así el borde
+       inferior de la imagen no se nota. */
+    linear-gradient(180deg, #0B3A3D 0%, #092F32 60%, #082A2D 100%);
   background-repeat: no-repeat;
-  background-position: center, right center, center, center, center;
-  background-size: cover, cover, cover, cover, cover;
-  background-attachment: local, local, local, local, local;
+  background-position: top center, top center, center;
+  /* 100% auto: entra el ancho completo, sin recortar las herramientas de los
+     costados (cover las cortaría en un sidebar angosto). */
+  background-size: 100% auto, 100% auto, cover;
+  background-attachment: local, local, local;
 }
 
 /* =============================================================================
