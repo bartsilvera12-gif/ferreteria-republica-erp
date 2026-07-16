@@ -91,7 +91,15 @@ export async function POST(request: NextRequest) {
       // ni rompe la respuesta si el SMTP no está configurado o falla).
       try {
         const r = await enviarConfirmacionOrdenCompra(out.ordenes);
-        if (!r.ok && !r.skipped) console.error("[ordenes-compra] email:", r.error);
+        if (r.ok) {
+          console.info(`[ordenes-compra] email enviado (${out.numero_oc}) id=${r.messageId}`);
+        } else if (r.skipped) {
+          // Antes esto no se logueaba: el correo no salía y no quedaba ningún
+          // rastro. Se avisa para poder diagnosticarlo desde los logs.
+          console.warn(`[ordenes-compra] email NO enviado (${out.numero_oc}): ${r.reason}`);
+        } else {
+          console.error(`[ordenes-compra] email falló (${out.numero_oc}):`, r.error);
+        }
       } catch (mailErr) {
         console.error("[ordenes-compra] email throw:", mailErr instanceof Error ? mailErr.message : mailErr);
       }
