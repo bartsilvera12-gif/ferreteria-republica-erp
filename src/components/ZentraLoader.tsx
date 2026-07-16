@@ -75,11 +75,11 @@ export function FerreteriaLoader(props: LoaderProps) {
           width={480}
           height={264}
           priority
-          className="ferro-logo h-auto w-full object-contain object-center"
+          className="ferro-logo h-auto w-[176px] object-contain object-center sm:w-[236px]"
         />
 
         <svg
-          className="ferro-svg"
+          className="ferro-svg h-[207px] w-[232px] sm:h-[257px] sm:w-[288px]"
           viewBox="0 0 280 250"
           style={{ display: "block", overflow: "visible" }}
           aria-hidden="true"
@@ -212,14 +212,14 @@ export function FerreteriaLoader(props: LoaderProps) {
         .ferro-stack {
           gap: 40px;
         }
+        /* OJO: el ancho del logo y el tamaño del SVG NO van acá. styled-jsx se
+           inyecta después del bundle de Tailwind, así que hasta que aplicaba
+           este bloque el logo tomaba w-full y el SVG (sin width) se estiraba al
+           100%: se veía un zoom gigante y recién después se acomodaba. Las
+           medidas viven en clases Tailwind, disponibles desde el primer pintado. */
         .ferro-logo {
-          width: 236px;
           filter: drop-shadow(0 10px 26px rgba(0, 0, 0, 0.22));
           user-select: none;
-        }
-        .ferro-svg {
-          width: 288px;
-          height: 257px;
         }
         .ferro-bar {
           width: 244px;
@@ -274,8 +274,6 @@ export function FerreteriaLoader(props: LoaderProps) {
 
         @media (max-width: 640px) {
           .ferro-stack { gap: 30px; }
-          .ferro-logo { width: 176px; }
-          .ferro-svg { width: 232px; height: 207px; }
           .ferro-bar { width: 188px; }
         }
 
