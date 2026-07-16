@@ -3,20 +3,14 @@
 import Image from "next/image";
 
 /**
- * Pantalla de carga Zentra — Ferretería República.
+ * Pantalla de carga Zentra — Ferretería República: caja de herramientas animada
+ * (SVG + CSS, bucle de 1400 ms, sin librerías).
  *
- * Conserva la API pública original: `label`, `fullscreen`, `overlay`,
- * `role="status"`, `aria-busy="true"`, texto para lectores de pantalla y
- * `prefers-reduced-motion`.
+ * API pública: `label`, `fullscreen`, `overlay`. Mantiene `role="status"`,
+ * `aria-busy="true"`, texto para lectores de pantalla y `prefers-reduced-motion`.
  *
- * El diseño se controla con la bandera de entorno
- * `NEXT_PUBLIC_FERRETERIA_LOADER_ENABLED`:
- *   - "true"  -> nuevo loader de ferretería (caja + herramientas).
- *   - resto   -> loader anterior (recreación exacta del actual).
- *
- * No modifica AuthGuard, BootContext ni Sidebar. No usa setTimeout.
- * El loader aparece mientras el ERP no esté listo y desaparece solo
- * cuando el consumidor deja de montarlo (misma lógica de antes).
+ * No modifica AuthGuard, BootContext ni Sidebar. No usa setTimeout: aparece
+ * mientras el ERP no esté listo y desaparece cuando el consumidor lo desmonta.
  */
 
 type LoaderProps = {
@@ -27,15 +21,8 @@ type LoaderProps = {
   overlay?: boolean;
 };
 
-const FERRETERIA_ENABLED =
-  process.env.NEXT_PUBLIC_FERRETERIA_LOADER_ENABLED === "true";
-
 export default function ZentraLoader(props: LoaderProps) {
-  return FERRETERIA_ENABLED ? (
-    <FerreteriaLoader {...props} />
-  ) : (
-    <LegacyLoader {...props} />
-  );
+  return <FerreteriaLoader {...props} />;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -301,93 +288,5 @@ export function FerreteriaLoader(props: LoaderProps) {
         }
       `}</style>
     </LoaderFrame>
-  );
-}
-
-/* -------------------------------------------------------------------------- */
-/*  ANTERIOR — recreación exacta del loader actual (no borrar)                */
-/* -------------------------------------------------------------------------- */
-
-export function LegacyLoader({ label = "Cargando", fullscreen = true, overlay = false }: LoaderProps) {
-  const letters = Array.from(label);
-  return (
-    <div
-      className={`flex flex-col items-center justify-center gap-7 bg-[#4FAEB2] ${
-        overlay ? "fixed inset-0 z-[200] h-screen w-screen overflow-hidden" : "w-full"
-      } ${fullscreen && !overlay ? "min-h-screen" : ""} ${
-        !fullscreen && !overlay ? "min-h-[40vh] py-16" : ""
-      }`}
-      aria-busy="true"
-      role="status"
-    >
-      <div
-        aria-hidden="true"
-        className="pointer-events-none absolute inset-0 -z-0 opacity-70"
-        style={{
-          background:
-            "radial-gradient(circle at 50% 40%, rgba(255,255,255,0.10), transparent 65%)",
-        }}
-      />
-      <div className="relative z-10 h-32 w-[15rem] sm:h-40 sm:w-[18rem]">
-        <Image
-          src="/brand/zentra-logo-official.png"
-          alt="ZENTRA"
-          fill
-          sizes="(min-width: 640px) 18rem, 15rem"
-          className="object-contain object-center drop-shadow-[0_8px_30px_rgba(0,0,0,0.15)]"
-          priority
-        />
-      </div>
-      <p
-        className="zentra-loader-label relative z-10 inline-flex items-end gap-[0.18em] text-sm font-semibold tracking-[0.42em] text-white uppercase"
-        aria-label={`${label}…`}
-      >
-        {letters.map((ch, i) => (
-          <span
-            key={`${ch}-${i}`}
-            className="zentra-loader-letter inline-block will-change-transform"
-            style={{ animationDelay: `${i * 90}ms` }}
-            aria-hidden="true"
-          >
-            {ch === " " ? "\u00a0" : ch}
-          </span>
-        ))}
-        <span className="ml-[0.4em] inline-flex items-end gap-[0.25em]">
-          {[0, 1, 2].map((d) => (
-            <span
-              key={d}
-              className="zentra-loader-letter inline-block h-1 w-1 rounded-full bg-white"
-              style={{ animationDelay: `${(letters.length + d) * 90}ms` }}
-              aria-hidden="true"
-            />
-          ))}
-        </span>
-      </p>
-      <style jsx>{`
-        .zentra-loader-letter {
-          animation: zentraLetterWave 1400ms cubic-bezier(0.4, 0, 0.2, 1) infinite both;
-        }
-        @keyframes zentraLetterWave {
-          0%, 60%, 100% {
-            transform: translateY(0);
-            opacity: 0.55;
-            text-shadow: 0 0 0 rgba(255, 255, 255, 0);
-          }
-          30% {
-            transform: translateY(-6px);
-            opacity: 1;
-            text-shadow: 0 6px 18px rgba(255, 255, 255, 0.35);
-          }
-        }
-        @media (prefers-reduced-motion: reduce) {
-          .zentra-loader-letter {
-            animation: none;
-            opacity: 1;
-            transform: none;
-          }
-        }
-      `}</style>
-      <span className="sr-only">Cargando contenido…</span>
-    </div>
   );
 }
