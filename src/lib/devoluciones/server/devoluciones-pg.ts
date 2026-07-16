@@ -45,6 +45,15 @@ function num(v: unknown): number {
 function str(v: unknown): string | null {
   return v == null ? null : String(v);
 }
+/**
+ * Normaliza timestamps a ISO. node-postgres devuelve `Date`, y String(Date) da
+ * "Thu Jul 16 2026 ... (hora estándar de Paraguay)", que Postgres NO parsea.
+ */
+function iso(v: unknown): string | null {
+  if (v == null) return null;
+  if (v instanceof Date) return v.toISOString();
+  return String(v);
+}
 
 function pool() {
   const p = getChatPostgresPool();
@@ -103,7 +112,7 @@ export async function getVentaDevolvible(
   return {
     venta_id: String(v.id),
     numero_control: String(v.numero_control ?? ""),
-    fecha: String(v.fecha ?? ""),
+    fecha: iso(v.fecha) ?? "",
     estado: String(v.estado ?? ""),
     metodo_pago: str(v.metodo_pago),
     total: num(v.total),
@@ -388,7 +397,7 @@ export async function crearDevolucion(
          $14::uuid, $15::boolean, $16, $17::uuid, $18
        ) RETURNING id::text`,
       [
-        empresaId, numero, input.venta_id, str(venta.numero_control), str(venta.fecha),
+        empresaId, numero, input.venta_id, str(venta.numero_control), iso(venta.fecha),
         str(venta.cliente_id), tipo, resolucion, input.motivo?.trim() || null,
         totalDevuelto, totalEntregado, diferencia, diferencia !== 0 ? metodo : null,
         cajaId, requiereNC, input.idempotency_key || null, usuario.id, usuario.nombre,
@@ -688,7 +697,7 @@ function mapDev(r: Record<string, unknown>, clienteNombre?: string | null): Devo
     numero_devolucion: String(r.numero_devolucion),
     venta_id: String(r.venta_id),
     venta_numero_control: str(r.venta_numero_control),
-    venta_fecha: str(r.venta_fecha),
+    venta_fecha: iso(r.venta_fecha),
     cliente_id: str(r.cliente_id),
     cliente_nombre: clienteNombre ?? str(r.cliente_nombre),
     tipo: (r.tipo === "total" ? "total" : "parcial") as TipoDevolucion,
@@ -704,8 +713,8 @@ function mapDev(r: Record<string, unknown>, clienteNombre?: string | null): Devo
     requiere_nota_credito: r.requiere_nota_credito === true,
     created_by: str(r.created_by),
     usuario_nombre: str(r.usuario_nombre),
-    created_at: String(r.created_at),
-    anulada_at: str(r.anulada_at),
+    created_at: iso(r.created_at) ?? "",
+    anulada_at: iso(r.anulada_at),
     anulada_motivo: str(r.anulada_motivo),
   };
 }
