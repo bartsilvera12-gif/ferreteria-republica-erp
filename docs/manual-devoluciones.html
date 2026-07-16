@@ -1,0 +1,531 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Manual de uso · Devoluciones de ventas · Ferretería República</title>
+<style>
+  :root{
+    --turq:#4FAEB2; --turq-dark:#3F8E91; --turq-soft:#E5F4F4;
+    --tinta:#0f172a; --slate:#334155; --gris:#64748b; --gris2:#94a3b8;
+    --linea:#e2e8f0; --linea2:#f1f5f9;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{font-family:-apple-system,"Segoe UI",Roboto,Arial,sans-serif;color:var(--tinta);font-size:11pt;line-height:1.5;}
+  .page{width:210mm;min-height:297mm;padding:16mm 15mm;margin:0 auto;background:#fff;position:relative;page-break-after:always;}
+  .page:last-child{page-break-after:auto;}
+
+  /* ── Portada ── */
+  .cover{display:flex;flex-direction:column;justify-content:center;min-height:265mm;}
+  .cover .eyebrow{font-size:9pt;font-weight:700;letter-spacing:.22em;text-transform:uppercase;color:var(--turq);}
+  .cover h1{font-size:34pt;line-height:1.05;margin:10px 0 6px;font-weight:800;letter-spacing:-.02em;}
+  .cover .sub{font-size:14pt;color:var(--gris);font-weight:400;}
+  .cover .rule{height:4px;width:70px;background:var(--turq);border-radius:2px;margin:26px 0;}
+  .cover .meta{font-size:10pt;color:var(--gris);line-height:1.9;}
+  .cover .meta b{color:var(--slate);}
+  .cover .box{margin-top:34px;border-left:3px solid var(--turq);background:var(--turq-soft);padding:14px 18px;border-radius:0 8px 8px 0;font-size:10pt;color:var(--slate);}
+  .brandbar{position:absolute;left:0;right:0;top:0;height:8px;background:linear-gradient(90deg,var(--turq),var(--turq-dark));}
+
+  /* ── Encabezados ── */
+  h2{font-size:19pt;font-weight:800;margin:0 0 4px;letter-spacing:-.01em;}
+  h2 .n{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:50%;background:var(--turq);color:#fff;font-size:13pt;margin-right:10px;vertical-align:middle;}
+  h3{font-size:12pt;font-weight:700;margin:20px 0 6px;color:var(--tinta);}
+  .lead{color:var(--gris);margin:0 0 16px;font-size:10.5pt;}
+  p{margin:0 0 9px;}
+  ul{margin:0 0 10px;padding-left:18px;} li{margin:3px 0;}
+  .hdr{display:flex;justify-content:space-between;align-items:baseline;border-bottom:2px solid var(--turq);padding-bottom:8px;margin-bottom:16px;}
+  .hdr .tag{font-size:8.5pt;color:var(--gris2);font-weight:600;text-transform:uppercase;letter-spacing:.1em;}
+  .foot{position:absolute;bottom:9mm;left:15mm;right:15mm;display:flex;justify-content:space-between;font-size:8pt;color:var(--gris2);border-top:1px solid var(--linea2);padding-top:6px;}
+
+  /* ── Callouts ── */
+  .callout{border-radius:8px;padding:11px 14px;font-size:9.5pt;margin:12px 0;border-left:3px solid;}
+  .c-info{background:var(--turq-soft);border-color:var(--turq);color:#245e60;}
+  .c-warn{background:#fffbeb;border-color:#f59e0b;color:#78350f;}
+  .c-ok{background:#ecfdf5;border-color:#10b981;color:#065f46;}
+  /* Solo el título del callout es bloque; los <b> del cuerpo van en línea. */
+  .callout > b:first-child{display:block;margin-bottom:2px;}
+
+  /* ── Mockups de la app ── */
+  .shot{border:1px solid var(--linea);border-radius:12px;overflow:hidden;margin:14px 0;box-shadow:0 4px 14px rgba(15,23,42,.07);background:#fff;}
+  .shot-cap{font-size:8.5pt;color:var(--gris2);text-align:center;margin-top:-6px;margin-bottom:16px;font-style:italic;}
+  .m-head{padding:14px 18px;border-bottom:1px solid var(--linea2);}
+  .m-title{font-size:13pt;font-weight:700;}
+  .m-sub{font-size:9pt;color:var(--gris);}
+  .steps{display:flex;align-items:center;gap:8px;padding:10px 18px;border-bottom:1px solid var(--linea2);}
+  .steps .s{display:flex;align-items:center;gap:6px;flex:1;}
+  .steps .dot{width:20px;height:20px;border-radius:50%;background:#f1f5f9;color:var(--gris2);display:flex;align-items:center;justify-content:center;font-size:8pt;font-weight:700;}
+  .steps .dot.on{background:var(--turq);color:#fff;}
+  .steps .lbl{font-size:8.5pt;font-weight:600;color:var(--gris2);}
+  .steps .lbl.on{color:var(--tinta);}
+  .steps .bar{flex:1;height:2px;background:#f1f5f9;}
+  .steps .bar.on{background:var(--turq);}
+  .m-body{padding:16px 18px;}
+
+  .lin{border:2px solid var(--linea);border-radius:10px;margin-bottom:10px;}
+  .lin.on{border-color:var(--turq);background:rgba(79,174,178,.04);}
+  .lin-row{display:flex;gap:10px;padding:10px 12px;align-items:flex-start;}
+  .cb{width:17px;height:17px;border-radius:4px;border:2px solid #cbd5e1;flex-shrink:0;margin-top:2px;display:flex;align-items:center;justify-content:center;color:#fff;font-size:9pt;font-weight:900;}
+  .cb.on{background:var(--turq);border-color:var(--turq);}
+  .p-nm{font-size:10pt;font-weight:700;}
+  .p-sku{font-family:ui-monospace,"Courier New",monospace;font-size:8pt;color:var(--gris2);}
+  .p-meta{font-size:8.5pt;color:var(--gris);margin-top:2px;}
+  .p-meta b{color:var(--slate);} .p-meta .ok{color:#047857;font-weight:700;}
+  .lin-body{border-top:1px solid rgba(79,174,178,.25);padding:10px 12px;}
+  .qrow{display:flex;justify-content:space-between;align-items:center;}
+  .stp{display:inline-flex;border:1px solid var(--linea);border-radius:7px;overflow:hidden;}
+  .stp span{width:26px;height:26px;display:flex;align-items:center;justify-content:center;color:var(--gris);font-size:11pt;}
+  .stp .v{width:44px;border-left:1px solid var(--linea);border-right:1px solid var(--linea);font-weight:800;color:var(--tinta);font-size:10pt;}
+  .conds{display:flex;gap:8px;margin-top:9px;}
+  .cond{flex:1;border:1px solid var(--linea);border-radius:7px;padding:6px;font-size:8.5pt;font-weight:700;color:var(--gris);text-align:center;}
+  .cond.ok{border-color:#6ee7b7;background:#ecfdf5;color:#047857;}
+  .cond.bad{border-color:#fca5a5;background:#fef2f2;color:#b91c1c;}
+
+  .opt2{display:flex;gap:10px;margin-bottom:12px;}
+  .opt{flex:1;border:2px solid var(--linea);border-radius:10px;padding:14px;font-size:10pt;font-weight:700;color:var(--slate);text-align:center;}
+  .opt.on{border-color:var(--turq);background:rgba(79,174,178,.08);color:var(--turq-dark);}
+  .resum{background:#f8fafc;border-radius:8px;padding:10px 12px;font-size:9.5pt;}
+  .resum .r{display:flex;justify-content:space-between;padding:2px 0;color:var(--gris);}
+  .resum .r b{color:var(--tinta);}
+  .resum .tot{display:flex;justify-content:space-between;border-top:1px solid var(--linea);margin-top:5px;padding-top:5px;font-weight:800;color:var(--turq-dark);}
+  .metodos{display:flex;gap:6px;margin-top:6px;}
+  .met{flex:1;border:1px solid var(--linea);border-radius:7px;padding:6px;font-size:8.5pt;font-weight:700;color:var(--gris);text-align:center;}
+  .met.on{border-color:var(--turq);background:rgba(79,174,178,.10);color:var(--turq-dark);}
+  .campo{border:1px solid var(--linea);border-radius:7px;padding:7px 10px;font-size:9pt;color:var(--gris2);}
+  .campo.on{border-color:var(--turq);}
+  .lbl-c{font-size:8pt;font-weight:700;color:var(--slate);margin:9px 0 3px;}
+
+  dl.res{border:1px solid var(--linea);border-radius:8px;overflow:hidden;margin:0;}
+  dl.res .h{background:#f8fafc;padding:6px 12px;font-size:8pt;font-weight:800;letter-spacing:.08em;color:var(--gris);text-transform:uppercase;border-bottom:1px solid var(--linea2);}
+  dl.res .row{display:flex;justify-content:space-between;gap:14px;padding:6px 12px;border-bottom:1px solid var(--linea2);font-size:9pt;}
+  dl.res .row:last-child{border-bottom:none;}
+  dl.res dt{color:var(--gris);font-weight:600;font-size:8.5pt;}
+  dl.res dd{margin:0;text-align:right;color:var(--slate);}
+
+  .btn{display:inline-flex;align-items:center;gap:5px;border-radius:7px;padding:6px 12px;font-size:9pt;font-weight:700;border:1px solid;}
+  .b-prim{background:var(--turq);border-color:var(--turq);color:#fff;}
+  .b-ghost{background:#fff;border-color:var(--linea);color:var(--slate);}
+  .b-amber{background:#fffbeb;border-color:#fde68a;color:#92400e;}
+  .b-turq{background:rgba(79,174,178,.08);border-color:rgba(79,174,178,.4);color:var(--turq-dark);}
+  .m-foot{display:flex;justify-content:space-between;padding:12px 18px;border-top:1px solid var(--linea2);}
+
+  table.t{width:100%;border-collapse:collapse;font-size:9.5pt;margin:10px 0;}
+  table.t th{background:var(--tinta);color:#fff;text-align:left;padding:7px 10px;font-size:8pt;text-transform:uppercase;letter-spacing:.04em;}
+  table.t td{padding:7px 10px;border-bottom:1px solid var(--linea2);vertical-align:top;}
+  table.t tr:nth-child(even) td{background:#fafbfc;}
+  .tag{display:inline-block;border-radius:999px;padding:1px 8px;font-size:8pt;font-weight:700;}
+  .t-amber{background:#fef3c7;color:#92400e;} .t-emerald{background:#d1fae5;color:#065f46;}
+  .t-red{background:#fee2e2;color:#991b1b;} .t-violet{background:#ede9fe;color:#5b21b6;}
+  .t-slate{background:#f1f5f9;color:#475569;} .t-sky{background:#e0f2fe;color:#075985;}
+  @page{size:A4;margin:0;}
+</style>
+</head>
+<body>
+
+<!-- ═══════════ PORTADA ═══════════ -->
+<section class="page">
+  <div class="brandbar"></div>
+  <div class="cover">
+    <div class="eyebrow">Zentra · Manual de uso</div>
+    <h1>Devoluciones<br>de ventas</h1>
+    <div class="sub">Guía paso a paso para el personal de mostrador</div>
+    <div class="rule"></div>
+    <div class="meta">
+      <div><b>Sistema:</b> Zentra ERP — Ferretería República</div>
+      <div><b>Módulo:</b> Ventas › Devoluciones</div>
+      <div><b>Versión del documento:</b> 1.0</div>
+    </div>
+    <div class="box">
+      <b style="display:block;margin-bottom:4px;">¿Qué resuelve este módulo?</b>
+      Registrar la devolución de productos de una venta ya realizada: devolver el dinero
+      o cambiar por otro producto, con el stock y la caja actualizados automáticamente.
+      La venta original nunca se borra ni se modifica: todo queda auditado.
+    </div>
+  </div>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 1</span></div>
+</section>
+
+<!-- ═══════════ CONCEPTOS ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2>Antes de empezar</h2><span class="tag-x tag t-slate">Conceptos</span></div>
+
+  <h3>Qué podés hacer</h3>
+  <table class="t">
+    <tr><th style="width:38%">Situación</th><th>Cómo se resuelve</th></tr>
+    <tr><td><b>El cliente devuelve todo</b></td><td>Devolución <b>total</b>. Se marca toda la venta.</td></tr>
+    <tr><td><b>Devuelve solo algunos productos</b></td><td>Devolución <b>parcial</b>. Podés hacer varias sobre la misma venta.</td></tr>
+    <tr><td><b>Quiere que le devuelvan la plata</b></td><td>Resolución <b>Reembolso</b>. Sale un egreso de la caja.</td></tr>
+    <tr><td><b>Quiere llevar otro producto</b></td><td>Resolución <b>Cambio</b>. El sistema calcula la diferencia.</td></tr>
+    <tr><td><b>El producto está sano</b></td><td>Marcás <b>Vuelve al stock</b>: se suma de nuevo al inventario.</td></tr>
+    <tr><td><b>El producto está roto o fallado</b></td><td>Marcás <b>Dañado</b>: <b>no</b> vuelve al stock, pero igual se le paga al cliente.</td></tr>
+  </table>
+
+  <h3>Reglas que el sistema aplica solo</h3>
+  <ul>
+    <li>Nunca podés devolver más de lo que se vendió (descuenta lo ya devuelto antes).</li>
+    <li>La venta original <b>no se borra ni se modifica</b>: solo cambia su estado.</li>
+    <li>Un producto marcado como dañado <b>nunca</b> vuelve al stock.</li>
+    <li>Todo queda registrado con fecha, usuario y motivo.</li>
+  </ul>
+
+  <div class="callout c-warn">
+    <b>Importante: la caja</b>
+    Si vas a devolver dinero <b>en efectivo</b>, tiene que haber una <b>caja abierta</b>.
+    Si no la hay, el sistema no te va a dejar confirmar y te va a avisar:
+    <i>“No hay una caja abierta. Abrí una caja antes de realizar esta devolución.”</i>
+    Con transferencia o tarjeta se registra el movimiento, pero no afecta el efectivo del cajón.
+  </div>
+
+  <h3>Cómo queda la venta después</h3>
+  <table class="t">
+    <tr><th style="width:34%">Estado</th><th>Significa</th></tr>
+    <tr><td><span class="tag t-emerald">Completada</span></td><td>Sin devoluciones.</td></tr>
+    <tr><td><span class="tag t-amber">Parcialmente devuelta</span></td><td>Se devolvió una parte. Todavía se puede devolver el resto.</td></tr>
+    <tr><td><span class="tag t-violet">Devuelta total</span></td><td>Se devolvió todo lo que se había vendido.</td></tr>
+  </table>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 2</span></div>
+</section>
+
+<!-- ═══════════ PASO 0 ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2><span class="n">1</span>Encontrar la venta</h2><span class="tag t-slate">Ventas</span></div>
+  <p class="lead">Toda devolución arranca desde la venta original, en el listado de <b>Ventas</b>.</p>
+
+  <p>Buscá la venta en la lista y, en la columna de la derecha, tocá el botón <b>Devolver</b>.</p>
+
+  <div class="shot">
+    <div style="padding:12px 14px;">
+      <table class="t" style="margin:0;font-size:8.5pt;">
+        <tr><th>Número</th><th>Productos</th><th style="text-align:center">Cant.</th><th style="text-align:right">Total</th><th>Pago</th><th style="text-align:center">Acciones</th></tr>
+        <tr>
+          <td style="font-family:ui-monospace,monospace;color:var(--gris)">VTA-000012</td>
+          <td><b>AUTOPERFORANTE 10X1.1/2 PATTA</b><br><span class="p-sku">TORNILLO5 <span class="tag t-slate">+1 más</span></span></td>
+          <td style="text-align:center">2</td>
+          <td style="text-align:right"><b>Gs. 15.450</b></td>
+          <td>Efectivo</td>
+          <td style="text-align:center;white-space:nowrap">
+            <span class="btn b-amber">↺ Devolver</span>
+            <span class="btn b-turq">Factura</span>
+          </td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="shot-cap">Listado de Ventas — el botón “Devolver” está en cada fila.</div>
+
+  <div class="callout c-info">
+    <b>¿Por qué unas ventas dicen “Factura” y otras “Imprimir”?</b>
+    Si la venta se le hizo a un <b>cliente</b>, lleva factura y vas a ver el botón <b>Factura</b>.
+    Si fue una venta de mostrador <b>sin cliente</b>, no lleva factura y vas a ver <b>Imprimir</b> (ticket interno).
+  </div>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 3</span></div>
+</section>
+
+<!-- ═══════════ PASO 1 ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2><span class="n">2</span>Elegir los productos</h2><span class="tag t-slate">Paso 1 de 3</span></div>
+  <p class="lead">Marcás qué productos devuelve el cliente y en qué condición vuelven.</p>
+
+  <div class="shot">
+    <div class="m-head"><div class="m-title">Devolución de venta</div><div class="m-sub">Venta VTA-000012 · RICARDO KEVIN AREVALOS ESCOBAR</div></div>
+    <div class="steps">
+      <div class="s"><span class="dot on">1</span><span class="lbl on">Productos</span><span class="bar"></span></div>
+      <div class="s"><span class="dot">2</span><span class="lbl">Resolución</span><span class="bar"></span></div>
+      <div class="s"><span class="dot">3</span><span class="lbl">Confirmación</span></div>
+    </div>
+    <div class="m-body">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <span style="font-size:9.5pt;color:var(--slate)">Marcá los productos que devuelve el cliente.</span>
+        <span class="btn b-turq">Devolver toda la venta</span>
+      </div>
+
+      <div class="lin on">
+        <div class="lin-row">
+          <span class="cb on">✓</span>
+          <div style="flex:1">
+            <div class="p-nm">AUTOPERFORANTE 10X1.1/2 PATTA</div>
+            <div class="p-sku">TORNILLO5 · Gs. 450 c/u</div>
+            <div class="p-meta">Vendido: <b>1</b> &nbsp; <span class="ok">Disponible: 1</span></div>
+          </div>
+        </div>
+        <div class="lin-body">
+          <div class="qrow">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:8.5pt;font-weight:700;color:var(--slate)">Cantidad a devolver</span>
+              <span class="stp"><span>−</span><span class="v">1</span><span>+</span></span>
+              <span style="font-size:8pt;color:var(--gris2)">de 1</span>
+            </div>
+            <b style="font-size:10pt">Gs. 450</b>
+          </div>
+          <div class="conds"><span class="cond ok">✓ Vuelve al stock</span><span class="cond">✕ Dañado / no vuelve al stock</span></div>
+        </div>
+      </div>
+
+      <div class="lin">
+        <div class="lin-row">
+          <span class="cb"></span>
+          <div style="flex:1">
+            <div class="p-nm">BOLA DUWEL 200GR</div>
+            <div class="p-sku">MARTILLO4 · Gs. 15.000 c/u</div>
+            <div class="p-meta">Vendido: <b>1</b> &nbsp; <span class="ok">Disponible: 1</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display:flex;justify-content:space-between;border-top:1px solid var(--linea2);padding-top:10px;margin-top:4px;">
+        <span style="font-size:9pt;color:var(--gris)">1 producto(s) · 1 unidad(es)</span>
+        <b style="font-size:12pt;color:var(--turq-dark)">Gs. 450</b>
+      </div>
+    </div>
+    <div class="m-foot"><span class="btn b-ghost">Cancelar</span><span class="btn b-prim">Continuar</span></div>
+  </div>
+
+  <h3>Cómo se usa</h3>
+  <ul>
+    <li><b>Tocá el producto</b> (toda la fila funciona): se marca y se completa solo con la cantidad disponible.</li>
+    <li><b>Ajustá la cantidad</b> con − / + si devuelve menos de lo que compró.</li>
+    <li><b>Elegí la condición</b>: <span class="tag t-emerald">Vuelve al stock</span> si está sano, o <span class="tag t-red">Dañado</span> si no se puede revender.</li>
+    <li><b>“Devolver toda la venta”</b> marca todo de una sola vez.</li>
+  </ul>
+
+  <div class="callout c-info">
+    <b>Qué mirar en cada línea</b>
+    <b style="display:inline">Vendido</b> es cuánto se llevó el cliente. <b style="display:inline">Disponible</b> es cuánto todavía se puede devolver.
+    Si ya hubo una devolución anterior, vas a ver también cuánto se devolvió antes, y el disponible va a ser menor.
+  </div>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 4</span></div>
+</section>
+
+<!-- ═══════════ PASO 2 · REEMBOLSO ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2><span class="n">3</span>Elegir la resolución</h2><span class="tag t-slate">Paso 2 de 3</span></div>
+  <p class="lead">Dos caminos: devolverle la plata o cambiarle el producto.</p>
+
+  <h3>Opción A — Devolver el dinero</h3>
+  <div class="shot">
+    <div class="steps">
+      <div class="s"><span class="dot on">1</span><span class="lbl on">Productos</span><span class="bar on"></span></div>
+      <div class="s"><span class="dot on">2</span><span class="lbl on">Resolución</span><span class="bar"></span></div>
+      <div class="s"><span class="dot">3</span><span class="lbl">Confirmación</span></div>
+    </div>
+    <div class="m-body">
+      <div class="opt2"><span class="opt">Cambiar por otro producto</span><span class="opt on">Devolver el dinero</span></div>
+      <div class="resum">
+        <div class="r"><span>Valor devuelto</span><b>Gs. 450</b></div>
+        <div class="tot"><span>Diferencia a devolver al cliente</span><span>Gs. 450</span></div>
+      </div>
+      <div class="lbl-c">Método del reembolso</div>
+      <div class="metodos"><span class="met on">Efectivo</span><span class="met">Transferencia</span><span class="met">Tarjeta</span></div>
+      <div style="font-size:7.5pt;color:var(--gris2);margin-top:4px;">En efectivo se registra el movimiento en la caja abierta. Sin caja abierta no se puede confirmar.</div>
+      <div class="lbl-c">Motivo</div>
+      <div class="campo on">Ej: producto fallado, el cliente se arrepintió…</div>
+    </div>
+    <div class="m-foot"><span class="btn b-ghost">Atrás</span><span class="btn b-prim">Continuar</span></div>
+  </div>
+  <div class="shot-cap">Reembolso: el sistema muestra cuánto hay que devolverle al cliente.</div>
+
+  <ul>
+    <li>Elegí el <b>método</b> por el que le devolvés la plata.</li>
+    <li>Cargá el <b>motivo</b> (recomendado): queda guardado para el control posterior.</li>
+  </ul>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 5</span></div>
+</section>
+
+<!-- ═══════════ PASO 2 · CAMBIO ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2><span class="n">3</span>Elegir la resolución</h2><span class="tag t-slate">Paso 2 · Cambio</span></div>
+
+  <h3>Opción B — Cambiar por otro producto</h3>
+  <div class="shot">
+    <div class="steps">
+      <div class="s"><span class="dot on">1</span><span class="lbl on">Productos</span><span class="bar on"></span></div>
+      <div class="s"><span class="dot on">2</span><span class="lbl on">Resolución</span><span class="bar"></span></div>
+      <div class="s"><span class="dot">3</span><span class="lbl">Confirmación</span></div>
+    </div>
+    <div class="m-body">
+      <div class="opt2"><span class="opt on">Cambiar por otro producto</span><span class="opt">Devolver el dinero</span></div>
+      <div class="lbl-c">Producto de reemplazo</div>
+      <div class="campo" style="border-width:2px;border-color:rgba(79,174,178,.3)">🔍 &nbsp; Buscar producto por nombre o SKU…</div>
+      <div style="display:flex;align-items:center;gap:10px;border:1px solid var(--linea);border-radius:7px;padding:8px 10px;margin-top:8px;">
+        <div style="flex:1"><div class="p-nm" style="font-size:9.5pt">BOLA DUWEL 200GR</div><div class="p-sku">Gs. 15.000 c/u</div></div>
+        <span class="campo" style="width:52px;text-align:center;color:var(--tinta);font-weight:700">1</span>
+        <b style="font-size:9.5pt">Gs. 15.000</b><span style="color:#dc2626">🗑</span>
+      </div>
+      <div class="resum" style="margin-top:10px;">
+        <div class="r"><span>Valor devuelto</span><b>Gs. 450</b></div>
+        <div class="r"><span>Valor del nuevo producto</span><b>Gs. 15.000</b></div>
+        <div class="tot" style="color:#b45309"><span>Diferencia a cobrar al cliente</span><span>Gs. 14.550</span></div>
+      </div>
+      <div class="lbl-c">Método de cobro</div>
+      <div class="metodos"><span class="met on">Efectivo</span><span class="met">Transferencia</span><span class="met">Tarjeta</span></div>
+    </div>
+    <div class="m-foot"><span class="btn b-ghost">Atrás</span><span class="btn b-prim">Continuar</span></div>
+  </div>
+  <div class="shot-cap">Cambio: buscás el producto nuevo y el sistema calcula la diferencia solo.</div>
+
+  <h3>Las tres situaciones posibles del cambio</h3>
+  <table class="t">
+    <tr><th style="width:34%">Si el producto nuevo…</th><th>Qué pasa</th></tr>
+    <tr><td><b>Vale lo mismo</b></td><td><span class="tag t-slate">Sin diferencia</span> — no se mueve plata. Solo se cambia el producto.</td></tr>
+    <tr><td><b>Vale más</b></td><td><span class="tag t-amber">Diferencia a cobrar</span> — el cliente paga. Entra plata a la caja.</td></tr>
+    <tr><td><b>Vale menos</b></td><td><span class="tag t-emerald">Diferencia a devolver</span> — le devolvés la vuelta. Sale plata de la caja.</td></tr>
+  </table>
+
+  <div class="callout c-ok">
+    <b>El stock se ajusta solo</b>
+    El producto devuelto <b>vuelve</b> al inventario (si está sano) y el producto entregado <b>sale</b> del inventario.
+    No hace falta tocar nada a mano.
+  </div>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 6</span></div>
+</section>
+
+<!-- ═══════════ PASO 3 ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2><span class="n">4</span>Confirmar</h2><span class="tag t-slate">Paso 3 de 3</span></div>
+  <p class="lead">Última pantalla antes de que se registre. Revisá que todo esté bien.</p>
+
+  <div class="shot">
+    <div class="steps">
+      <div class="s"><span class="dot on">1</span><span class="lbl on">Productos</span><span class="bar on"></span></div>
+      <div class="s"><span class="dot on">2</span><span class="lbl on">Resolución</span><span class="bar on"></span></div>
+      <div class="s"><span class="dot on">3</span><span class="lbl on">Confirmación</span></div>
+    </div>
+    <div class="m-body">
+      <dl class="res">
+        <div class="h">Resumen</div>
+        <div class="row"><dt>Venta original</dt><dd>VTA-000012 · RICARDO KEVIN AREVALOS ESCOBAR</dd></div>
+        <div class="row"><dt>Tipo</dt><dd>Devolución parcial</dd></div>
+        <div class="row"><dt>Resolución</dt><dd>Cambio por otro producto</dd></div>
+        <div class="row" style="display:block">
+          <dt style="margin-bottom:3px">Productos devueltos</dt>
+          <dd style="text-align:left">1× AUTOPERFORANTE 10X1.1/2 PATTA — Gs. 450 <span style="color:#047857;font-size:8pt">(vuelve al stock)</span></dd>
+        </div>
+        <div class="row" style="display:block">
+          <dt style="margin-bottom:3px">Productos entregados</dt>
+          <dd style="text-align:left">1× BOLA DUWEL 200GR — Gs. 15.000 <span style="color:var(--gris2);font-size:8pt">(sale del stock)</span></dd>
+        </div>
+        <div class="row"><dt>Diferencia a cobrar</dt><dd>Gs. 14.550 · efectivo</dd></div>
+        <div class="row"><dt>Caja afectada</dt><dd>Caja abierta (movimiento en efectivo)</dd></div>
+        <div class="row"><dt>Motivo</dt><dd>—</dd></div>
+      </dl>
+      <div style="font-size:7.5pt;color:var(--gris2);margin-top:8px;">Al confirmar se registra el movimiento de inventario y, si corresponde, el de caja. La venta original no se modifica ni se elimina.</div>
+    </div>
+    <div class="m-foot"><span class="btn b-ghost">Atrás</span><span class="btn b-prim">✓ Confirmar devolución</span></div>
+  </div>
+  <div class="shot-cap">Resumen final: todo lo que va a pasar, antes de que pase.</div>
+
+  <p>Al tocar <b>Confirmar devolución</b>:</p>
+  <ul>
+    <li>Se genera el número de devolución (<b>DEV-000001</b>, DEV-000002, …).</li>
+    <li>Se abre el <b>comprobante</b> para imprimir y entregarle al cliente.</li>
+    <li>Se actualizan el stock y la caja automáticamente.</li>
+  </ul>
+
+  <div class="callout c-ok">
+    <b>Tranquilo con el doble clic</b>
+    Si tocás dos veces “Confirmar”, el sistema <b>no</b> genera dos devoluciones ni descuenta doble.
+  </div>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 7</span></div>
+</section>
+
+<!-- ═══════════ HISTORIAL ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2><span class="n">5</span>Historial y anulación</h2><span class="tag t-slate">Ventas › Devoluciones</span></div>
+  <p class="lead">Todas las devoluciones quedan registradas y se pueden consultar cuando quieras.</p>
+
+  <p>Entrá desde <b>Ventas</b> → botón <b>Devoluciones</b> (arriba a la derecha).</p>
+
+  <div class="shot">
+    <div style="padding:12px 14px;">
+      <table class="t" style="margin:0;font-size:8.5pt;">
+        <tr><th>N°</th><th>Venta</th><th>Fecha</th><th style="text-align:center">Tipo</th><th style="text-align:center">Resolución</th><th style="text-align:right">Monto</th><th style="text-align:center">Estado</th></tr>
+        <tr>
+          <td style="font-family:ui-monospace,monospace"><b>DEV-000002</b></td>
+          <td>VTA-000012<br><span style="color:var(--gris2)">R. AREVALOS</span></td>
+          <td>16/07/2026 09:12</td>
+          <td style="text-align:center"><span class="tag t-slate">Parcial</span></td>
+          <td style="text-align:center"><span class="tag t-sky">Cambio</span></td>
+          <td style="text-align:right"><b>Gs. 450</b></td>
+          <td style="text-align:center"><span class="tag t-emerald">Confirmada</span></td>
+        </tr>
+        <tr>
+          <td style="font-family:ui-monospace,monospace"><b>DEV-000001</b></td>
+          <td>VTA-000009<br><span style="color:var(--gris2)">Sin cliente</span></td>
+          <td>15/07/2026 17:40</td>
+          <td style="text-align:center"><span class="tag t-violet">Total</span></td>
+          <td style="text-align:center"><span class="tag t-emerald">Reembolso</span></td>
+          <td style="text-align:right"><b>Gs. 26.400</b></td>
+          <td style="text-align:center"><span class="tag t-red">Anulada</span></td>
+        </tr>
+      </table>
+    </div>
+  </div>
+  <div class="shot-cap">Historial de devoluciones, con su estado y accesos a Detalle e Imprimir.</div>
+
+  <h3>Qué podés hacer desde acá</h3>
+  <ul>
+    <li><b>Detalle</b>: ver los productos, el motivo, el usuario y el movimiento de plata.</li>
+    <li><b>Imprimir</b>: reimprimir el comprobante cuando el cliente lo pide.</li>
+    <li><b>Anular</b>: solo si te equivocaste (ver abajo).</li>
+  </ul>
+
+  <h3>Anular una devolución</h3>
+  <p>Si registraste una devolución por error, abrí el <b>Detalle</b> y tocá <b>Anular devolución</b>. Vas a tener que escribir el motivo.</p>
+  <div class="callout c-warn">
+    <b>Qué hace la anulación</b>
+    Deshace todo automáticamente: el stock vuelve como estaba, se genera el movimiento
+    de caja inverso y la venta recupera su estado anterior.
+    <b style="display:inline">La devolución no se borra</b>: queda marcada como <span class="tag t-red">Anulada</span> para que quede el registro de lo que pasó.
+  </div>
+
+  <div class="callout c-info">
+    <b>Sobre las facturas</b>
+    Si la venta tenía factura, el sistema deja registrado que <b>puede requerir una Nota de Crédito fiscal</b>.
+    El módulo <b>no emite</b> la Nota de Crédito automáticamente: eso se gestiona aparte con el contador.
+  </div>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 8</span></div>
+</section>
+
+<!-- ═══════════ AYUDA ═══════════ -->
+<section class="page">
+  <div class="hdr"><h2>Preguntas frecuentes</h2><span class="tag t-slate">Ayuda</span></div>
+
+  <h3>“No me deja confirmar la devolución”</h3>
+  <p>Casi siempre es una de estas tres:</p>
+  <table class="t">
+    <tr><th style="width:44%">El sistema dice…</th><th>Qué hacer</th></tr>
+    <tr><td><i>No hay una caja abierta…</i></td><td>Abrí una caja desde <b>Ventas</b> y volvé a intentar. Solo pasa si devolvés efectivo.</td></tr>
+    <tr><td><i>No podés devolver X de…</i></td><td>Estás pidiendo más de lo disponible. Fijate el número <b>Disponible</b> de esa línea.</td></tr>
+    <tr><td><i>Sin stock suficiente de…</i></td><td>El producto del cambio no tiene stock. Elegí otro o ajustá la cantidad.</td></tr>
+  </table>
+
+  <h3>“¿Puedo devolver dos veces la misma venta?”</h3>
+  <p>Sí. Podés hacer todas las devoluciones parciales que necesites, hasta agotar lo vendido.
+     El sistema lleva la cuenta solo y no te deja pasarte.</p>
+
+  <h3>“El cliente devuelve algo roto, ¿le pago igual?”</h3>
+  <p>Eso lo decidís vos. Marcá el producto como <b>Dañado</b>: el reembolso se paga igual,
+     pero el producto <b>no</b> vuelve al stock (porque no se puede revender).</p>
+
+  <h3>“¿Se puede borrar una devolución?”</h3>
+  <p>No, y es a propósito: es un registro de plata y de stock. Si te equivocaste, se <b>anula</b>,
+     y queda el rastro de la devolución y de su anulación.</p>
+
+  <h3>“¿Dónde veo el impacto en la caja?”</h3>
+  <p>En el arqueo de la caja. Los reembolsos aparecen como <b>egreso</b> y las diferencias cobradas como <b>ingreso</b>,
+     cada uno con el número de devolución en el concepto.</p>
+
+  <div class="callout c-info" style="margin-top:24px;">
+    <b>¿Necesitás ayuda?</b>
+    Ante cualquier duda o comportamiento raro, anotá el <b>número de devolución</b> (DEV-XXXXXX)
+    o el <b>número de venta</b> (VTA-XXXXXX) y reportalo. Con ese dato se puede rastrear todo lo ocurrido.
+  </div>
+
+  <div style="margin-top:40px;text-align:center;color:var(--gris2);font-size:8.5pt;">
+    <div style="height:3px;width:50px;background:var(--turq);border-radius:2px;margin:0 auto 12px;"></div>
+    Zentra ERP · Módulo de Devoluciones de Ventas<br>Documento de uso interno — Ferretería República
+  </div>
+  <div class="foot"><span>Zentra · Ferretería República</span><span>Manual de devoluciones · Pág. 9</span></div>
+</section>
+
+</body>
+</html>
