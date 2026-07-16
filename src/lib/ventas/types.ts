@@ -52,6 +52,12 @@ export interface Venta {
 
   metodo_pago?: MetodoPago;  // En lo de Mari: efectivo/tarjeta/transferencia
 
+  /**
+   * Cliente de la venta. Si hay cliente, la venta se factura (se emite factura
+   * autoimpresor); si es null, solo lleva ticket interno.
+   */
+  cliente_id?: string | null;
+
   /** La venta emite nota de remisión (documento no fiscal). */
   genera_nota_remision?: boolean;
   /** Número de nota de remisión (NR-XXXXXX) si genera_nota_remision. */
