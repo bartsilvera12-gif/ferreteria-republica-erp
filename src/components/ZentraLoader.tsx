@@ -38,10 +38,13 @@ function LoaderFrame({
 }: LoaderProps & { children: React.ReactNode; background: string }) {
   return (
     <div
-      className={`relative flex flex-col items-center justify-center overflow-hidden ${
+      // OJO: `relative` y `fixed` no pueden convivir. Tailwind define .relative
+      // después de .fixed, así que ganaba `relative` y el overlay quedaba en el
+      // flujo normal (invisible, empujado debajo del contenido).
+      className={`flex flex-col items-center justify-center overflow-hidden ${
         overlay
           ? "fixed inset-0 z-[200] h-screen w-screen"
-          : "w-full"
+          : "relative w-full"
       } ${fullscreen && !overlay ? "min-h-screen" : ""} ${
         !fullscreen && !overlay ? "min-h-[40vh] py-16" : ""
       }`}
