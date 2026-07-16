@@ -184,10 +184,10 @@ body {
        cerrando a los ~605px: aparecía una banda tonal. */
     linear-gradient(
       180deg,
-      rgba(11, 58, 61, 0.3) 0%,
-      rgba(11, 58, 61, 0.46) 30%,
-      rgba(11, 58, 61, 0.8) 62%,
-      #0B3A3D 88%,
+      rgba(11, 58, 61, 0.02) 0%,
+      rgba(11, 58, 61, 0.12) 34%,
+      rgba(11, 58, 61, 0.5) 66%,
+      rgba(11, 58, 61, 0.92) 86%,
       #0B3A3D 100%
     ),
     /* Textura: herramientas ancladas arriba, a lo ancho del sidebar. */
