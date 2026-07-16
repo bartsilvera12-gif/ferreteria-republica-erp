@@ -167,12 +167,28 @@ body {
    Sidebar — gradiente sutil estilo Zentra (top más claro, bottom más oscuro).
    Base #0B3A3D con elevated #104A4E. La luz cae hacia esquina superior derecha,
    sombra hacia abajo.
+
+   Encima del gradiente va una textura de herramientas (pegboard) anclada al
+   borde derecho. Va DEBAJO de una capa oscura para que nunca compita con el
+   texto del menú: la legibilidad manda sobre la decoración.
+
+   Ámbito: esta clase la usa SOLO el <aside> del sidebar, así que la imagen no
+   puede filtrarse a ningún módulo.
    ============================================================================= */
 .zentra-sidebar-bg {
   background:
+    /* Velo direccional: opaco a la izquierda (donde vive el texto del menú) y
+       más abierto a la derecha, para que asomen las herramientas. */
+    linear-gradient(90deg, #0B3A3D 0%, #0B3A3D 34%, rgba(11, 58, 61, 0.86) 58%, rgba(8, 42, 45, 0.34) 100%),
+    /* Textura: herramientas sobre el borde derecho. */
+    url("/brand/sidebar-herramientas.webp"),
     radial-gradient(ellipse 120% 60% at 100% 0%, rgba(255, 255, 255, 0.06), transparent 55%),
     radial-gradient(ellipse 120% 60% at 0% 0%, rgba(255, 255, 255, 0.04), transparent 55%),
     linear-gradient(180deg, #104A4E 0%, #0B3A3D 35%, #082A2D 100%);
+  background-repeat: no-repeat;
+  background-position: center, right center, center, center, center;
+  background-size: cover, cover, cover, cover, cover;
+  background-attachment: local, local, local, local, local;
 }
 
 /* =============================================================================
