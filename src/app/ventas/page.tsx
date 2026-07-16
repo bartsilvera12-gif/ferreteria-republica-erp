@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { RotateCcw, Printer, FileText, Truck } from "lucide-react";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
@@ -37,6 +38,14 @@ function formatFecha(iso: string) {
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none";
+
+/**
+ * Base compartida de los botones de acción de cada fila: misma altura y sin
+ * corte de línea, para que queden alineados aunque cambie la etiqueta.
+ * El color lo aporta cada botón.
+ */
+const BTN_ACCION =
+  "inline-flex h-8 shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg border px-2.5 text-xs font-semibold transition-colors";
 
 const tipoVentaBadge: Record<TipoVenta, string> = {
   CONTADO: "bg-blue-50 text-blue-700",
@@ -318,28 +327,31 @@ export default function VentasPage() {
                             <button
                               type="button"
                               onClick={() => setDevolverVentaId(v.id)}
-                              className="inline-flex items-center justify-center rounded-md border border-amber-200 bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-800 transition-colors hover:bg-amber-100"
+                              className={`${BTN_ACCION} border-amber-200 bg-amber-50 text-amber-800 hover:border-amber-300 hover:bg-amber-100`}
                               title="Ver detalle y registrar una devolución"
                             >
-                              Ver / Devolver
+                              <RotateCcw className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              Devolver
                             </button>
                           )}
                           <a
                             href={`/api/ventas/${v.id}/ticket?mode=comandas`}
                             target="_blank"
                             rel="noopener"
-                            className="inline-flex items-center justify-center rounded-md border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300 hover:bg-slate-50 transition-colors"
+                            className={`${BTN_ACCION} border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50`}
                             title="Abrir comandas + ticket cliente"
                           >
+                            <Printer className="h-3.5 w-3.5 shrink-0" aria-hidden />
                             Imprimir
                           </a>
                           <a
                             href={`/api/ventas/${v.id}/factura`}
                             target="_blank"
                             rel="noopener"
-                            className="inline-flex items-center justify-center rounded-md border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-3 py-1.5 text-xs font-medium text-[#3F8E91] hover:bg-[#4FAEB2]/[0.16] transition-colors"
+                            className={`${BTN_ACCION} border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] text-[#3F8E91] hover:border-[#4FAEB2]/60 hover:bg-[#4FAEB2]/[0.16]`}
                             title="Factura autoimpresor (formato ticket)"
                           >
+                            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
                             Factura
                           </a>
                           {v.genera_nota_remision && (
@@ -347,10 +359,11 @@ export default function VentasPage() {
                               href={`/api/ventas/${v.id}/ticket?tipo=remision`}
                               target="_blank"
                               rel="noopener"
-                              className="inline-flex items-center justify-center rounded-md border border-sky-200 bg-sky-50 px-3 py-1.5 text-xs font-medium text-sky-700 hover:bg-sky-100 transition-colors"
+                              className={`${BTN_ACCION} border-sky-200 bg-sky-50 text-sky-700 hover:border-sky-300 hover:bg-sky-100`}
                               title="Nota de remisión (documento no fiscal)"
                             >
-                              Nota de remisión
+                              <Truck className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                              Remisión
                             </a>
                           )}
                         </div>
