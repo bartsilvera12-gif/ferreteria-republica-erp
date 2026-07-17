@@ -54,7 +54,9 @@ function buildHtml(rows: OrdenCompraRow[]): { subject: string; html: string } {
     <p style="margin:0 0 16px;color:#64748b;font-size:13px">Ferretería República · generada desde el ERP</p>
 
     <p style="margin:0 0 14px;font-size:14px;line-height:1.55;color:#334155">
-      Se registró una nueva <strong>solicitud de compra</strong> en el sistema.
+      ${generadaPor
+        ? `El usuario <strong>${esc(generadaPor)}</strong> cargó una nueva <strong>orden de compra</strong> en el sistema.`
+        : `Se cargó una nueva <strong>orden de compra</strong> en el sistema.`}
       A continuación, el detalle de lo solicitado a <strong>${esc(cab.proveedor_nombre || "el proveedor")}</strong>
       (${esc(itemsTxt)}). Revisá los datos y coordiná el envío del pedido con el proveedor.
     </p>
@@ -63,7 +65,6 @@ function buildHtml(rows: OrdenCompraRow[]): { subject: string; html: string } {
       <tr><td style="padding:2px 0;color:#64748b">Proveedor</td><td style="padding:2px 0;text-align:right;font-weight:bold">${esc(cab.proveedor_nombre || "—")}</td></tr>
       <tr><td style="padding:2px 0;color:#64748b">Fecha</td><td style="padding:2px 0;text-align:right">${esc(fecha)}</td></tr>
       <tr><td style="padding:2px 0;color:#64748b">Condición de pago</td><td style="padding:2px 0;text-align:right">${esc(condicion)}</td></tr>
-      ${generadaPor ? `<tr><td style="padding:2px 0;color:#64748b">Generada por</td><td style="padding:2px 0;text-align:right">${esc(generadaPor)}</td></tr>` : ""}
     </table>
 
     <table style="width:100%;border-collapse:collapse;font-size:13px">

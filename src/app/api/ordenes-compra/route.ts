@@ -56,7 +56,9 @@ export async function POST(request: NextRequest) {
           : null,
       observacion: req("observacion") ? String(body.observacion).trim().slice(0, 2000) : null,
       created_by: ctx.auth.usuarioCatalogId ?? null,
-      usuario_nombre: ctx.auth.user?.email ?? null,
+      // Auditoría: nombre del catálogo si existe; el email es solo el último
+      // recurso (así el correo dice "Juan Pérez" y no "juan@empresa.com").
+      usuario_nombre: ctx.auth.nombre?.trim() || ctx.auth.user?.email || null,
     };
 
     const items: OrdenCompraItemInput[] = [];
