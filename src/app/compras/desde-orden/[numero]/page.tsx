@@ -6,6 +6,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { getOrdenCompra, confirmarRecepcionOrdenCompra, type ExcedenteDetalle } from "@/lib/ordenes-compra/storage";
 import { uploadComprobante } from "@/lib/compras/storage";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { OrdenCompra } from "@/lib/ordenes-compra/types";
 
 function fmtGs(v: number) {
@@ -43,6 +44,7 @@ export default function DesdeOrdenRecepcionPage() {
   const [nroTimbrado, setNroTimbrado] = useState("");
   const [fechaFactura, setFechaFactura] = useState("");
   const [tipoPago, setTipoPago] = useState<"contado" | "credito">("contado");
+  const [proveedorRuc, setProveedorRuc] = useState<string | null>(null);
   const [plazoDias, setPlazoDias] = useState("");
   const [observacionCompra, setObservacionCompra] = useState("");
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
@@ -65,6 +67,22 @@ export default function DesdeOrdenRecepcionPage() {
       };
     }
     setRecepcion(init);
+    // La OC ya trae la condición de pago acordada al pedirla: la arrastramos en
+    // vez de asumir "contado" y obligar a recargarla a mano.
+    const oc = l[0];
+    if (oc) {
+      setTipoPago(oc.tipo_pago === "credito" ? "credito" : "contado");
+      setPlazoDias(oc.plazo_dias != null ? String(oc.plazo_dias) : "");
+      // RUC del proveedor (best-effort: si falla, se muestra solo el nombre).
+      if (oc.proveedor_id) {
+        try {
+          const r = await fetchWithSupabaseSession(`/api/proveedores/${oc.proveedor_id}`, { cache: "no-store" });
+          const j = await r.json();
+          const ruc = j?.data?.proveedor?.ruc;
+          if (typeof ruc === "string" && ruc.trim()) setProveedorRuc(ruc.trim());
+        } catch { /* sin RUC: no rompe el flujo */ }
+      }
+    }
     setCargando(false);
   }, [numeroOc]);
   useEffect(() => { cargar(); }, [cargar]);
@@ -288,7 +306,11 @@ export default function DesdeOrdenRecepcionPage() {
         <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
           <div>
             <label className={labelClass}>Proveedor</label>
-            <input disabled value={cab.proveedor_nombre} className={`${inputClass} bg-slate-50 text-slate-500`} />
+            <input
+              disabled
+              value={proveedorRuc ? `${cab.proveedor_nombre} · RUC ${proveedorRuc}` : cab.proveedor_nombre}
+              className={`${inputClass} bg-slate-50 text-slate-500`}
+            />
           </div>
           <div>
             <label className={labelClass}>N° de factura <span className="text-red-500">*</span></label>
