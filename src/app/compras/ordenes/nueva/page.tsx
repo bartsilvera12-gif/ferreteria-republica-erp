@@ -3,14 +3,37 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Search, Trash2, Loader2, Plus } from "lucide-react";
+import { Search, Trash2, Loader2, Plus, ImageIcon } from "lucide-react";
 import { getProveedores } from "@/lib/proveedores/storage";
-import { getProductos } from "@/lib/inventario/storage";
 import { saveOrdenCompra, type OrdenItemPayload } from "@/lib/ordenes-compra/storage";
-import { productoMatchesQuery } from "@/lib/productos/token-search";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { Proveedor } from "@/lib/proveedores/types";
-import type { Producto } from "@/lib/inventario/types";
 import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
+
+/** Miniatura con fallback si no hay imagen o falla. */
+function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
+  const [err, setErr] = useState(false);
+  if (!url || err) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-100 bg-slate-50 text-slate-300">
+        <ImageIcon className="h-4 w-4" />
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} loading="lazy" onError={() => setErr(true)} className="h-10 w-10 shrink-0 rounded-md border border-slate-100 object-cover" />;
+}
+
+/** Resultado del autocomplete (búsqueda server-side sobre todo el catálogo). */
+type ComboHit = {
+  id: string;
+  nombre: string;
+  sku: string;
+  precio_venta: number;
+  stock_actual: number;
+  controla_stock: boolean;
+  imagen_url: string | null;
+};
 
 function fmtGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -38,7 +61,6 @@ const inputClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm 
 export default function NuevaOrdenCompraPage() {
   const router = useRouter();
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
   const [cab, setCab] = useState({
     proveedor_id: "",
     moneda: "PYG" as Moneda,
@@ -50,13 +72,17 @@ export default function NuevaOrdenCompraPage() {
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [q, setQ] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
+  const [hits, setHits] = useState<ComboHit[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
   const [enviando, setEnviando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const searchBoxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     getProveedores().then(setProveedores).catch(() => setProveedores([]));
-    getProductos().then(setProductos).catch(() => setProductos([]));
   }, []);
 
   useEffect(() => {
@@ -67,32 +93,64 @@ export default function NuevaOrdenCompraPage() {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
+  // Autocomplete server-side por tokens (todo el catálogo), con debounce —
+  // mismo endpoint que el buscador de Caja.
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    const term = q.trim();
+    if (term.length < 2) { setHits([]); setBuscando(false); return; }
+    setBuscando(true);
+    timer.current = setTimeout(async () => {
+      try {
+        const r = await fetchWithSupabaseSession(`/api/productos/search?q=${encodeURIComponent(term)}&limit=20`, { cache: "no-store" });
+        const j = await r.json();
+        setHits(((j?.data?.items ?? []) as Record<string, unknown>[]).map((p): ComboHit => ({
+          id: String(p.id), nombre: String(p.nombre ?? ""), sku: String(p.sku ?? ""),
+          precio_venta: Number(p.precio_venta) || 0, stock_actual: Number(p.stock_actual) || 0,
+          controla_stock: p.controla_stock !== false, imagen_url: (p.imagen_url as string | null) ?? null,
+        })));
+      } catch { setHits([]); }
+      finally { setBuscando(false); }
+    }, 220);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [q]);
+
+  useEffect(() => { setHighlight(-1); }, [hits]);
+
   const tc = cab.moneda === "USD" ? Number(cab.tipo_cambio) || 0 : 1;
 
   const excluidos = useMemo(() => new Set(lineas.map((l) => l.producto_id)), [lineas]);
-  const resultados = useMemo(() => {
-    const query = q.trim();
-    if (query.length < 2) return [];
-    return productos
-      .filter((p) => !excluidos.has(String(p.id)) && productoMatchesQuery(query, p.nombre, p.sku))
-      .slice(0, 20);
-  }, [productos, excluidos, q]);
+  const resultados = useMemo(() => hits.filter((p) => !excluidos.has(p.id)), [hits, excluidos]);
 
-  function addProducto(p: Producto) {
-    setLineas((prev) => [
-      ...prev,
-      {
-        producto_id: String(p.id),
-        producto_nombre: p.nombre,
-        sku: p.sku,
-        cantidad: 1,
-        costo_input: 0,
-        iva_tipo: "10",
-        precio_venta: Number(p.precio_venta) || 0,
-      },
-    ]);
+  function addProducto(p: ComboHit) {
+    setLineas((prev) => {
+      if (prev.some((l) => l.producto_id === p.id)) return prev; // ya está
+      return [
+        ...prev,
+        {
+          producto_id: p.id,
+          producto_nombre: p.nombre,
+          sku: p.sku,
+          cantidad: 1,
+          costo_input: 0,
+          iva_tipo: "10",
+          precio_venta: p.precio_venta,
+        },
+      ];
+    });
     setQ("");
+    setHits([]);
     setSearchOpen(false);
+    setHighlight(-1);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  /** Teclado: ↑/↓ navega, Enter agrega el resaltado, Esc cierra. */
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setSearchOpen(true); setHighlight((h) => Math.min(h + 1, resultados.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const sel = resultados[highlight] ?? resultados[0]; if (sel) addProducto(sel); }
+    else if (e.key === "Escape") { setSearchOpen(false); setHighlight(-1); }
   }
   function updateLinea(id: string, patch: Partial<Linea>) {
     setLineas((prev) => prev.map((l) => (l.producto_id === id ? { ...l, ...patch } : l)));
@@ -218,33 +276,53 @@ export default function NuevaOrdenCompraPage() {
         <div ref={searchBoxRef} className="relative">
           <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#4FAEB2]" />
           <input
+            ref={inputRef}
             value={q}
-            onChange={(e) => { setQ(e.target.value); setSearchOpen(true); }}
+            onChange={(e) => { setQ(e.target.value); setSearchOpen(true); setHighlight(-1); }}
             onFocus={() => setSearchOpen(true)}
+            onKeyDown={onKeyDown}
             placeholder="Buscar producto por nombre, SKU o palabras clave…"
             className="h-14 w-full rounded-2xl border-2 border-[#4FAEB2]/25 bg-white pl-12 pr-4 text-base outline-none focus:border-[#4FAEB2] focus:ring-4 focus:ring-[#4FAEB2]/15"
             autoComplete="off"
           />
           {searchOpen && q.trim().length >= 2 && (
             <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border-2 border-[#4FAEB2]/20 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
-              {resultados.length === 0 ? (
+              {buscando && resultados.length === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-slate-400">Buscando…</div>
+              ) : resultados.length === 0 ? (
                 <div className="px-4 py-6 text-center text-sm text-slate-400">Sin resultados para &quot;{q}&quot;</div>
               ) : (
                 <ul className="divide-y divide-slate-100">
-                  {resultados.map((p) => (
-                    <li key={String(p.id)}>
-                      <button type="button" onClick={() => addProducto(p)}
-                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[#4FAEB2]/8">
-                        <div className="min-w-0 flex-1">
-                          <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
-                          <p className="text-xs font-mono text-slate-500">{p.sku}</p>
-                        </div>
-                        <span className="inline-flex items-center gap-1 rounded-lg bg-[#4FAEB2]/10 px-2.5 py-1 text-xs font-bold text-[#3F8E91]">
-                          <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Agregar
-                        </span>
-                      </button>
-                    </li>
-                  ))}
+                  {resultados.map((p, i) => {
+                    const sinStock = p.controla_stock && p.stock_actual <= 0;
+                    return (
+                      <li key={p.id}>
+                        <button type="button"
+                          onMouseEnter={() => setHighlight(i)}
+                          onClick={() => addProducto(p)}
+                          className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${i === highlight ? "bg-[#4FAEB2]/[0.08]" : "hover:bg-slate-50"}`}>
+                          <ProductoThumb url={p.imagen_url} alt={p.nombre} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
+                            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                              <span className="font-mono">{p.sku || "—"}</span>
+                              <span className="text-slate-300">·</span>
+                              <span className={`font-semibold ${!p.controla_stock ? "text-slate-400" : sinStock ? "text-red-600" : p.stock_actual < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                                {!p.controla_stock ? "Sin control" : sinStock ? "Sin stock" : `${p.stock_actual} en stock`}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-slate-800">{fmtGs(p.precio_venta)}</span>
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[#4FAEB2]/10 px-2.5 py-1 text-xs font-bold text-[#3F8E91]">
+                            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Agregar
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {resultados.length >= 20 && (
+                    <li className="px-4 py-2 text-center text-[11px] text-slate-400">Mostrando los primeros 20. Refiná la búsqueda para acotar.</li>
+                  )}
                 </ul>
               )}
             </div>
