@@ -38,15 +38,34 @@ function buildHtml(rows: OrdenCompraRow[]): { subject: string; html: string } {
       <td style="padding:6px 10px;border-bottom:1px solid #e2e8f0;text-align:right">${gs(r.total)}</td>
     </tr>`).join("");
 
-  const subject = `Orden de compra ${cab.numero_oc} — ${cab.proveedor_nombre || "Proveedor"}`;
+  const cantItems = rows.length;
+  const itemsTxt = `${cantItems} producto${cantItems === 1 ? "" : "s"}`;
+  const condicion =
+    String(cab.tipo_pago) === "credito"
+      ? `Crédito${cab.plazo_dias ? ` a ${cab.plazo_dias} día(s)` : ""}`
+      : "Contado";
+  const generadaPor = cab.usuario_nombre?.trim() || null;
+  const observacion = cab.observacion?.trim() || null;
+
+  const subject = `Nueva orden de compra ${cab.numero_oc} — ${cab.proveedor_nombre || "Proveedor"}`;
   const html = `
   <div style="font-family:Arial,Helvetica,sans-serif;color:#0f172a;max-width:640px;margin:0 auto">
     <h2 style="color:#3F8E91;margin:0 0 4px">Orden de compra ${esc(cab.numero_oc)}</h2>
     <p style="margin:0 0 16px;color:#64748b;font-size:13px">Ferretería República · generada desde el ERP</p>
+
+    <p style="margin:0 0 14px;font-size:14px;line-height:1.55;color:#334155">
+      Se registró una nueva <strong>solicitud de compra</strong> en el sistema.
+      A continuación, el detalle de lo solicitado a <strong>${esc(cab.proveedor_nombre || "el proveedor")}</strong>
+      (${esc(itemsTxt)}). Revisá los datos y coordiná el envío del pedido con el proveedor.
+    </p>
+
     <table style="width:100%;font-size:14px;margin-bottom:16px">
       <tr><td style="padding:2px 0;color:#64748b">Proveedor</td><td style="padding:2px 0;text-align:right;font-weight:bold">${esc(cab.proveedor_nombre || "—")}</td></tr>
       <tr><td style="padding:2px 0;color:#64748b">Fecha</td><td style="padding:2px 0;text-align:right">${esc(fecha)}</td></tr>
+      <tr><td style="padding:2px 0;color:#64748b">Condición de pago</td><td style="padding:2px 0;text-align:right">${esc(condicion)}</td></tr>
+      ${generadaPor ? `<tr><td style="padding:2px 0;color:#64748b">Generada por</td><td style="padding:2px 0;text-align:right">${esc(generadaPor)}</td></tr>` : ""}
     </table>
+
     <table style="width:100%;border-collapse:collapse;font-size:13px">
       <thead>
         <tr style="background:#E5F4F4;color:#3F8E91">
@@ -59,6 +78,12 @@ function buildHtml(rows: OrdenCompraRow[]): { subject: string; html: string } {
       <tbody>${filas}</tbody>
     </table>
     <p style="text-align:right;font-size:16px;margin:16px 0 0"><strong>Total estimado: ${gs(total)}</strong></p>
+    ${observacion ? `<div style="margin:16px 0 0;padding:12px 14px;background:#f8fafc;border-left:3px solid #4FAEB2;border-radius:0 6px 6px 0;font-size:13px;color:#334155"><strong style="color:#0f172a">Observación:</strong><br>${esc(observacion)}</div>` : ""}
+
+    <p style="margin:22px 0 0;padding-top:14px;border-top:1px solid #e2e8f0;font-size:12px;color:#94a3b8;line-height:1.5">
+      El total es estimado según los costos cargados en la orden; el monto final se confirma al recibir la factura del proveedor.
+      Este correo se generó automáticamente desde el ERP de Ferretería República.
+    </p>
   </div>`;
   return { subject, html };
 }
