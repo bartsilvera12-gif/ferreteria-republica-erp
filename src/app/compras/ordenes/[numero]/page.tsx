@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { AlertTriangle, Loader2 } from "lucide-react";
 import { getOrdenCompra, cancelarOrdenCompra } from "@/lib/ordenes-compra/storage";
 import type { OrdenCompra, EstadoOrdenCompra } from "@/lib/ordenes-compra/types";
 
@@ -41,6 +42,8 @@ export default function OrdenCompraDetallePage() {
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [procesando, setProcesando] = useState(false);
+  const [cancelOpen, setCancelOpen] = useState(false);
+  const [motivoCancel, setMotivoCancel] = useState("");
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -56,14 +59,15 @@ export default function OrdenCompraDetallePage() {
   const totalIva = useMemo(() => lineas.reduce((s, l) => s + l.monto_iva, 0), [lineas]);
   const puedeRecibir = cab?.estado === "pendiente" || cab?.estado === "recibida_parcial";
 
+  /** Confirma la cancelación desde el modal (reemplaza confirm() + prompt() nativos). */
   async function onCancelar() {
-    if (!confirm("¿Cancelar esta orden de compra? No se podrá recibir después.")) return;
-    const motivo = prompt("Motivo (opcional):") ?? null;
     setProcesando(true);
     setErr(null);
-    const r = await cancelarOrdenCompra(numeroOc, motivo);
+    const r = await cancelarOrdenCompra(numeroOc, motivoCancel.trim() || null);
     setProcesando(false);
     if (!r.success) { setErr(r.error); return; }
+    setCancelOpen(false);
+    setMotivoCancel("");
     setMsg("Orden cancelada.");
     cargar();
   }
@@ -98,7 +102,7 @@ export default function OrdenCompraDetallePage() {
         </div>
         <div className="flex items-center gap-2">
           {cab.estado === "pendiente" && (
-            <button onClick={onCancelar} disabled={procesando}
+            <button onClick={() => { setMotivoCancel(""); setCancelOpen(true); }} disabled={procesando}
               className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
               Cancelar OC
             </button>
@@ -164,6 +168,66 @@ export default function OrdenCompraDetallePage() {
           </tfoot>
         </table>
       </div>
+
+      {/* Cancelar OC: un solo modal que confirma y pide el motivo. */}
+      {cancelOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 p-4 backdrop-blur-sm"
+          onClick={() => !procesando && setCancelOpen(false)}
+        >
+          <div className="w-full max-w-md rounded-2xl bg-white shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-start gap-3 border-b border-slate-100 px-6 py-4">
+              <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-red-50 ring-1 ring-red-100">
+                <AlertTriangle className="h-5 w-5 text-red-600" />
+              </div>
+              <div>
+                <h2 className="text-base font-bold text-slate-900">Cancelar orden de compra</h2>
+                <p className="text-sm text-slate-500">{numeroOc} · {cab.proveedor_nombre || "—"}</p>
+              </div>
+            </div>
+
+            <div className="space-y-4 px-6 py-5">
+              <p className="text-sm text-slate-600">
+                La orden queda cancelada y <strong className="text-slate-800">ya no se va a poder recibir</strong>. Esta acción no se deshace.
+              </p>
+              <div>
+                <label htmlFor="motivo-cancel" className="mb-1 block text-xs font-semibold text-slate-600">
+                  Motivo <span className="font-normal text-slate-400">(opcional)</span>
+                </label>
+                <textarea
+                  id="motivo-cancel"
+                  autoFocus
+                  value={motivoCancel}
+                  onChange={(e) => setMotivoCancel(e.target.value)}
+                  rows={3}
+                  placeholder="Ej: el proveedor no tiene stock, se pidió por error…"
+                  className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20"
+                />
+                <p className="mt-1 text-[11px] text-slate-400">Queda registrado en la orden para el control posterior.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 border-t border-slate-100 px-6 py-4">
+              <button
+                type="button"
+                onClick={() => setCancelOpen(false)}
+                disabled={procesando}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Volver
+              </button>
+              <button
+                type="button"
+                onClick={() => void onCancelar()}
+                disabled={procesando}
+                className="inline-flex items-center gap-2 rounded-lg bg-red-600 px-4 py-2 text-sm font-bold text-white hover:bg-red-700 disabled:opacity-50"
+              >
+                {procesando ? <><Loader2 className="h-4 w-4 animate-spin" /> Cancelando…</> : "Sí, cancelar orden"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
