@@ -8,7 +8,9 @@ import { crearDevolucion, listarDevoluciones } from "@/lib/devoluciones/server/d
 import { DevolucionBloqueadaError, type CrearDevolucionInput } from "@/lib/devoluciones/types";
 
 /** Motivos de bloqueo que son culpa del pedido (400) vs conflicto de estado (409). */
-const CONFLICTO = new Set(["sin_caja_abierta", "cantidad_excedida", "stock_insuficiente_cambio", "venta_anulada"]);
+const CONFLICTO = new Set([
+  "sin_caja_abierta", "cantidad_excedida", "stock_insuficiente_cambio", "venta_anulada", "saldo_ya_usado",
+]);
 
 /** GET /api/devoluciones — historial. */
 export async function GET(request: NextRequest) {
@@ -55,7 +57,9 @@ export async function POST(request: NextRequest) {
     const input: CrearDevolucionInput = {
       venta_id: body.venta_id,
       motivo: typeof body.motivo === "string" ? body.motivo.slice(0, 500) : null,
-      resolucion: body.resolucion === "cambio" ? "cambio" : "reembolso",
+      resolucion:
+        body.resolucion === "saldo_favor" ? "saldo_favor" : body.resolucion === "cambio" ? "cambio" : "reembolso",
+      cliente_id: typeof body.cliente_id === "string" && body.cliente_id.trim() ? body.cliente_id.trim() : null,
       items: body.items.map((it) => ({
         venta_item_id: String(it.venta_item_id),
         cantidad: Number(it.cantidad) || 0,

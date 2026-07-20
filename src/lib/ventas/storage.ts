@@ -65,7 +65,16 @@ export async function saveVenta(
   datos: Omit<Venta, "id" | "numero_control" | "fecha"> & { cliente_id?: string | null; genera_nota_remision?: boolean },
   pedidoCocina?: PedidoCocinaInput,
   pagoDetalle?: PagoDetalleInput | null,
-  opts?: { permitirSinStock?: boolean; pedidoId?: string | null; pedidoCajaId?: string | null; cajaId?: string | null }
+  opts?: {
+    permitirSinStock?: boolean;
+    pedidoId?: string | null;
+    pedidoCajaId?: string | null;
+    cajaId?: string | null;
+    /** Monto del saldo a favor del cliente que se aplica a esta venta. */
+    usarSaldoFavor?: number;
+    /** Excedente de saldo que el cliente pide retirar en efectivo. */
+    retirarSaldoEfectivo?: number;
+  }
 ): Promise<ResultadoGuardarVenta> {
   if (!datos.items || datos.items.length === 0) {
     return { success: false, error: "La venta debe tener al menos un producto." };
@@ -94,6 +103,8 @@ export async function saveVenta(
         pedido_id: opts?.pedidoId ?? null,
         pedido_caja_id: opts?.pedidoCajaId ?? null,
         caja_id: opts?.cajaId ?? null,
+        usar_saldo_favor: opts?.usarSaldoFavor ?? 0,
+        retirar_saldo_efectivo: opts?.retirarSaldoEfectivo ?? 0,
       }),
     });
 

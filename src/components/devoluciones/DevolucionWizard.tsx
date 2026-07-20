@@ -10,17 +10,15 @@
  * "Confirmar devolución" no puede crear dos devoluciones.
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Search, X, Loader2, Plus, Minus, Trash2, Check } from "lucide-react";
+import { Search, X, Loader2, Plus, Minus, Check } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type {
   CondicionProducto, MetodoReembolso, ResolucionDevolucion, VentaDevolvible,
 } from "@/lib/devoluciones/types";
 
-type ComboHit = {
-  id: string; nombre: string; sku: string; precio_venta: number;
-  stock_actual: number; controla_stock: boolean;
-};
-type CambioSel = { producto_id: string; nombre: string; sku: string; precio: number; cantidad: number };
+/** Cliente al que acreditar el saldo (ventas de mostrador no traen cliente). */
+type ClienteHit = { id: string; nombre: string; ruc: string | null };
 
 function gs(v: number) {
   return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`;
@@ -45,11 +43,11 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
   // Paso 2
   const [resolucion, setResolucion] = useState<ResolucionDevolucion>("reembolso");
   const [metodo, setMetodo] = useState<MetodoReembolso>("efectivo");
-  const [cambios, setCambios] = useState<CambioSel[]>([]);
   const [motivo, setMotivo] = useState("");
-  // Buscador de productos (mismo endpoint que Caja)
+  // Cliente al que se acredita el saldo (solo si la venta no tiene uno).
+  const [clienteSel, setClienteSel] = useState<ClienteHit | null>(null);
   const [q, setQ] = useState("");
-  const [hits, setHits] = useState<ComboHit[]>([]);
+  const [hits, setHits] = useState<ClienteHit[]>([]);
   const [buscando, setBuscando] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -71,7 +69,7 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
 
   useEffect(() => { void cargar(); }, [cargar]);
 
-  // Autocomplete de productos para el cambio.
+  // Autocomplete de clientes (solo se usa si hay que elegir a quién acreditar).
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     const term = q.trim();
@@ -79,13 +77,20 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
     setBuscando(true);
     timer.current = setTimeout(async () => {
       try {
-        const r = await fetchWithSupabaseSession(`/api/productos/search?q=${encodeURIComponent(term)}&limit=15`, { cache: "no-store" });
+        const r = await fetchWithSupabaseSession("/api/clientes", { cache: "no-store" });
         const j = await r.json();
-        setHits(((j?.data?.items ?? []) as Record<string, unknown>[]).map((p): ComboHit => ({
-          id: String(p.id), nombre: String(p.nombre ?? ""), sku: String(p.sku ?? ""),
-          precio_venta: Number(p.precio_venta) || 0, stock_actual: Number(p.stock_actual) || 0,
-          controla_stock: p.controla_stock !== false,
-        })));
+        const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+        const todos = (Array.isArray(j?.data) ? j.data : []) as Record<string, unknown>[];
+        setHits(
+          todos
+            .map((c): ClienteHit => ({
+              id: String(c.id),
+              nombre: s(c.empresa) || s(c.nombre_contacto) || s(c.nombre) || "Cliente",
+              ruc: s(c.ruc) || s(c.documento),
+            }))
+            .filter((c) => productoMatchesQuery(term, c.nombre, c.ruc))
+            .slice(0, 15)
+        );
       } catch { setHits([]); }
       finally { setBuscando(false); }
     }, 220);
@@ -101,11 +106,12 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
     () => seleccion.reduce((a, l) => a + l.precio_unitario * (cant[l.venta_item_id] ?? 0), 0),
     [seleccion, cant]
   );
-  const totalEntregado = useMemo(
-    () => (resolucion === "cambio" ? cambios.reduce((a, c) => a + c.precio * c.cantidad, 0) : 0),
-    [resolucion, cambios]
-  );
-  const diferencia = resolucion === "cambio" ? totalEntregado - totalDevuelto : -totalDevuelto;
+  /** Saldo a favor NO mueve caja: el monto queda como crédito del cliente. */
+  const esSaldo = resolucion === "saldo_favor";
+  const diferencia = esSaldo ? 0 : -totalDevuelto;
+  /** La venta ya tiene cliente: no hace falta elegir uno. */
+  const clienteVenta = venta?.cliente_id ? { id: venta.cliente_id, nombre: venta.cliente_nombre ?? "Cliente" } : null;
+  const clienteCredito = clienteVenta ?? clienteSel;
 
   const unidadesTotales = useMemo(
     () => seleccion.reduce((a, l) => a + (cant[l.venta_item_id] ?? 0), 0),
@@ -137,15 +143,6 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
     for (const l of lineas) if (l.cantidad_disponible > 0) next[l.venta_item_id] = l.cantidad_disponible;
     setCant(next);
   }
-  function agregarCambio(h: ComboHit) {
-    setCambios((prev) => {
-      const i = prev.findIndex((c) => c.producto_id === h.id);
-      if (i >= 0) return prev.map((c, k) => (k === i ? { ...c, cantidad: c.cantidad + 1 } : c));
-      return [...prev, { producto_id: h.id, nombre: h.nombre, sku: h.sku, precio: h.precio_venta, cantidad: 1 }];
-    });
-    setQ(""); setHits([]);
-  }
-
   async function confirmar() {
     if (guardando) return; // guard anti doble clic (además de la idempotency_key)
     setGuardando(true);
@@ -166,7 +163,8 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
             condicion: cond[l.venta_item_id] ?? "buen_estado",
             reintegra_stock: (cond[l.venta_item_id] ?? "buen_estado") === "buen_estado",
           })),
-          cambios: resolucion === "cambio" ? cambios.map((c) => ({ producto_id: c.producto_id, cantidad: c.cantidad })) : [],
+          cambios: [],
+          cliente_id: esSaldo ? clienteCredito?.id ?? null : null,
         }),
       });
       const j = await r.json();
@@ -177,7 +175,8 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
   }
 
   const puedePaso2 = seleccion.length > 0;
-  const puedeConfirmar = puedePaso2 && (resolucion === "reembolso" || cambios.length > 0);
+  // Con saldo a favor hace falta un cliente a quien acreditarle el crédito.
+  const puedeConfirmar = puedePaso2 && (!esSaldo || !!clienteCredito);
 
   return (
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-4 backdrop-blur-sm">
@@ -314,70 +313,70 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
             /* ── PASO 2 ── */
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {([["cambio", "Cambiar por otro producto"], ["reembolso", "Devolver el dinero"]] as const).map(([val, label]) => (
+                {([
+                  ["saldo_favor", "Generar saldo a favor", "Queda como crédito del cliente para su próxima compra."],
+                  ["reembolso", "Devolver el dinero", "Se le entrega el importe y la devolución termina acá."],
+                ] as const).map(([val, label, hint]) => (
                   <button key={val} type="button" onClick={() => setResolucion(val)}
                     className={`rounded-xl border-2 p-4 text-left transition-colors ${
                       resolucion === val ? "border-[#4FAEB2] bg-[#4FAEB2]/[0.08]" : "border-slate-200 hover:bg-slate-50"}`}>
-                    <span className={`text-sm font-bold ${resolucion === val ? "text-[#3F8E91]" : "text-slate-700"}`}>{label}</span>
+                    <span className={`block text-sm font-bold ${resolucion === val ? "text-[#3F8E91]" : "text-slate-700"}`}>{label}</span>
+                    <span className="mt-1 block text-xs leading-snug text-slate-500">{hint}</span>
                   </button>
                 ))}
               </div>
 
-              {resolucion === "cambio" && (
-                <div className="space-y-2">
-                  <label className="text-xs font-semibold text-slate-600">Producto de reemplazo</label>
-                  <div className="relative">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#4FAEB2]" />
-                    <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar producto por nombre o SKU…"
-                      className="h-11 w-full rounded-lg border-2 border-[#4FAEB2]/30 bg-white pl-10 pr-3 text-sm outline-none focus:border-[#4FAEB2]" />
-                    {q.trim().length >= 2 && (
-                      <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                        {buscando && hits.length === 0 ? (
-                          <p className="px-3 py-3 text-center text-xs text-slate-400">Buscando…</p>
-                        ) : hits.length === 0 ? (
-                          <p className="px-3 py-3 text-center text-xs text-slate-400">Sin resultados.</p>
-                        ) : hits.map((h) => (
-                          <button key={h.id} type="button" onClick={() => agregarCambio(h)}
-                            className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50">
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate text-sm font-medium text-slate-800">{h.nombre}</p>
-                              <p className="text-xs text-slate-400">{h.sku} · stock {h.controla_stock ? h.stock_actual : "s/c"}</p>
-                            </div>
-                            <span className="text-sm font-bold text-slate-700">{gs(h.precio_venta)}</span>
-                            <Plus className="h-4 w-4 text-[#3F8E91]" />
-                          </button>
-                        ))}
-                      </div>
-                    )}
+              {/* Saldo a favor: hace falta un cliente a quien acreditárselo. */}
+              {esSaldo && (
+                clienteVenta ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    <Check className="h-4 w-4 shrink-0" />
+                    <span>El saldo se acredita a <strong>{clienteVenta.nombre}</strong> (cliente de la venta).</span>
                   </div>
-                  {cambios.map((c, i) => (
-                    <div key={c.producto_id} className="flex items-center gap-2 rounded-lg border border-slate-200 p-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-medium text-slate-800">{c.nombre}</p>
-                        <p className="text-xs text-slate-400">{gs(c.precio)} c/u</p>
-                      </div>
-                      <input type="number" min={1} step="any" value={c.cantidad}
-                        onChange={(e) => setCambios((p) => p.map((x, k) => (k === i ? { ...x, cantidad: Math.max(1, Number(e.target.value) || 1) } : x)))}
-                        className="w-20 rounded-lg border border-slate-200 px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30" />
-                      <span className="w-28 text-right text-sm font-bold text-slate-800">{gs(c.precio * c.cantidad)}</span>
-                      <button onClick={() => setCambios((p) => p.filter((_, k) => k !== i))} className="text-red-600 hover:text-red-700" aria-label="Quitar">
-                        <Trash2 className="h-4 w-4" />
-                      </button>
+                ) : clienteSel ? (
+                  <div className="flex items-center gap-2 rounded-lg border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+                    <Check className="h-4 w-4 shrink-0" />
+                    <span className="flex-1">El saldo se acredita a <strong>{clienteSel.nombre}</strong>{clienteSel.ruc ? ` · ${clienteSel.ruc}` : ""}.</span>
+                    <button type="button" onClick={() => { setClienteSel(null); setQ(""); }}
+                      className="rounded-md border border-emerald-300 px-2 py-1 text-xs font-semibold hover:bg-emerald-100">Cambiar</button>
+                  </div>
+                ) : (
+                  <div className="space-y-2 rounded-lg border border-amber-200 bg-amber-50 p-3">
+                    <p className="text-sm text-amber-800">
+                      Esta venta no tiene cliente. Elegí a quién acreditarle el saldo a favor.
+                    </p>
+                    <div className="relative">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#4FAEB2]" />
+                      <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar cliente por nombre o RUC…"
+                        className="h-11 w-full rounded-lg border-2 border-[#4FAEB2]/30 bg-white pl-10 pr-3 text-sm outline-none focus:border-[#4FAEB2]" />
+                      {q.trim().length >= 2 && (
+                        <div className="absolute left-0 right-0 top-full z-10 mt-1 max-h-56 overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg">
+                          {buscando && hits.length === 0 ? (
+                            <p className="px-3 py-3 text-center text-xs text-slate-400">Buscando…</p>
+                          ) : hits.length === 0 ? (
+                            <p className="px-3 py-3 text-center text-xs text-slate-400">Sin clientes que coincidan.</p>
+                          ) : hits.map((h) => (
+                            <button key={h.id} type="button" onClick={() => { setClienteSel(h); setQ(""); setHits([]); }}
+                              className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-slate-50">
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-sm font-medium text-slate-800">{h.nombre}</p>
+                                {h.ruc && <p className="text-xs text-slate-400">RUC / CI: {h.ruc}</p>}
+                              </div>
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  ))}
-                </div>
+                  </div>
+                )
               )}
 
               {/* Resumen económico */}
               <div className="space-y-1 rounded-xl bg-slate-50 p-4 text-sm">
                 <div className="flex justify-between"><span className="text-slate-500">Valor devuelto</span><span className="tabular-nums font-medium">{gs(totalDevuelto)}</span></div>
-                {resolucion === "cambio" && (
-                  <div className="flex justify-between"><span className="text-slate-500">Valor del nuevo producto</span><span className="tabular-nums font-medium">{gs(totalEntregado)}</span></div>
-                )}
-                <div className={`flex justify-between border-t border-slate-200 pt-1.5 font-bold ${
-                  diferencia > 0 ? "text-amber-700" : diferencia < 0 ? "text-[#3F8E91]" : "text-slate-600"}`}>
-                  <span>{diferencia > 0 ? "Diferencia a cobrar al cliente" : diferencia < 0 ? "Diferencia a devolver al cliente" : "Sin diferencia"}</span>
-                  <span className="tabular-nums">{gs(Math.abs(diferencia))}</span>
+                <div className={`flex justify-between border-t border-slate-200 pt-1.5 font-bold ${esSaldo ? "text-[#3F8E91]" : "text-[#3F8E91]"}`}>
+                  <span>{esSaldo ? "Saldo a favor a generar" : "A devolver al cliente"}</span>
+                  <span className="tabular-nums">{gs(totalDevuelto)}</span>
                 </div>
               </div>
 
@@ -428,18 +427,18 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
                       ))}
                     </dd>
                   </div>
-                  {resolucion === "cambio" && cambios.length > 0 && (
-                    <div className="px-4 py-2">
-                      <dt className="text-xs font-semibold text-slate-500">Productos entregados</dt>
-                      <dd className="mt-1 space-y-0.5">
-                        {cambios.map((c) => (
-                          <p key={c.producto_id} className="text-slate-700">{c.cantidad}× {c.nombre} — {gs(c.precio * c.cantidad)} <span className="text-xs text-slate-400">(sale del stock)</span></p>
-                        ))}
-                      </dd>
-                    </div>
+                  {esSaldo ? (
+                    <>
+                      <Fila k="Saldo a favor generado" v={gs(totalDevuelto)} />
+                      <Fila k="Se acredita a" v={clienteCredito?.nombre ?? "—"} />
+                      <Fila k="Caja afectada" v="No aplica (no se mueve dinero)" />
+                    </>
+                  ) : (
+                    <>
+                      <Fila k="Reembolso" v={`${gs(totalDevuelto)} · ${metodo}`} />
+                      <Fila k="Caja afectada" v={metodo === "efectivo" ? "Caja abierta (egreso en efectivo)" : `Caja abierta (${metodo}, no afecta el efectivo)`} />
+                    </>
                   )}
-                  <Fila k={diferencia > 0 ? "Diferencia a cobrar" : diferencia < 0 ? "Reembolso" : "Movimiento de dinero"} v={diferencia === 0 ? "Sin movimiento" : `${gs(Math.abs(diferencia))} · ${metodo}`} />
-                  <Fila k="Caja afectada" v={diferencia === 0 ? "No aplica" : metodo === "efectivo" ? "Caja abierta (movimiento en efectivo)" : `Caja abierta (${metodo}, no afecta el efectivo)`} />
                   <Fila k="Motivo" v={motivo.trim() || "—"} />
                 </dl>
               </div>

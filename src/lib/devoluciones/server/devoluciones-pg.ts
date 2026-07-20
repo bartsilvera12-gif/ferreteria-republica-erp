@@ -15,6 +15,10 @@
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import {
+  registrarMovimientoCredito,
+  getSaldoClienteForUpdate,
+} from "@/lib/creditos/server/creditos-pg";
+import {
   DevolucionBloqueadaError,
   calcIvaIncluido,
   round2,
@@ -53,6 +57,9 @@ function iso(v: unknown): string | null {
   if (v == null) return null;
   if (v instanceof Date) return v.toISOString();
   return String(v);
+}
+function gsFmt(v: number): string {
+  return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`;
 }
 
 function pool() {
@@ -348,11 +355,30 @@ export async function crearDevolucion(
       }
     }
 
-    // ── 5) Diferencia. >0 el cliente paga; <0 se le devuelve dinero.
+    // ── 5) Resolución y diferencia.
+    //   reembolso   -> sale plata de la caja (diferencia negativa).
+    //   saldo_favor -> NO mueve caja: el monto queda como crédito del cliente.
+    //   cambio      -> histórico (ya no se ofrece): diferencia entre lo entregado
+    //                  y lo devuelto.
     const resolucion: ResolucionDevolucion = input.resolucion;
-    const diferencia = resolucion === "cambio" ? round2(totalEntregado - totalDevuelto) : round2(-totalDevuelto);
+    const esSaldo = resolucion === "saldo_favor";
+    const diferencia = esSaldo
+      ? 0
+      : resolucion === "cambio"
+        ? round2(totalEntregado - totalDevuelto)
+        : round2(-totalDevuelto);
     const metodo: MetodoReembolso = input.metodo ?? "efectivo";
     const requiereEfectivo = diferencia !== 0 && metodo === "efectivo";
+
+    // Cliente al que se acredita: el de la venta o el elegido en el wizard
+    // (las ventas de mostrador no tienen cliente y el crédito necesita dueño).
+    const clienteCredito = esSaldo ? (str(venta.cliente_id) ?? input.cliente_id ?? null) : null;
+    if (esSaldo && !clienteCredito) {
+      throw new DevolucionBloqueadaError(
+        "sin_cliente_para_saldo",
+        "Elegí un cliente para acreditarle el saldo a favor."
+      );
+    }
 
     // ── 6) Caja: obligatoria si hay movimiento en efectivo.
     const cajaId = diferencia !== 0 ? await cajaAbierta(client, schema, empresaId, str(venta.caja_id)) : null;
@@ -398,7 +424,9 @@ export async function crearDevolucion(
        ) RETURNING id::text`,
       [
         empresaId, numero, input.venta_id, str(venta.numero_control), iso(venta.fecha),
-        str(venta.cliente_id), tipo, resolucion, input.motivo?.trim() || null,
+        // Si el saldo se acredita a un cliente elegido en el wizard, queda
+        // registrado en la devolución (la venta original no se toca).
+        clienteCredito ?? str(venta.cliente_id), tipo, resolucion, input.motivo?.trim() || null,
         totalDevuelto, totalEntregado, diferencia, diferencia !== 0 ? metodo : null,
         cajaId, requiereNC, input.idempotency_key || null, usuario.id, usuario.nombre,
       ]
@@ -470,6 +498,18 @@ export async function crearDevolucion(
           cb.costo, numero, input.venta_id, devolucionId, usuario.id, usuario.nombre,
         ]
       );
+    }
+
+    // ── 12.5) Saldo a favor: se acredita al cliente en vez de mover caja.
+    if (esSaldo && clienteCredito) {
+      await registrarMovimientoCredito(client, schema, empresaId, {
+        clienteId: clienteCredito,
+        tipo: "devolucion",
+        monto: totalDevuelto, // positivo: acredita
+        devolucionId: devolucionId,
+        motivo: `Devolución ${numero} · venta ${String(venta.numero_control ?? "")}`,
+        usuario,
+      });
     }
 
     // ── 13) Movimiento de caja por la diferencia.
@@ -545,7 +585,8 @@ export async function anularDevolucion(
 
     const dQ = await client.query(
       `SELECT id::text, numero_devolucion, venta_id::text AS venta_id, estado, diferencia,
-              metodo_reembolso, caja_id::text AS caja_id
+              metodo_reembolso, caja_id::text AS caja_id, resolucion,
+              cliente_id::text AS cliente_id, total_devuelto
          FROM ${tD} WHERE id = $1::uuid AND empresa_id = $2::uuid FOR UPDATE`,
       [devolucionId, empresaId]
     );
@@ -555,6 +596,27 @@ export async function anularDevolucion(
       throw new DevolucionBloqueadaError("devolucion_ya_anulada", "La devolución ya está anulada.");
     }
     const numero = String(d.numero_devolucion);
+
+    // Si generó saldo a favor, hay que retirárselo al cliente. No se puede si ya
+    // lo gastó: dejaría el saldo en negativo.
+    if (String(d.resolucion) === "saldo_favor" && d.cliente_id) {
+      const acreditado = num(d.total_devuelto);
+      const saldoActual = await getSaldoClienteForUpdate(client, schema, empresaId, String(d.cliente_id));
+      if (acreditado > saldoActual + 1e-9) {
+        throw new DevolucionBloqueadaError(
+          "saldo_ya_usado",
+          `No se puede anular: el cliente ya usó parte del saldo. Se le acreditaron ${gsFmt(acreditado)} y hoy tiene ${gsFmt(saldoActual)}.`
+        );
+      }
+      await registrarMovimientoCredito(client, schema, empresaId, {
+        clienteId: String(d.cliente_id),
+        tipo: "reverso",
+        monto: -acreditado, // negativo: retira lo acreditado
+        devolucionId,
+        motivo: `Anulación de la devolución ${numero}`,
+        usuario,
+      });
+    }
 
     // Revertir stock de los items devueltos que SI habian reintegrado.
     const itQ = await client.query(
@@ -701,7 +763,9 @@ function mapDev(r: Record<string, unknown>, clienteNombre?: string | null): Devo
     cliente_id: str(r.cliente_id),
     cliente_nombre: clienteNombre ?? str(r.cliente_nombre),
     tipo: (r.tipo === "total" ? "total" : "parcial") as TipoDevolucion,
-    resolucion: (r.resolucion === "cambio" ? "cambio" : "reembolso") as ResolucionDevolucion,
+    resolucion: (r.resolucion === "cambio" || r.resolucion === "saldo_favor"
+      ? r.resolucion
+      : "reembolso") as ResolucionDevolucion,
     estado: (r.estado === "anulada" ? "anulada" : "confirmada") as EstadoDevolucion,
     motivo: str(r.motivo),
     total_devuelto: num(r.total_devuelto),

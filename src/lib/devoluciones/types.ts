@@ -1,7 +1,12 @@
 /** Tipos del modulo de devoluciones de ventas. */
 
 export type TipoDevolucion = "total" | "parcial";
-export type ResolucionDevolucion = "reembolso" | "cambio";
+/**
+ * `cambio` queda solo por compatibilidad con devoluciones históricas: la opción
+ * de canjear por otro producto se reemplazó por `saldo_favor` (crédito a nombre
+ * del cliente, que luego usa como medio de pago).
+ */
+export type ResolucionDevolucion = "reembolso" | "cambio" | "saldo_favor";
 export type EstadoDevolucion = "confirmada" | "anulada";
 export type CondicionProducto = "buen_estado" | "danado";
 export type MetodoReembolso = "efectivo" | "tarjeta" | "transferencia";
@@ -54,8 +59,13 @@ export interface CrearDevolucionInput {
   motivo: string | null;
   resolucion: ResolucionDevolucion;
   items: DevolucionItemInput[];
-  /** Solo si resolucion = cambio. */
+  /** Solo si resolucion = cambio (histórico; ya no se ofrece en la UI). */
   cambios: DevolucionCambioInput[];
+  /**
+   * Cliente al que se acredita el saldo a favor. Obligatorio con
+   * resolucion = 'saldo_favor' cuando la venta NO tiene cliente asignado.
+   */
+  cliente_id?: string | null;
   /** Metodo del reembolso o del cobro de la diferencia. */
   metodo: MetodoReembolso;
   /** Clave para idempotencia (doble clic / reintento). */
@@ -128,7 +138,9 @@ export type BloqueoDevolucion =
   | "sin_items"
   | "stock_insuficiente_cambio"
   | "devolucion_no_encontrada"
-  | "devolucion_ya_anulada";
+  | "devolucion_ya_anulada"
+  | "sin_cliente_para_saldo"
+  | "saldo_ya_usado";
 
 export class DevolucionBloqueadaError extends Error {
   motivo: BloqueoDevolucion;

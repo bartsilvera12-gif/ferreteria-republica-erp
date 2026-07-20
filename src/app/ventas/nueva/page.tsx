@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Search, Plus, Minus, Trash2, ImageIcon } from "lucide-react";
+import { Search, Plus, Minus, Trash2, ImageIcon, Wallet } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import ProductPickerModal, { type ProductoPickerItem, type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
 import { saveVenta, type FaltanteStock } from "@/lib/ventas/storage";
@@ -176,6 +176,20 @@ export default function NuevaVentaPage() {
   // Modal de alta rápida de cliente (crea en el módulo Clientes + lo selecciona).
   const [showCrearCliente, setShowCrearCliente] = useState(false);
 
+  /**
+   * Saldo a favor del cliente elegido. Se consulta al seleccionarlo para poder
+   * avisarle al cajero que tiene crédito disponible.
+   */
+  useEffect(() => {
+    let cancel = false;
+    if (!clienteId) { setSaldoFavor(0); setUsarSaldo(0); return; }
+    fetchWithSupabaseSession(`/api/clientes/${clienteId}/saldo-favor`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) { setSaldoFavor(Number(j?.data?.saldo) || 0); setUsarSaldo(0); } })
+      .catch(() => { if (!cancel) { setSaldoFavor(0); setUsarSaldo(0); } });
+    return () => { cancel = true; };
+  }, [clienteId]);
+
   function handleClienteCreado(c: ClienteCreado) {
     setClientes((prev) => [c, ...prev.filter((x) => x.id !== c.id)]);
     setClienteId(c.id);
@@ -183,6 +197,13 @@ export default function NuevaVentaPage() {
     setGeneraNotaRemision(c.usa_nota_remision);
     setShowCrearCliente(false);
   }
+
+  // ── Saldo a favor del cliente (crédito por devoluciones) ──────────────────
+  const [saldoFavor, setSaldoFavor] = useState(0);
+  /** Cuánto de ese saldo se aplica a ESTA venta (el resto queda como crédito). */
+  const [usarSaldo, setUsarSaldo] = useState(0);
+  /** El cliente pide llevarse el excedente en efectivo (egreso de caja). */
+  const [retirarExcedente, setRetirarExcedente] = useState(false);
 
   // ── Cobro (solo CONTADO, no se persiste — solo ayuda al cajero) ───────────
   const [montoRecibido, setMontoRecibido] = useState("");
@@ -582,9 +603,18 @@ export default function NuevaVentaPage() {
     : entidades.filter((e) => productoMatchesQuery(entidadQuery, e.nombre, e.codigo))
   ).slice(0, 50);
 
-  // Vuelto (solo informativo, no se persiste)
+  // ── Saldo a favor aplicado a esta venta ───────────────────────────────────
+  /** No puede superar ni el saldo del cliente ni el total de la venta. */
+  const saldoAplicado = Math.max(0, Math.min(usarSaldo, saldoFavor, totalGeneral));
+  /** Lo que falta cobrar por los medios normales (efectivo, tarjeta, etc.). */
+  const restaCobrar = Math.max(0, totalGeneral - saldoAplicado);
+  /** Crédito que le sobra al cliente después de pagar esta venta. */
+  const saldoRestante = Math.max(0, saldoFavor - saldoAplicado);
+
+  // Vuelto (solo informativo, no se persiste). Se calcula sobre lo que resta
+  // cobrar: si parte se pagó con saldo, el cajero recibe menos efectivo.
   const montoRecibidoNum = parseFloat(montoRecibido) || 0;
-  const vuelto           = montoRecibidoNum - totalGeneral;
+  const vuelto           = montoRecibidoNum - restaCobrar;
 
   // ── Productos filtrados para el combobox ──────────────────────────────────
   // Solo vendibles (Reventa + Menú). Excluye materia prima / insumos.
@@ -737,7 +767,11 @@ export default function NuevaVentaPage() {
           titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
           observacion: pagoObservacion.trim() || null,
         },
-        { permitirSinStock, pedidoId, pedidoCajaId, cajaId: cajaActivaFinal }
+        {
+          permitirSinStock, pedidoId, pedidoCajaId, cajaId: cajaActivaFinal,
+          usarSaldoFavor: saldoAplicado,
+          retirarSaldoEfectivo: retirarExcedente ? saldoRestante : 0,
+        }
       );
 
       if (!resultado.success) {
@@ -1198,9 +1232,72 @@ export default function NuevaVentaPage() {
                     </div>
                   </div>
 
+                  {/* Saldo a favor del cliente (crédito por devoluciones). */}
+                  {saldoFavor > 0 && tipoVenta === "CONTADO" && (
+                    <div className="rounded-lg border-2 border-emerald-300 bg-emerald-50 p-3">
+                      <div className="flex items-start gap-2">
+                        <Wallet className="mt-0.5 h-4 w-4 shrink-0 text-emerald-700" />
+                        <div className="min-w-0 flex-1">
+                          <p className="text-xs font-bold text-emerald-900">
+                            Este cliente tiene saldo a favor: {formatGs(saldoFavor)}
+                          </p>
+                          <p className="mt-0.5 text-[11px] text-emerald-700">
+                            Se puede usar para pagar esta venta, total o en parte.
+                          </p>
+                        </div>
+                      </div>
+                      <div className="mt-2.5 flex items-center gap-2">
+                        <input
+                          type="number" min={0} max={Math.min(saldoFavor, totalGeneral)} step="any"
+                          value={usarSaldo || ""}
+                          onChange={(e) => setUsarSaldo(Math.max(0, Math.min(Math.min(saldoFavor, totalGeneral), Number(e.target.value) || 0)))}
+                          placeholder="0"
+                          className="h-9 w-32 rounded-lg border border-emerald-300 bg-white px-2 text-center text-sm font-bold text-slate-800 outline-none focus:ring-2 focus:ring-emerald-300"
+                        />
+                        <button type="button"
+                          onClick={() => setUsarSaldo(Math.min(saldoFavor, totalGeneral))}
+                          className="rounded-lg border border-emerald-300 bg-white px-2.5 py-1.5 text-xs font-semibold text-emerald-800 hover:bg-emerald-100">
+                          Usar {formatGs(Math.min(saldoFavor, totalGeneral))}
+                        </button>
+                        {usarSaldo > 0 && (
+                          <button type="button" onClick={() => setUsarSaldo(0)}
+                            className="text-xs font-medium text-emerald-700 underline">Quitar</button>
+                        )}
+                      </div>
+                      {usarSaldo > 0 && (
+                        <div className="mt-2 space-y-0.5 border-t border-emerald-200 pt-2 text-xs">
+                          <div className="flex justify-between text-emerald-800">
+                            <span>Paga con saldo</span><span className="tabular-nums font-semibold">− {formatGs(usarSaldo)}</span>
+                          </div>
+                          <div className="flex justify-between font-bold text-emerald-900">
+                            <span>Resta cobrar</span><span className="tabular-nums">{formatGs(restaCobrar)}</span>
+                          </div>
+                          {saldoRestante > 0 && (
+                            <p className="pt-1 text-[11px] text-emerald-700">
+                              Le quedan {formatGs(saldoRestante)} de saldo para próximas compras.
+                            </p>
+                          )}
+                        </div>
+                      )}
+                      {/* Punto 6: el excedente se puede entregar en efectivo. */}
+                      {saldoRestante > 0 && (
+                        <label className="mt-2 flex items-start gap-2 border-t border-emerald-200 pt-2 text-xs text-emerald-800">
+                          <input type="checkbox" checked={retirarExcedente} className="mt-0.5"
+                            onChange={(e) => setRetirarExcedente(e.target.checked)} />
+                          <span>
+                            Entregar el excedente de <strong>{formatGs(saldoRestante)}</strong> en efectivo
+                            <span className="block text-[10px] text-emerald-600">Sale de la caja como egreso. Solo si el cliente lo pide.</span>
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  )}
+
                   {tipoVenta === "CONTADO" && (
                     <div className="bg-slate-50 border border-slate-200 rounded-lg p-3 space-y-2.5">
-                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">Cobro</p>
+                      <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
+                        Cobro{usarSaldo > 0 ? ` · resta ${formatGs(restaCobrar)}` : ""}
+                      </p>
                       <div className="grid grid-cols-3 gap-1.5">
                         {([
                           { v: "efectivo", label: "Efectivo" },

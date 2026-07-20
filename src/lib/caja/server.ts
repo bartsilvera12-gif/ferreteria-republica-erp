@@ -188,16 +188,34 @@ export async function getReporteCajas(
   // 2) Ventas de esas cajas (en lote).
   const vQ = await sb
     .from("ventas")
-    .select("caja_id, total, metodo_pago, estado")
+    .select("id, caja_id, total, metodo_pago, estado")
     .eq("empresa_id", empresaId)
     .in("caja_id", cajaIds);
   if (vQ.error) throw new Error(vQ.error.message);
   const ventas = (vQ.data ?? []) as unknown as Array<{
+    id: string;
     caja_id: string | null;
     total: number | string;
     metodo_pago: string | null;
     estado: string | null;
   }>;
+
+  // 2b) Detalle de cobro por venta. Es la fuente de verdad del medio de pago:
+  // una venta puede pagarse combinando saldo a favor + efectivo, y en ese caso
+  // `ventas.metodo_pago` sola contaría TODO el total como efectivo e inflaría
+  // el arqueo. El saldo a favor no es plata que entra al cajón.
+  const pdQ = await sb
+    .from("ventas_pagos_detalle")
+    .select("venta_id, metodo_pago, monto")
+    .eq("empresa_id", empresaId)
+    .in("venta_id", ventas.map((v) => v.id));
+  if (pdQ.error) throw new Error(pdQ.error.message);
+  const detallePorVenta = new Map<string, Array<{ metodo_pago: string; monto: number }>>();
+  for (const d of (pdQ.data ?? []) as Array<{ venta_id: string; metodo_pago: string; monto: number | string }>) {
+    const arr = detallePorVenta.get(d.venta_id) ?? [];
+    arr.push({ metodo_pago: d.metodo_pago, monto: num(d.monto) });
+    detallePorVenta.set(d.venta_id, arr);
+  }
 
   // 3) Movimientos activos de esas cajas (en lote).
   const mQ = await sb
@@ -267,7 +285,17 @@ export async function getReporteCajas(
     const t = num(v.total);
     a.cantidad_ventas++;
     a.total_vendido += t;
-    if (v.metodo_pago === "tarjeta") a.total_tarjeta += t;
+    // Se reparte por el detalle de cobro (soporta pagos combinados). Si una
+    // venta no tuviera detalle, se cae al método de la venta como antes.
+    const det = detallePorVenta.get(v.id);
+    if (det && det.length > 0) {
+      for (const d of det) {
+        if (d.metodo_pago === "tarjeta") a.total_tarjeta += d.monto;
+        else if (d.metodo_pago === "transferencia") a.total_transferencia += d.monto;
+        else if (d.metodo_pago === "efectivo") a.total_efectivo += d.monto;
+        // saldo_favor / qr / billetera / otro: no suman al efectivo del cajón.
+      }
+    } else if (v.metodo_pago === "tarjeta") a.total_tarjeta += t;
     else if (v.metodo_pago === "transferencia") a.total_transferencia += t;
     else a.total_efectivo += t;
   }
@@ -419,11 +447,34 @@ export async function getDetalleCaja(
     totalEfectivo = 0,
     totalTarjeta = 0,
     totalTransferencia = 0;
+  // Detalle de cobro por venta: soporta pagos combinados (p. ej. saldo a favor
+  // + efectivo). Sin esto, una venta pagada en parte con crédito inflaría el
+  // efectivo esperado del arqueo.
+  const pdQ2 = await sb
+    .from("ventas_pagos_detalle")
+    .select("venta_id, metodo_pago, monto")
+    .eq("empresa_id", empresaId)
+    .in("venta_id", ventasRaw.map((v) => v.id));
+  if (pdQ2.error) throw new Error(pdQ2.error.message);
+  const detPorVenta = new Map<string, Array<{ metodo_pago: string; monto: number }>>();
+  for (const d of (pdQ2.data ?? []) as Array<{ venta_id: string; metodo_pago: string; monto: number | string }>) {
+    const arr = detPorVenta.get(d.venta_id) ?? [];
+    arr.push({ metodo_pago: d.metodo_pago, monto: num(d.monto) });
+    detPorVenta.set(d.venta_id, arr);
+  }
   for (const v of ventas) {
     if (v.estado === "anulada") continue;
     cantidadVentas++;
     totalVendido += v.total;
-    if (v.metodo_pago === "tarjeta") totalTarjeta += v.total;
+    const det = detPorVenta.get(v.id);
+    if (det && det.length > 0) {
+      for (const d of det) {
+        if (d.metodo_pago === "tarjeta") totalTarjeta += d.monto;
+        else if (d.metodo_pago === "transferencia") totalTransferencia += d.monto;
+        else if (d.metodo_pago === "efectivo") totalEfectivo += d.monto;
+        // saldo_favor y otros medios no suman al efectivo del cajón.
+      }
+    } else if (v.metodo_pago === "tarjeta") totalTarjeta += v.total;
     else if (v.metodo_pago === "transferencia") totalTransferencia += v.total;
     else totalEfectivo += v.total;
   }

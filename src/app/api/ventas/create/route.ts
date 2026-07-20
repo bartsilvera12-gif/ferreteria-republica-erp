@@ -9,6 +9,8 @@ import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta } from "@/lib/ventas/types";
 import { createServiceRoleClientWithDbSchema } from "@/lib/supabase/empresa-data-schema";
 import { estaFacturado, marcarFacturado } from "@/lib/caja/facturacion";
+import { getSaldoCliente } from "@/lib/creditos/server/creditos-pg";
+import { aplicarSaldoAVenta } from "@/lib/creditos/server/aplicar-saldo-venta";
 
 /** Error tipado: el pedido que se intenta facturar ya tiene venta. */
 class PedidoYaFacturadoError extends Error {
@@ -227,6 +229,35 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // ── Saldo a favor: se valida ANTES de crear la venta para no dejarla
+    // creada si el cliente no tiene crédito suficiente. El consumo real (con
+    // lock) ocurre después, ya con el id de la venta.
+    const usarSaldo = Math.max(0, Number(o.usar_saldo_favor) || 0);
+    const retirarSaldo = Math.max(0, Number(o.retirar_saldo_efectivo) || 0);
+    if ((usarSaldo > 0 || retirarSaldo > 0) && !clienteId) {
+      return NextResponse.json(
+        errorResponse("Para usar saldo a favor hay que seleccionar el cliente."),
+        { status: 400 }
+      );
+    }
+    if (usarSaldo > totalDeclarado + 1e-9) {
+      return NextResponse.json(
+        errorResponse("El saldo aplicado no puede superar el total de la venta."),
+        { status: 400 }
+      );
+    }
+    if (clienteId && (usarSaldo > 0 || retirarSaldo > 0)) {
+      const disponible = await getSaldoCliente(schema, auth.empresa_id, clienteId);
+      if (usarSaldo + retirarSaldo > disponible + 1e-9) {
+        return NextResponse.json(
+          errorResponse(
+            `El cliente no tiene saldo suficiente: disponible Gs. ${Math.round(disponible).toLocaleString("es-PY")}.`
+          ),
+          { status: 409 }
+        );
+      }
+    }
+
     const { ventaId, numeroControl, fechaIso, notaRemisionNumero } = await createVentaTransaccionalPg({
       schema,
       empresaId: auth.empresa_id,
@@ -295,9 +326,39 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Saldo a favor: consumo REAL (transaccional, con lock por cliente). No es
+    // best-effort porque es dinero: si falla, se anula la venta recién creada
+    // para no dejarla cobrada con un saldo que no se descontó.
+    let saldoUsado = 0;
+    if (clienteId && (usarSaldo > 0 || retirarSaldo > 0)) {
+      try {
+        const r = await aplicarSaldoAVenta(schema, auth.empresa_id, {
+          clienteId,
+          ventaId,
+          ventaNumero: numeroControl,
+          usar: usarSaldo,
+          retirar: retirarSaldo,
+          cajaId: o.caja_id != null && String(o.caja_id).trim() !== "" ? String(o.caja_id) : null,
+          usuario: { id: auth.usuarioCatalogId ?? null, nombre: auth.nombre ?? auth.user?.email ?? null },
+        });
+        saldoUsado = r.usado;
+      } catch (e) {
+        // Compensación: la venta ya existe pero el saldo no se pudo aplicar.
+        try {
+          const sb = createServiceRoleClientWithDbSchema(schema);
+          await sb.from("ventas").update({ estado: "anulada" }).eq("id", ventaId).eq("empresa_id", auth.empresa_id);
+        } catch (e2) {
+          console.error("[ventas/create] no se pudo anular la venta tras fallar el saldo:", e2 instanceof Error ? e2.message : e2);
+        }
+        const msg = e instanceof Error ? e.message : "No se pudo aplicar el saldo a favor.";
+        return NextResponse.json(errorResponse(msg), { status: 409 });
+      }
+    }
+
     // Detalle de cobro (conciliación) — best-effort, FUERA de la transacción de
     // venta. Si falla, la venta queda igual (no se rompe ni se afectan recetas).
-    // 1 detalle por venta: método = metodoPago; monto = total (suma = total).
+    // Con saldo a favor son DOS filas: el saldo aplicado y el resto por el medio
+    // elegido. La suma sigue siendo el total de la venta.
     try {
       const pd = (o.pago_detalle ?? null) as Record<string, unknown> | null;
       const str = (v: unknown, max = 200) =>
@@ -306,16 +367,31 @@ export async function POST(request: NextRequest) {
         const v = pd?.fecha_acreditacion;
         return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
       })();
-      await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
-        metodo_pago: metodoPago,
-        entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
-        entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
-        monto: totalDeclarado,
-        referencia: str(pd?.referencia),
-        titular: str(pd?.titular),
-        fecha_acreditacion: fechaAcred,
-        observacion: str(pd?.observacion, 500),
-      });
+      if (saldoUsado > 0) {
+        await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+          metodo_pago: "saldo_favor",
+          entidad_bancaria_id: null,
+          entidad_nombre_snapshot: null,
+          monto: saldoUsado,
+          referencia: null,
+          titular: null,
+          fecha_acreditacion: null,
+          observacion: "Pagado con saldo a favor del cliente",
+        });
+      }
+      const resto = Math.round((totalDeclarado - saldoUsado) * 100) / 100;
+      if (resto > 0) {
+        await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+          metodo_pago: metodoPago,
+          entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
+          entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
+          monto: resto,
+          referencia: str(pd?.referencia),
+          titular: str(pd?.titular),
+          fecha_acreditacion: fechaAcred,
+          observacion: str(pd?.observacion, 500),
+        });
+      }
     } catch (e) {
       console.error("[ventas/create] pago_detalle best-effort fallo (venta OK):", e instanceof Error ? e.message : e);
     }
