@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import { ajustarStockConMovimiento } from "@/lib/inventario/server/ajuste-stock-pg";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
@@ -97,7 +99,11 @@ export async function PATCH(
     if (body.sku !== undefined) patch.sku = normalizeUpperText(body.sku);
     if (body.costo_promedio !== undefined) patch.costo_promedio = Number(body.costo_promedio) || 0;
     if (body.precio_venta !== undefined) patch.precio_venta = Number(body.precio_venta) || 0;
-    if (body.stock_actual !== undefined) patch.stock_actual = Number(body.stock_actual) || 0;
+    // stock_actual NO va en el patch directo: se ajusta con auditoría (genera un
+    // movimiento de inventario) más abajo, en una transacción con lock.
+    const ajustaStock = body.stock_actual !== undefined;
+    const nuevoStock = ajustaStock ? Number(body.stock_actual) || 0 : 0;
+    const motivoAjuste = typeof body.motivo_ajuste === "string" ? body.motivo_ajuste : null;
     if (body.stock_minimo !== undefined) patch.stock_minimo = Number(body.stock_minimo) || 0;
     if (body.unidad_medida !== undefined) patch.unidad_medida = normalizeUpperText(body.unidad_medida) || "UNIDAD";
     if (body.metodo_valuacion !== undefined) {
@@ -186,7 +192,7 @@ export async function PATCH(
       patch.modo_receta = mr === "produccion_previa" ? "produccion_previa" : "preparado_al_vender";
     }
 
-    if (Object.keys(patch).length === 0) {
+    if (Object.keys(patch).length === 0 && !ajustaStock) {
       const { data: existing, error: errGet } = await sb
         .from("productos")
         .select(PRODUCTO_COLS)
@@ -198,26 +204,54 @@ export async function PATCH(
       return NextResponse.json(successResponse({ producto: rowToApi(existing as unknown as Record<string, unknown>) }));
     }
 
-    const upd = await sb
-      .from("productos")
-      .update(patch)
-      .eq("empresa_id", empresaId)
-      .eq("id", id)
-      .select(PRODUCTO_COLS)
-      .maybeSingle();
-    if (upd.error) {
-      const msg = upd.error.message ?? "";
-      if (/duplicate key|unique|23505/i.test(msg)) {
-        if (/sku/i.test(msg)) return NextResponse.json(errorResponse("Ya existe un producto con ese SKU."), { status: 409 });
-        if (/codigo_barras|barras/i.test(msg))
-          return NextResponse.json(errorResponse("Ya existe un producto con ese código de barras."), { status: 409 });
-        return NextResponse.json(errorResponse("Conflicto de datos únicos."), { status: 409 });
+    // Ajuste de stock con auditoría (movimiento de inventario). Se hace ANTES
+    // del resto para fallar temprano si el producto no existe.
+    if (ajustaStock) {
+      try {
+        await ajustarStockConMovimiento(
+          await fetchDataSchemaForEmpresaId(empresaId),
+          empresaId,
+          id,
+          nuevoStock,
+          { id: ctx.auth.usuarioCatalogId ?? null, nombre: ctx.auth.nombre ?? ctx.auth.user?.email ?? null },
+          motivoAjuste
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo ajustar el stock.";
+        if (/no encontrado/i.test(msg)) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+        console.error("[/api/productos/[id] PATCH] ajuste stock", msg);
+        return NextResponse.json(errorResponse("No se pudo ajustar el stock."), { status: 500 });
       }
-      console.error("[/api/productos/[id] PATCH]", msg);
-      return NextResponse.json(errorResponse("No se pudo actualizar el producto."), { status: 500 });
     }
-    if (!upd.data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
-    const updRow = upd.data as unknown as Record<string, unknown>;
+
+    // Resto de campos. Si SOLO se ajustó el stock, no hay patch: releemos.
+    let updRow: Record<string, unknown>;
+    if (Object.keys(patch).length > 0) {
+      const upd = await sb
+        .from("productos")
+        .update(patch)
+        .eq("empresa_id", empresaId)
+        .eq("id", id)
+        .select(PRODUCTO_COLS)
+        .maybeSingle();
+      if (upd.error) {
+        const msg = upd.error.message ?? "";
+        if (/duplicate key|unique|23505/i.test(msg)) {
+          if (/sku/i.test(msg)) return NextResponse.json(errorResponse("Ya existe un producto con ese SKU."), { status: 409 });
+          if (/codigo_barras|barras/i.test(msg))
+            return NextResponse.json(errorResponse("Ya existe un producto con ese código de barras."), { status: 409 });
+          return NextResponse.json(errorResponse("Conflicto de datos únicos."), { status: 409 });
+        }
+        console.error("[/api/productos/[id] PATCH]", msg);
+        return NextResponse.json(errorResponse("No se pudo actualizar el producto."), { status: 500 });
+      }
+      if (!upd.data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+      updRow = upd.data as unknown as Record<string, unknown>;
+    } else {
+      const { data: fresh } = await sb
+        .from("productos").select(PRODUCTO_COLS).eq("empresa_id", empresaId).eq("id", id).maybeSingle();
+      updRow = (fresh ?? {}) as unknown as Record<string, unknown>;
+    }
 
     // Sincronizar categoría principal en puente producto_categorias
     if (categoriaCambia) {
