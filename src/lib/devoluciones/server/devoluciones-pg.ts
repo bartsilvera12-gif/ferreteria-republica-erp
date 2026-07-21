@@ -368,7 +368,6 @@ export async function crearDevolucion(
         ? round2(totalEntregado - totalDevuelto)
         : round2(-totalDevuelto);
     const metodo: MetodoReembolso = input.metodo ?? "efectivo";
-    const requiereEfectivo = diferencia !== 0 && metodo === "efectivo";
 
     // Cliente al que se acredita: el de la venta o el elegido en el wizard
     // (las ventas de mostrador no tienen cliente y el crédito necesita dueño).
@@ -380,9 +379,13 @@ export async function crearDevolucion(
       );
     }
 
-    // ── 6) Caja: obligatoria si hay movimiento en efectivo.
-    const cajaId = diferencia !== 0 ? await cajaAbierta(client, schema, empresaId, str(venta.caja_id)) : null;
-    if (requiereEfectivo && !cajaId) {
+    // ── 6) Caja: TODA devolución con impacto exige una caja abierta y deja un
+    // movimiento. Reembolso -> movimiento real (egreso/ingreso). Saldo a favor
+    // -> movimiento INFORMATIVO (medio 'otro'): queda visible en la caja pero no
+    // altera el efectivo esperado del arqueo.
+    const requiereCaja = esSaldo || diferencia !== 0;
+    const cajaId = requiereCaja ? await cajaAbierta(client, schema, empresaId, str(venta.caja_id)) : null;
+    if (requiereCaja && !cajaId) {
       throw new DevolucionBloqueadaError(
         "sin_caja_abierta",
         "No hay una caja abierta. Abrí una caja antes de realizar esta devolución."
@@ -512,18 +515,26 @@ export async function crearDevolucion(
       });
     }
 
-    // ── 13) Movimiento de caja por la diferencia.
-    //  diferencia < 0 -> egreso (le devolvemos plata al cliente)
-    //  diferencia > 0 -> ingreso (el cliente paga la diferencia)
-    //  Tarjeta/transferencia se registran con su medio_pago: el resumen de caja
-    //  solo suma efectivo, asi que no afectan el efectivo fisico esperado.
+    // ── 13) Movimiento de caja. Toda devolución con caja abierta deja uno:
+    //  reembolso  -> egreso (le devolvemos plata) / ingreso (paga diferencia),
+    //                con su medio real. Tarjeta/transferencia no tocan el
+    //                efectivo esperado (el arqueo solo suma efectivo).
+    //  saldo favor -> INFORMATIVO: egreso con medio 'otro', para que quede
+    //                 visible en la caja sin afectar el efectivo esperado.
     let cajaMovId: string | null = null;
-    if (diferencia !== 0 && cajaId) {
-      const tipoMov = diferencia > 0 ? "ingreso" : "egreso";
-      const concepto =
-        diferencia > 0
+    if (cajaId && (diferencia !== 0 || esSaldo)) {
+      const informativo = esSaldo && diferencia === 0;
+      const tipoMov = informativo ? "egreso" : diferencia > 0 ? "ingreso" : "egreso";
+      const medioMov = informativo ? "otro" : metodo;
+      const montoMov = informativo ? totalDevuelto : Math.abs(diferencia);
+      const concepto = informativo
+        ? `Saldo a favor por devolución ${numero}`
+        : diferencia > 0
           ? `Diferencia a cobrar por devolución ${numero}`
           : `Reembolso por devolución ${numero}`;
+      const observacion = informativo
+        ? `Venta ${String(venta.numero_control ?? "")} · saldo a favor del cliente (no afecta el efectivo)`
+        : `Venta ${String(venta.numero_control ?? "")} · devolución ${numero}`;
       const insM = await client.query(
         `INSERT INTO ${tCM} (
            empresa_id, caja_id, tipo, concepto, monto, medio_pago, usuario_id,
@@ -531,9 +542,8 @@ export async function crearDevolucion(
          ) VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7::uuid,$8,$9::uuid,$10::uuid)
          RETURNING id::text`,
         [
-          empresaId, cajaId, tipoMov, concepto, Math.abs(diferencia), metodo, usuario.id,
-          `Venta ${String(venta.numero_control ?? "")} · devolución ${numero}`,
-          devolucionId, input.venta_id,
+          empresaId, cajaId, tipoMov, concepto, montoMov, medioMov, usuario.id,
+          observacion, devolucionId, input.venta_id,
         ]
       );
       cajaMovId = String(insM.rows[0].id);
@@ -680,12 +690,18 @@ export async function anularDevolucion(
     }
 
     // Movimiento de caja inverso.
+    // Reverso en caja. Para reembolso: movimiento inverso real. Para saldo a
+    // favor: reverso del movimiento informativo (ingreso 'otro', no toca efectivo).
     const dif = num(d.diferencia);
+    const esSaldoAnular = String(d.resolucion) === "saldo_favor";
     let movInvId: string | null = null;
-    if (dif !== 0 && d.caja_id) {
+    if ((dif !== 0 || esSaldoAnular) && d.caja_id) {
       const cajaDestino = await cajaAbierta(client, schema, empresaId, str(d.caja_id));
       if (cajaDestino) {
-        const tipoInv = dif > 0 ? "egreso" : "ingreso"; // inverso del original
+        const infoInv = esSaldoAnular && dif === 0;
+        const tipoInv = infoInv ? "ingreso" : dif > 0 ? "egreso" : "ingreso"; // inverso del original
+        const medioInv = infoInv ? "otro" : (str(d.metodo_reembolso) ?? "efectivo");
+        const montoInv = infoInv ? num(d.total_devuelto) : Math.abs(dif);
         const insM = await client.query(
           `INSERT INTO ${tCM} (
              empresa_id, caja_id, tipo, concepto, monto, medio_pago, usuario_id,
@@ -694,8 +710,9 @@ export async function anularDevolucion(
            RETURNING id::text`,
           [
             empresaId, cajaDestino, tipoInv, `Anulación de devolución ${numero}`,
-            Math.abs(dif), str(d.metodo_reembolso) ?? "efectivo", usuario.id,
-            `Reverso automático de ${numero}`, devolucionId, String(d.venta_id),
+            montoInv, medioInv, usuario.id,
+            infoInv ? `Reverso del saldo a favor de ${numero} (no afecta el efectivo)` : `Reverso automático de ${numero}`,
+            devolucionId, String(d.venta_id),
           ]
         );
         movInvId = String(insM.rows[0].id);

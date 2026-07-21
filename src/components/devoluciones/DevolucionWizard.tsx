@@ -431,7 +431,7 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
                     <>
                       <Fila k="Saldo a favor generado" v={gs(totalDevuelto)} />
                       <Fila k="Se acredita a" v={clienteCredito?.nombre ?? "—"} />
-                      <Fila k="Caja afectada" v="No aplica (no se mueve dinero)" />
+                      <Fila k="Caja afectada" v="Queda registrado en la caja abierta (no afecta el efectivo)" />
                     </>
                   ) : (
                     <>
