@@ -22,7 +22,7 @@ import * as fs from "fs";
 import * as XLSX from "xlsx";
 import { Pool } from "pg";
 import { parseReporte } from "@/lib/imports/parsers-reportes-xls";
-import { consolidar, resumir, type ProductoConsolidado } from "@/lib/imports/consolidacion-productos";
+import { consolidar, resumir, nullificarBarrasDuplicados } from "@/lib/imports/consolidacion-productos";
 
 const SCHEMA = "ferreteriarepublica";
 
@@ -59,10 +59,13 @@ async function main() {
   if (fGen)  { const r = parseReporte("stock_general", aoa(fGen)); console.log(`Stock General: ${r.diag.filas_datos} filas, cols=${JSON.stringify(r.diag.columnas)}, faltan=${r.diag.columnas_faltantes}`); filas.push(...r.filas); }
   if (fVal)  { const r = parseReporte("stock_valorizado", aoa(fVal)); console.log(`Stock Valorizado: ${r.diag.filas_datos} filas, cols=${JSON.stringify(r.diag.columnas)}, faltan=${r.diag.columnas_faltantes}`); filas.push(...r.filas); }
 
-  const items = consolidar(filas).filter((i) => i.errores.length === 0);
-  const res = resumir(consolidar(filas));
+  const consolidado = consolidar(filas);
+  const res = resumir(consolidado);
+  const items = consolidado.filter((i) => i.errores.length === 0);
+  const barrasAnuladas = nullificarBarrasDuplicados(items);
   console.log("\nConsolidado:", JSON.stringify(res, null, 2));
   console.log(`Productos a cargar (sin errores): ${items.length}`);
+  console.log(`Códigos de barras duplicados anulados: ${barrasAnuladas}`);
 
   if (!apply) {
     console.log("\nDRY-RUN: no se escribió nada. Agregá --apply para ejecutar.");
@@ -72,22 +75,53 @@ async function main() {
   const pool = new Pool({ connectionString: url });
   const t = (name: string) => `"${SCHEMA}"."${name}"`;
   try {
-    const empresa = (await pool.query(`SELECT id FROM ${t("empresas")} ORDER BY created_at LIMIT 1`)).rows[0]?.id
-      ?? (await pool.query(`SELECT DISTINCT empresa_id AS id FROM ${t("productos")} LIMIT 1`)).rows[0]?.id;
-    if (!empresa) throw new Error("No se pudo determinar empresa_id.");
+    // La empresa se determina desde los productos actuales (todos comparten
+    // empresa_id). Se lee ANTES de borrar, así que siempre hay filas.
+    const empresa = (await pool.query(
+      `SELECT empresa_id AS id, count(*) AS n FROM ${t("productos")} GROUP BY empresa_id ORDER BY n DESC LIMIT 1`
+    )).rows[0]?.id;
+    if (!empresa) throw new Error("No se pudo determinar empresa_id (no hay productos).");
     console.log("empresa_id:", empresa);
 
-    // ── 1) Historial de prueba (opcional) ──
-    if (resetHistory) {
-      const a = await pool.query(`DELETE FROM ${t("ventas_items")} WHERE empresa_id=$1`, [empresa]);
-      const b = await pool.query(`DELETE FROM ${t("movimientos_inventario")} WHERE empresa_id=$1`, [empresa]);
-      const c = await pool.query(`DELETE FROM ${t("compras")} WHERE empresa_id=$1`, [empresa]);
-      console.log(`Historial borrado -> ventas_items:${a.rowCount} movimientos:${b.rowCount} compras:${c.rowCount}`);
-    }
+    // ── 1) Borrado transaccional (todo o nada), en orden hijo → padre ──
+    // El catálogo tiene historial que lo referencia con FKs RESTRICT/NO ACTION.
+    // Hay que limpiar la cadena antes de tocar productos.
+    const clear = await pool.connect();
+    try {
+      await clear.query("BEGIN");
+      const wipe = async (tabla: string) => {
+        const r = await clear.query(`DELETE FROM ${t(tabla)} WHERE empresa_id=$1`, [empresa]);
+        console.log(`  borrado ${tabla}: ${r.rowCount}`);
+      };
 
-    // ── 2) Catálogo actual ──
-    const del = await pool.query(`DELETE FROM ${t("productos")} WHERE empresa_id=$1`, [empresa]);
-    console.log(`Productos borrados: ${del.rowCount}`);
+      if (resetHistory) {
+        // Devoluciones (hijas de ventas_items y de ventas)
+        await wipe("devoluciones_venta_items");
+        await wipe("devoluciones_venta_cambios");
+        await wipe("devoluciones_venta");
+        // Factura autoimpresor (hija de ventas)
+        await wipe("factura_autoimpresor");
+        // Ítems de venta (hijos de ventas; ya sin devoluciones que los referencien)
+        await wipe("ventas_items");
+        // Movimientos (RESTRICT sobre productos)
+        await wipe("movimientos_inventario");
+        // Ventas (padre)
+        await wipe("ventas");
+        // Compras (RESTRICT sobre productos)
+        await wipe("compras");
+      }
+
+      // ── 2) Catálogo actual (CASCADE limpia stock por ubicación, recetas, etc.) ──
+      const del = await clear.query(`DELETE FROM ${t("productos")} WHERE empresa_id=$1`, [empresa]);
+      console.log(`Productos borrados: ${del.rowCount}`);
+
+      await clear.query("COMMIT");
+    } catch (e) {
+      await clear.query("ROLLBACK").catch(() => {});
+      throw e;
+    } finally {
+      clear.release();
+    }
 
     // ── 3) Categorías ──
     const catRows = (await pool.query(`SELECT id, upper(trim(nombre)) AS n FROM ${t("categorias_productos")} WHERE empresa_id=$1`, [empresa])).rows;

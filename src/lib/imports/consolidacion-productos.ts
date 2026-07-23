@@ -427,6 +427,28 @@ export function consolidar(todas: FilaNormalizada[]): ProductoConsolidado[] {
   });
 }
 
+/**
+ * El ERP exige código de barras único (índice parcial). Los archivos del
+ * cliente traen barcodes repetidos entre productos distintos (errores de
+ * carga en origen). Conservamos el barcode en el primer producto y lo dejamos
+ * en null en los siguientes: el producto conserva su identidad por código
+ * interno. Devuelve cuántos barcodes se anularon.
+ */
+export function nullificarBarrasDuplicados(items: ProductoConsolidado[]): number {
+  const vistos = new Set<string>();
+  let anulados = 0;
+  for (const it of items) {
+    if (!it.codigo_barras) continue;
+    if (vistos.has(it.codigo_barras)) {
+      it.codigo_barras = "";
+      anulados++;
+    } else {
+      vistos.add(it.codigo_barras);
+    }
+  }
+  return anulados;
+}
+
 export interface ResumenConsolidacion {
   total: number;
   con_conflictos: number;

@@ -10,7 +10,7 @@
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { registrarImportAudit } from "@/lib/excel/imports-audit-pg";
 import {
-  consolidar, resumir,
+  consolidar, resumir, nullificarBarrasDuplicados,
   type Fuente, type FilaNormalizada, type ProductoConsolidado,
   type ResumenConsolidacion,
 } from "./consolidacion-productos";
@@ -52,6 +52,8 @@ export async function construirPreview(
   }
 
   const items = consolidar(todas);
+  // El ERP exige código de barras único: anulamos los duplicados del origen.
+  nullificarBarrasDuplicados(items);
   await marcarExistentes(schemaRaw, empresaId, items);
   return { items, resumen: resumir(items), archivos: diagnosticos };
 }
