@@ -26,10 +26,10 @@ const FUENTE_LABEL: Record<Fuente, string> = {
 };
 
 const CAMPO_LABEL: Record<string, string> = {
-  codigo_interno: "Código interno", codigo_fabrica: "Código de fábrica",
+  producto: "Producto", codigo_interno: "Código interno", codigo_fabrica: "Código de fábrica",
   codigo_barras: "Código de barras", descripcion: "Descripción",
   categoria: "Categoría", unidad: "Unidad de medida", stock: "Stock",
-  costo: "Precio de costo", costo_mayorista: "Costo mayorista",
+  costo: "Precio de costo", mayorista: "Costo mayorista", costo_mayorista: "Costo mayorista",
   precio_venta: "Precio de venta", iva: "IVA",
 };
 
@@ -44,8 +44,9 @@ interface Item {
   match_existente_id?: string | null;
 }
 interface Archivo {
-  fuente: Fuente; filename: string; filas: number;
-  mapeo: Record<string, string>; no_reconocidas: string[]; faltantes: string[];
+  fuente: Fuente; filename: string;
+  filas_datos: number; filas_ignoradas: number; con_codigo_fabrica: number;
+  columnas: Record<string, number>; columnas_faltantes: string[];
 }
 interface Preview {
   items: Item[];
@@ -252,21 +253,17 @@ export default function ImportInicialWizard() {
               {preview.archivos.map((a) => (
                 <div key={a.fuente} className="rounded-xl border border-slate-200 p-3">
                   <p className="text-xs font-bold text-slate-900">{FUENTE_LABEL[a.fuente]}</p>
-                  <p className="truncate text-[11px] text-slate-500">{a.filename} · {num(a.filas)} filas</p>
+                  <p className="truncate text-[11px] text-slate-500">{a.filename}</p>
                   <p className="mt-2 text-[11px] text-slate-600">
-                    Columnas reconocidas:{" "}
-                    <span className="font-semibold text-[#3F8E91]">
-                      {Object.keys(a.mapeo).map((c) => CAMPO_LABEL[c] ?? c).join(", ") || "ninguna"}
-                    </span>
+                    <span className="font-semibold text-[#3F8E91]">{num(a.filas_datos)}</span> filas de datos
+                    {a.filas_ignoradas > 0 && <span className="text-slate-400"> · {num(a.filas_ignoradas)} ignoradas</span>}
                   </p>
-                  {a.faltantes.length > 0 && (
+                  <p className="mt-1 text-[11px] text-slate-600">
+                    Columnas: {Object.entries(a.columnas).filter(([, v]) => v >= 0).map(([c]) => CAMPO_LABEL[c] ?? c).join(", ") || "ninguna"}
+                  </p>
+                  {a.columnas_faltantes.length > 0 && (
                     <p className="mt-1 text-[11px] text-amber-700">
-                      No se encontró: {a.faltantes.map((c) => CAMPO_LABEL[c] ?? c).join(", ")}
-                    </p>
-                  )}
-                  {a.no_reconocidas.length > 0 && (
-                    <p className="mt-1 text-[11px] text-slate-400">
-                      Ignoradas: {a.no_reconocidas.join(", ")}
+                      No se encontró: {a.columnas_faltantes.map((c) => CAMPO_LABEL[c] ?? c).join(", ")}
                     </p>
                   )}
                 </div>

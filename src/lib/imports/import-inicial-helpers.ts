@@ -1,8 +1,8 @@
 /** Auth + lectura de los 3 archivos del import inicial (form-data). */
+import * as XLSX from "xlsx";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { getAuthWithRol, isAdmin } from "@/lib/middleware/auth";
-import { parseUploadFile } from "@/lib/excel/import";
 import type { Fuente } from "./consolidacion-productos";
 import type { ArchivoEntrada } from "./import-inicial-productos";
 
@@ -13,6 +13,8 @@ const CAMPOS: { campo: string; fuente: Fuente }[] = [
   { campo: "file_stock_valorizado", fuente: "stock_valorizado" },
 ];
 
+const MAX_BYTES = 30 * 1024 * 1024; // reportes grandes: hasta 30 MB
+
 export interface CtxImportInicial {
   empresaId: string;
   schema: string;
@@ -20,6 +22,15 @@ export interface CtxImportInicial {
   usuarioNombre: string | null;
   archivos: ArchivoEntrada[];
   form: FormData;
+}
+
+/** Lee un .xls/.xlsx como matriz de filas (AOA), sin asumir encabezado. */
+export function bufferToAoa(buf: ArrayBuffer): unknown[][] {
+  const wb = XLSX.read(buf, { type: "array" });
+  const sheet = wb.SheetNames[0];
+  if (!sheet) return [];
+  const ws = wb.Sheets[sheet];
+  return XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: "", blankrows: false });
 }
 
 export async function leerArchivosYAuth(request: Request): Promise<
@@ -45,11 +56,15 @@ export async function leerArchivosYAuth(request: Request): Promise<
   for (const { campo, fuente } of CAMPOS) {
     const f = form.get(campo);
     if (!(f instanceof File) || f.size === 0) continue;
-    const parsed = await parseUploadFile(f);
-    if ("error" in parsed) {
-      return { ok: false, status: 400, error: `${f.name}: ${parsed.error}` };
+    if (f.size > MAX_BYTES) {
+      return { ok: false, status: 400, error: `${f.name}: archivo demasiado grande (máx. 30 MB).` };
     }
-    archivos.push({ fuente, filename: f.name, headers: parsed.headers, rows: parsed.rows });
+    try {
+      const aoa = bufferToAoa(await f.arrayBuffer());
+      archivos.push({ fuente, filename: f.name, aoa });
+    } catch (e) {
+      return { ok: false, status: 400, error: `${f.name}: ${e instanceof Error ? e.message : "no se pudo leer"}` };
+    }
   }
 
   if (archivos.length === 0) {

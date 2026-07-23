@@ -10,36 +10,22 @@
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { registrarImportAudit } from "@/lib/excel/imports-audit-pg";
 import {
-  consolidar, normalizarFilas, resumir,
+  consolidar, resumir,
   type Fuente, type FilaNormalizada, type ProductoConsolidado,
-  type ResumenConsolidacion, type MapeoColumnas,
+  type ResumenConsolidacion,
 } from "./consolidacion-productos";
+import { parseReporte, type DiagnosticoParser } from "./parsers-reportes-xls";
 
 export interface ArchivoEntrada {
   fuente: Fuente;
   filename: string;
-  headers: string[];
-  rows: Record<string, string>[];
+  /** Matriz de filas cruda del .xls (sin asumir dónde está el encabezado). */
+  aoa: unknown[][];
 }
 
-export interface DiagnosticoArchivo {
-  fuente: Fuente;
+export interface DiagnosticoArchivo extends DiagnosticoParser {
   filename: string;
-  filas: number;
-  /** Columnas del archivo que se reconocieron y a qué campo se mapearon. */
-  mapeo: MapeoColumnas;
-  /** Encabezados del archivo que no se reconocieron (se ignoran). */
-  no_reconocidas: string[];
-  /** Campos esperados para ese reporte que no se encontraron. */
-  faltantes: string[];
 }
-
-/** Campos que cada reporte DEBERÍA aportar, para avisar si falta una columna. */
-const ESPERADOS: Record<Fuente, (keyof MapeoColumnas)[]> = {
-  productos: ["codigo_interno", "codigo_fabrica", "descripcion", "stock", "costo", "precio_venta", "unidad"],
-  stock_general: ["codigo_fabrica", "descripcion", "categoria", "codigo_barras", "stock"],
-  stock_valorizado: ["codigo_interno", "codigo_fabrica", "descripcion", "codigo_barras", "iva", "stock", "costo", "precio_venta"],
-};
 
 export interface PreviewConsolidado {
   items: ProductoConsolidado[];
@@ -60,21 +46,9 @@ export async function construirPreview(
   const diagnosticos: DiagnosticoArchivo[] = [];
 
   for (const a of archivos) {
-    const { filas, mapeo } = normalizarFilas(a.fuente, a.headers, a.rows);
-    // Descartamos filas totalmente vacías (colas de planilla).
-    const utiles = filas.filter(
-      (f) => f.descripcion || f.codigo_interno || f.codigo_fabrica || f.codigo_barras
-    );
-    todas.push(...utiles);
-    const reconocidas = new Set(Object.values(mapeo));
-    diagnosticos.push({
-      fuente: a.fuente,
-      filename: a.filename,
-      filas: utiles.length,
-      mapeo,
-      no_reconocidas: a.headers.filter((h) => !reconocidas.has(h)),
-      faltantes: ESPERADOS[a.fuente].filter((c) => !mapeo[c]),
-    });
+    const { filas, diag } = parseReporte(a.fuente, a.aoa);
+    todas.push(...filas);
+    diagnosticos.push({ ...diag, filename: a.filename });
   }
 
   const items = consolidar(todas);

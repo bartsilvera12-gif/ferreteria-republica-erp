@@ -251,6 +251,15 @@ const CAMPOS_TEXTO: CampoConsolidado[] = [
 ];
 const CAMPOS_NUM: CampoConsolidado[] = ["stock", "costo", "costo_mayorista", "precio_venta"];
 
+/**
+ * Campos donde una diferencia entre reportes SÍ es un conflicto a revisar
+ * (los que pidió el cliente). La descripción y los códigos no entran: la
+ * descripción difiere solo por truncado y los códigos son la propia llave.
+ */
+const CAMPOS_CONFLICTO = new Set<CampoConsolidado>([
+  "stock", "costo", "costo_mayorista", "precio_venta", "iva", "codigo_barras", "unidad",
+]);
+
 /** Descripción normalizada para el match de último recurso. */
 function claveDescripcion(d: string): string {
   return normHeader(d);
@@ -349,19 +358,34 @@ export function consolidar(todas: FilaNormalizada[]): ProductoConsolidado[] {
         if (!porFuente.has(f.fuente)) porFuente.set(f.fuente, v);
         vistos.push({ fuente: f.fuente, valor: fmt(campo, v) });
       }
-      if (porFuente.size === 0) { faltantes.push(campo); return null; }
-
-      // Valor ganador por prioridad de fuente.
-      let elegido: unknown = null;
-      for (const fuente of PRIORIDAD[campo]) {
-        if (porFuente.has(fuente)) { elegido = porFuente.get(fuente); break; }
+      // costo_mayorista e iva son opcionales (default 10%): no son "faltantes".
+      if (porFuente.size === 0) {
+        if (campo !== "costo_mayorista" && campo !== "iva") faltantes.push(campo);
+        return null;
       }
-      if (elegido === null) elegido = [...porFuente.values()][0];
 
-      // Conflicto: más de un valor DISTINTO entre fuentes.
-      const distintos = new Set(vistos.map((v) => v.valor));
-      if (distintos.size > 1) {
-        conflictos.push({ campo, elegido: fmt(campo, elegido), valores: vistos });
+      let elegido: unknown = null;
+      if (campo === "descripcion") {
+        // El reporte Productos trunca la descripción; Valorizado la trae
+        // completa. Nos quedamos con la más larga (la más informativa).
+        for (const v of porFuente.values()) {
+          if (elegido === null || String(v).length > String(elegido).length) elegido = v;
+        }
+      } else {
+        // Valor ganador por prioridad de fuente.
+        for (const fuente of PRIORIDAD[campo]) {
+          if (porFuente.has(fuente)) { elegido = porFuente.get(fuente); break; }
+        }
+        if (elegido === null) elegido = [...porFuente.values()][0];
+      }
+
+      // Conflicto: más de un valor DISTINTO entre fuentes, solo en los campos
+      // que el cliente quiere revisar (no la descripción ni los códigos-llave).
+      if (CAMPOS_CONFLICTO.has(campo)) {
+        const distintos = new Set(vistos.map((v) => v.valor));
+        if (distintos.size > 1) {
+          conflictos.push({ campo, elegido: fmt(campo, elegido), valores: vistos });
+        }
       }
       return elegido;
     }
