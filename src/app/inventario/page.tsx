@@ -244,6 +244,14 @@ export default function InventarioPage() {
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <ExportExcelButton url="/api/inventario/productos/export" />
+          {isAdmin && (
+            <a
+              href="/inventario/import-inicial"
+              className="rounded-lg border-2 border-[#4FAEB2]/40 bg-[#E5F4F4] px-3 py-2 text-xs font-semibold text-[#3F8E91] transition hover:border-[#4FAEB2] hover:bg-[#4FAEB2] hover:text-white"
+            >
+              Importación inicial
+            </a>
+          )}
           <ImportExcelButton
             entidad="Productos"
             previewUrl="/api/inventario/productos/import/preview"

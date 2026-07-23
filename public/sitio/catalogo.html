@@ -252,7 +252,7 @@ class Component extends DCLogic {
     clearTimeout(this._toastTimer);
     this._toastTimer = setTimeout(() => this.setState({ toast: false }), 2500);
   }
-  get wa() { return (this.props.numeroWhatsapp || '595983908535').replace(/[^0-9]/g, ''); }
+  get wa() { return (this.props.numeroWhatsapp || '595994707092').replace(/[^0-9]/g, ''); }
   fmt(n) { return 'Gs. ' + String(n).replace(/\B(?=(\d{3})+(?!\d))/g, '.'); }
   norm(s) { return (s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase(); }
 
