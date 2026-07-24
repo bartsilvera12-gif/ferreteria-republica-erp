@@ -20,8 +20,14 @@ const S = `"ferreteriarepublica"`;
 interface NuevoUsuario {
   auth_id: string;
   nombre: string;
-  rol: "administrador" | "supervisor" | "vendedor";
-  /** Solo para roles no admin. Vacío = usa lo que herede del rol. */
+  /**
+   * `usuario` es el rol neutro para accesos acotados: recibe EXACTAMENTE los
+   * módulos que se le asignan. Ojo con `supervisor`: el sistema le concede
+   * además los módulos de omnicanal (conversaciones, monitoreo) si están
+   * activos en la empresa, aunque no se los asignes.
+   */
+  rol: "administrador" | "usuario" | "vendedor";
+  /** Solo para roles no admin. */
   modulos: string[];
   nota: string;
 }
@@ -42,9 +48,16 @@ const USUARIOS: NuevoUsuario[] = [
   // Queda afuera `configuracion` (usuarios, timbrado, datos de la empresa) y
   // `reportes` (reportes de gestión), que son las de control.
   { auth_id: "28f98d9a-7e43-4849-932d-018fc874ea29", nombre: "Dahiana Miranda",
-    rol: "supervisor",
+    rol: "usuario",
     modulos: ["dashboard", "ventas", "inventario", "clientes", "presupuestos", "compras", "gastos"],
     nota: "Semi completo: factura, caja, ventas y stock. Sin configuración ni reportes." },
+
+  // ── Compras + operación ──────────────────────────────────────────────────
+  // "Órdenes de compra" vive dentro del módulo `compras` (junto a Proveedores).
+  { auth_id: "bc97468b-2eec-4d8b-a3c5-0ebcf6382138", nombre: "David Villar",
+    rol: "usuario",
+    modulos: ["compras", "ventas", "inventario"],
+    nota: "Compras, órdenes de compra, ventas y stock." },
 
   // ── Caja / Ventas ────────────────────────────────────────────────────────
   { auth_id: "3c7994da-066e-4375-aa3f-8ee16546e59e", nombre: "Pablino Caballero",
@@ -53,9 +66,6 @@ const USUARIOS: NuevoUsuario[] = [
     rol: "vendedor", modulos: ["ventas"], nota: "Caja y ventas" },
   { auth_id: "8c735f1f-2573-4aa2-8574-1ba91e1ef210", nombre: "Thiago Sanabria",
     rol: "vendedor", modulos: ["ventas"], nota: "Caja y ventas" },
-
-  // David Villar (bc97468b-2eec-4d8b-a3c5-0ebcf6382138) queda pendiente:
-  // no se indicó su nivel de acceso.
 ];
 
 const has = (n: string) => process.argv.includes(`--${n}`);
