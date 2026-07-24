@@ -134,6 +134,20 @@ function AuthGuardInner({ children }: { children: React.ReactNode }) {
       !access.superAdmin &&
       !isModuleSlugGranted(slug, access.slugs, access.inactiveSlugs, { strict: access.strict })
     ) {
+      // El usuario cayó en un módulo que no tiene (típico: un cajero entra a
+      // "/" = dashboard). En vez de mostrarle un cartel de error, lo mandamos
+      // solo a la primera sección a la que sí puede entrar (para un cajero, la
+      // Caja). El cartel queda como último recurso si no hay adónde ir.
+      const fallback = firstAccessibleHref(access.slugs, {
+        superAdmin: access.superAdmin,
+        inactiveSlugs: access.inactiveSlugs,
+        strict: access.strict,
+      });
+      if (fallback && fallback !== pathname) {
+        router.replace(fallback);
+        setBlockedSlug(null);
+        return;
+      }
       setBlockedSlug(slug);
       return;
     }
