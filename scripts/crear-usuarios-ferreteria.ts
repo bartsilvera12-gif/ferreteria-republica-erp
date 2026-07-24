@@ -61,11 +61,11 @@ const USUARIOS: NuevoUsuario[] = [
 
   // ── Caja / Ventas ────────────────────────────────────────────────────────
   { auth_id: "3c7994da-066e-4375-aa3f-8ee16546e59e", nombre: "Pablino Caballero",
-    rol: "vendedor", modulos: ["ventas"], nota: "Ventas" },
+    rol: "vendedor", modulos: ["ventas", "presupuestos"], nota: "Ventas y presupuestos" },
   { auth_id: "bdea35f3-f455-4d23-a71a-a1334c0adfc1", nombre: "Julio Aranda",
-    rol: "vendedor", modulos: ["ventas"], nota: "Caja y ventas" },
+    rol: "vendedor", modulos: ["ventas", "presupuestos"], nota: "Caja, ventas y presupuestos" },
   { auth_id: "8c735f1f-2573-4aa2-8574-1ba91e1ef210", nombre: "Thiago Sanabria",
-    rol: "vendedor", modulos: ["ventas"], nota: "Caja y ventas" },
+    rol: "vendedor", modulos: ["ventas", "presupuestos"], nota: "Caja, ventas y presupuestos" },
 ];
 
 const has = (n: string) => process.argv.includes(`--${n}`);
