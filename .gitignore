@@ -48,3 +48,4 @@ e2e-super-admin*.png
 
 # Detalle de asignacion automatica de categorias (datos, para rollback)
 categorias-asignadas-*.json
+categorias-por-reglas-*.json
