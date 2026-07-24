@@ -4,7 +4,6 @@ import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import {
   apiCreateCliente,
-  apiCreateFactura,
   apiCreateSuscripcion,
   apiGetGestionTributariaClientes,
   apiGetObligacionesTributariasCatalogo,
@@ -116,13 +115,6 @@ function NuevoClienteForm() {
     generar_factura:   false,
   });
 
-  // Campos factura inicial Contado
-  const [formContado, setFormContado] = useState({
-    emitir_factura: false,
-    monto:         "",
-    descripcion:   "Venta al contado",
-  });
-
   const [gestionTributariaEmpresa, setGestionTributariaEmpresa] = useState(false);
   const [catalogoObligaciones, setCatalogoObligaciones] = useState<
     { id: string; slug: string; nombre: string; requiere_detalle_otro: boolean }[]
@@ -181,13 +173,6 @@ function NuevoClienteForm() {
     };
   }, []);
 
-  // Contado: al elegir plan, precargar monto de factura con el precio del plan (editable después).
-  useEffect(() => {
-    if (form.condicion_pago !== "CONTADO") return;
-    const p = planes.find((x) => x.id === formSusc.plan_id);
-    if (p) setFormContado((fc) => ({ ...fc, monto: String(p.precio) }));
-  }, [formSusc.plan_id, form.condicion_pago, planes]);
-
   // Pre-fill desde CRM si viene con ?from_crm=id
   useEffect(() => {
     if (!fromCrmId) return;
@@ -242,11 +227,6 @@ function NuevoClienteForm() {
       if (!formSusc.plan_id.trim()) return setError("Seleccioná un plan para clientes mensuales.");
       const precio = parseFloat(formSusc.precio) || 0;
       if (precio <= 0) return setError("El precio debe ser mayor a 0.");
-    }
-
-    if (form.condicion_pago === "CONTADO" && formContado.emitir_factura) {
-      const monto = parseFloat(formContado.monto) || 0;
-      if (monto <= 0) return setError("El monto de la factura debe ser mayor a 0.");
     }
 
     if (gestionTributariaEmpresa && formTributario.perfil_activo) {
@@ -369,23 +349,6 @@ function NuevoClienteForm() {
         dia_vencimiento: parseInt(formSusc.dia_vencimiento, 10) || 10,
         generar_factura_este_mes: formSusc.generar_factura,
       });
-    }
-
-    // Crear factura inicial si condicion_pago = CONTADO y Emitir factura
-    if (form.condicion_pago === "CONTADO" && formContado.emitir_factura) {
-      const monto = parseFloat(formContado.monto) || 0;
-      if (monto > 0) {
-        const hoy = new Date().toISOString().slice(0, 10);
-        await apiCreateFactura({
-          cliente_id: clienteId,
-          fecha: hoy,
-          fecha_vencimiento: hoy,
-          monto,
-          tipo: "contado",
-          moneda: form.moneda_preferida,
-          descripcion_linea: formContado.descripcion.trim() || "Venta al contado",
-        });
-      }
     }
 
     // Marcar prospecto CRM como cliente_creado
@@ -828,45 +791,6 @@ function NuevoClienteForm() {
                 </select>
               </div>
             </div>
-            )}
-
-            {/* Campos factura inicial Contado */}
-            {form.condicion_pago === "CONTADO" && (
-              <div className="mt-6 p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-4">
-                <SectionTitle>Facturación al contado</SectionTitle>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="emitir_contado"
-                    checked={formContado.emitir_factura}
-                    onChange={(e) => setFormContado((p) => ({ ...p, emitir_factura: e.target.checked }))}
-                  />
-                  <label htmlFor="emitir_contado" className="text-sm text-slate-600">Emitir factura inicial</label>
-                </div>
-                {formContado.emitir_factura && (
-                  <>
-                    <div>
-                      <label className={labelClass}>Monto (Gs.)</label>
-                      <MontoInput
-                        value={formContado.monto}
-                        onChange={(n) => setFormContado((p) => ({ ...p, monto: String(n) }))}
-                        className={inputClass}
-                        placeholder="Monto de la factura"
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Descripción</label>
-                      <input
-                        type="text"
-                        value={formContado.descripcion}
-                        onChange={(e) => setFormContado((p) => ({ ...p, descripcion: e.target.value }))}
-                        className={inputClass}
-                        placeholder="Venta al contado"
-                      />
-                    </div>
-                  </>
-                )}
-              </div>
             )}
 
             {/* Campos de suscripción (solo cuando condicion_pago = MENSUAL) */}
