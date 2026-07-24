@@ -14,6 +14,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import {
   permiteDecimales, pasoCantidad, minimoCantidad, parseCantidad, clampCantidad,
+  formatStockConUnidad,
 } from "@/lib/productos/unidades";
 import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
 
@@ -1077,7 +1078,7 @@ export default function NuevaVentaPage() {
                                 <span className="font-mono">{p.sku}</span>
                                 <span className="text-slate-300">·</span>
                                 <span className={`font-semibold ${!controla ? "text-slate-400" : sinStock ? "text-red-600" : (p.stock_actual ?? 0) < 5 ? "text-amber-600" : "text-emerald-700"}`}>
-                                  {!controla ? "Sin control" : sinStock ? "Sin stock" : `${p.stock_actual} ${p.unidad_medida ?? ""}`}
+                                  {!controla ? "Sin control" : sinStock ? "Sin stock" : formatStockConUnidad(p.stock_actual ?? 0, p.unidad_medida)}
                                 </span>
                               </div>
                             </div>

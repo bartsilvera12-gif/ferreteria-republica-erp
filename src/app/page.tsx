@@ -40,6 +40,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { etiquetaVisibleTipoServicio } from "@/lib/clientes/tipo-servicio-catalogo";
 import { useMapNombreTipoServicioCatalogo } from "@/lib/clientes/use-map-nombre-tipo-servicio";
 import { getEtapas, getEtapaClasses, normalizeEtapaCodigo, type EtapaCrm } from "@/lib/crm/etapas";
+import { formatStock, formatStockConUnidad } from "@/lib/productos/unidades";
 import {
   isDashboardTabSlug,
   type DashboardTabSlug,
@@ -1673,7 +1674,7 @@ const DashInventario = memo(function DashInventario({
                       <td className="px-3 py-2.5 text-xs font-semibold text-slate-900">{p.nombre}</td>
                       <td className="px-3 py-2.5">
                         <span className={`text-xs font-bold tabular-nums ${p.stock_actual <= 0 ? "text-red-600" : "text-amber-600"}`}>
-                          {p.stock_actual} {p.unidad_medida}
+                          {formatStockConUnidad(p.stock_actual, p.unidad_medida)}
                         </span>
                       </td>
                       <td className="px-3 py-2.5 text-xs font-medium text-slate-600 tabular-nums">{p.stock_minimo} {p.unidad_medida}</td>
@@ -1723,7 +1724,7 @@ const DashInventario = memo(function DashInventario({
                     </td>
                     <td className="px-3 py-2.5 text-xs font-semibold text-slate-900">{p.nombre}</td>
                     <td className="px-3 py-2.5 font-mono text-xs font-medium text-[#3F8E91]">{p.sku}</td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums font-medium text-slate-700">{p.stock_actual}</td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums font-medium text-slate-700">{formatStock(p.stock_actual, p.unidad_medida)}</td>
                     <td className="px-3 py-2.5 text-xs tabular-nums text-slate-600">Gs. {formatGs(p.costo_promedio)}</td>
                     <td className="px-3 py-2.5 text-xs tabular-nums font-bold text-slate-900">Gs. {formatGs(p.valor)}</td>
                   </tr>

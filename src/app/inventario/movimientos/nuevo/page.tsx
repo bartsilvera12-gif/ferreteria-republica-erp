@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import { getProductos, saveMovimiento } from "@/lib/inventario/storage";
 import type { Producto, TipoMovimiento, OrigenMovimiento } from "@/lib/inventario/types";
+import { formatStockConUnidad } from "@/lib/productos/unidades";
 
 export default function NuevoMovimientoPage() {
   const router = useRouter();
@@ -104,7 +105,7 @@ export default function NuevoMovimientoPage() {
               <option value="">Seleccionar producto...</option>
               {productos.map((p) => (
                 <option key={p.id} value={String(p.id)}>
-                  {p.nombre} — {p.sku} (stock actual: {p.stock_actual})
+                  {p.nombre} — {p.sku} (stock actual: {formatStockConUnidad(p.stock_actual, p.unidad_medida)})
                 </option>
               ))}
             </select>
@@ -189,7 +190,7 @@ export default function NuevoMovimientoPage() {
               <div className="flex justify-between text-gray-600">
                 <span>Stock actual</span>
                 <span className="font-semibold tabular-nums">
-                  {productoSeleccionado.stock_actual} uds.
+                  {formatStockConUnidad(productoSeleccionado.stock_actual, productoSeleccionado.unidad_medida)}
                 </span>
               </div>
               <div className="flex justify-between text-gray-600">

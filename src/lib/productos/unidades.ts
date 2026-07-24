@@ -80,3 +80,38 @@ export function formatCantidad(n: number, unidad?: string | null): string {
     ? String(redondearCantidad(n, unidad))
     : String(Math.round(n));
 }
+
+/**
+ * Formatea el STOCK igual que el catálogo del cliente.
+ *
+ * Su sistema exporta los productos por peso o medida con 3 decimales fijos
+ * ("19.890" = 19,89 kg). Mostrarlo con menos decimales lo obliga a traducir
+ * mentalmente entre su planilla y el ERP al hacer inventario, así que se
+ * respeta ese formato tal cual.
+ *
+ * Los productos por UNIDAD van sin decimales: "19,890" para 19 martillos
+ * sería confuso y además no es lo que muestra su catálogo.
+ *
+ * El separador sigue la convención local (es-PY): coma decimal y punto para
+ * los miles, consistente con cómo se muestran los importes en todo el sistema.
+ */
+export function formatStock(valor: number, unidad?: string | null): string {
+  const n = Number(valor);
+  if (!Number.isFinite(n)) return "0";
+  if (permiteDecimales(unidad)) {
+    return n.toLocaleString("es-PY", { minimumFractionDigits: 3, maximumFractionDigits: 3 });
+  }
+  // Unidad no fraccionable. Si aun así el stock tiene decimales (pasa cuando el
+  // catálogo de origen trae mal la unidad: "CABLE ... X METRO" marcado como
+  // UNIDAD), se muestran igual. Ocultarlos mostraría un número distinto al
+  // que está guardado, y el conteo físico nunca cerraría.
+  return n.toLocaleString("es-PY", {
+    maximumFractionDigits: n === Math.trunc(n) ? 0 : 3,
+  });
+}
+
+/** Stock + unidad, listo para mostrar: "19,890 KG" / "59 UNIDAD". */
+export function formatStockConUnidad(valor: number, unidad?: string | null): string {
+  const u = String(unidad ?? "").trim();
+  return u ? `${formatStock(valor, unidad)} ${u}` : formatStock(valor, unidad);
+}

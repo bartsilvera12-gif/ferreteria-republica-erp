@@ -10,6 +10,7 @@ import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
+import { formatStock } from "@/lib/productos/unidades";
 import {
   Search,
   ChevronLeft,
@@ -34,9 +35,8 @@ function formatGs(valor: number) {
   return `Gs. ${valor.toLocaleString("es-PY")}`;
 }
 
-function formatStock(valor: number) {
-  return valor.toLocaleString("es-PY", { maximumFractionDigits: 3 });
-}
+// El formato del stock vive en @/lib/productos/unidades para que el listado,
+// la venta y el dashboard muestren siempre lo mismo que el catálogo del cliente.
 
 function calcularMargenVenta(costo: number, precio: number): number {
   if (precio === 0) return 0;
@@ -496,7 +496,7 @@ export default function InventarioPage() {
                                 : "bg-slate-50 text-slate-500 ring-1 ring-slate-200"
                             }`}
                           >
-                            {formatStock(p.stock_actual)}
+                            {formatStock(p.stock_actual, p.unidad_medida)}
                             <span className="text-[10px] font-normal opacity-80">
                               {p.unidad_medida}
                             </span>
