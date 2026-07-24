@@ -13,6 +13,11 @@ export interface LineaVenta {
   sku:                   string;
   /** Cantidad en la PRESENTACION elegida (ej. 2 = 2 cajas o 10 unidades). */
   cantidad:              number;
+  /**
+   * Unidad de medida del producto. Define si la cantidad admite decimales:
+   * KILOGRAMO/METRO/LITRO sí (medio kilo de clavos), UNIDAD no.
+   */
+  unidad_medida?:        string | null;
   precio_venta_original: number;  // en la moneda elegida
   precio_venta:          number;  // siempre en GS, POR PRESENTACION
   tipo_iva:              TipoIvaVenta;

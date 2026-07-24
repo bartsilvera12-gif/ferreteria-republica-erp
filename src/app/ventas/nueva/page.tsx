@@ -12,6 +12,9 @@ import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
+import {
+  permiteDecimales, pasoCantidad, minimoCantidad, parseCantidad, clampCantidad,
+} from "@/lib/productos/unidades";
 import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
 
 /** Miniatura de producto con fallback a un placeholder si no hay imagen o falla. */
@@ -290,6 +293,7 @@ export default function NuevaVentaPage() {
         producto_nombre: p.nombre,
         sku: p.sku,
         cantidad,
+        unidad_medida: p.unidad_medida ?? "UNIDAD",
         precio_venta_original: precio_input,
         precio_venta: precioPyg,
         tipo_iva: iva,
@@ -665,6 +669,7 @@ export default function NuevaVentaPage() {
           producto_nombre: p.nombre,
           sku: p.sku,
           cantidad: 1,
+          unidad_medida: p.unidad_medida ?? "UNIDAD",
           precio_venta_original: precio,
           precio_venta: precio,
           tipo_iva: "10%",
@@ -688,8 +693,15 @@ export default function NuevaVentaPage() {
   function updateItemCampo(idx: number, patch: Partial<LineaVenta>) {
     setItems((prev) => prev.map((it, i) => (i === idx ? recomputeLinea({ ...it, ...patch }) : it)));
   }
+  /** delta viene en "pasos": el tamaño real depende de la unidad del producto. */
   function changeCantidadItem(idx: number, delta: number) {
-    setItems((prev) => prev.map((it, i) => (i === idx ? recomputeLinea({ ...it, cantidad: Math.max(1, it.cantidad + delta) }) : it)));
+    setItems((prev) =>
+      prev.map((it, i) => {
+        if (i !== idx) return it;
+        const paso = pasoCantidad(it.unidad_medida);
+        return recomputeLinea({ ...it, cantidad: clampCantidad(it.cantidad + delta * paso, it.unidad_medida) });
+      })
+    );
   }
   function changeTipoPrecioItem(idx: number, tipo: TipoPrecioVenta) {
     setItems((prev) =>
@@ -1169,12 +1181,32 @@ export default function NuevaVentaPage() {
                             <div className="mx-auto flex w-fit items-center rounded-md border border-slate-200 bg-white">
                               <button type="button" onClick={() => changeCantidadItem(idx, -1)} className="h-8 w-8 rounded-l-md text-slate-500 hover:bg-slate-100"><Minus className="mx-auto h-3.5 w-3.5" /></button>
                               <input
-                                type="number" min={1} value={item.cantidad}
-                                onChange={(e) => updateItemCampo(idx, { cantidad: Math.max(1, parseInt(e.target.value) || 1) })}
-                                className="h-8 w-12 text-center text-sm tabular-nums outline-none"
+                                type="number"
+                                inputMode={permiteDecimales(item.unidad_medida) ? "decimal" : "numeric"}
+                                min={minimoCantidad(item.unidad_medida)}
+                                step={pasoCantidad(item.unidad_medida)}
+                                value={item.cantidad}
+                                onChange={(e) => {
+                                  // null = todavía no es un número válido: lo dejamos
+                                  // escribir en vez de saltar a 1.
+                                  const n = parseCantidad(e.target.value, item.unidad_medida);
+                                  if (n !== null) updateItemCampo(idx, { cantidad: n });
+                                }}
+                                onBlur={(e) => {
+                                  const n = parseCantidad(e.target.value, item.unidad_medida);
+                                  updateItemCampo(idx, { cantidad: clampCantidad(n ?? 0, item.unidad_medida) });
+                                }}
+                                className={`h-8 text-center text-sm tabular-nums outline-none ${
+                                  permiteDecimales(item.unidad_medida) ? "w-16" : "w-12"
+                                }`}
                               />
                               <button type="button" onClick={() => changeCantidadItem(idx, 1)} className="h-8 w-8 rounded-r-md text-slate-500 hover:bg-slate-100"><Plus className="mx-auto h-3.5 w-3.5" /></button>
                             </div>
+                            {permiteDecimales(item.unidad_medida) && (
+                              <p className="mt-0.5 text-center text-[10px] font-semibold uppercase text-[#3F8E91]">
+                                {item.unidad_medida}
+                              </p>
+                            )}
                           </td>
                           {/* Precio unitario editable */}
                           <td className="px-3 py-2.5 text-right">

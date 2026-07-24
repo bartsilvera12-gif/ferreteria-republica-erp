@@ -8,6 +8,7 @@ import SelectFromList from "@/components/inventario/SelectFromList";
 import { productoExiste, saveProducto } from "@/lib/inventario/storage";
 import type { MetodoValuacion } from "@/lib/inventario/types";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
+import { permiteDecimales, pasoCantidad, redondearCantidad } from "@/lib/productos/unidades";
 
 // Opciones estándar de unidad de medida para gastro
 const UNIDADES_OPCIONES = [
@@ -335,8 +336,9 @@ export default function NuevoProductoPage() {
           precio_mayorista: form.precio_mayorista.trim() !== "" ? parseFloat(form.precio_mayorista) || null : null,
           precio_distribuidor: form.precio_distribuidor.trim() !== "" ? parseFloat(form.precio_distribuidor) || null : null,
           cantidad_minima_mayorista: form.cantidad_minima_mayorista.trim() !== "" ? parseFloat(form.cantidad_minima_mayorista) || null : null,
-          stock_actual: parseInt(form.stock_actual) || 0,
-          stock_minimo: parseInt(form.stock_minimo) || 0,
+          // parseFloat: los productos por kilo/metro se cargan fraccionados.
+          stock_actual: redondearCantidad(parseFloat(form.stock_actual.replace(",", ".")) || 0, form.unidad_medida),
+          stock_minimo: redondearCantidad(parseFloat(form.stock_minimo.replace(",", ".")) || 0, form.unidad_medida),
           unidad_medida: form.unidad_medida.trim().toUpperCase(),
           metodo_valuacion: form.metodo_valuacion,
           codigo_barras: codigo,
@@ -1168,6 +1170,8 @@ export default function NuevoProductoPage() {
                   placeholder="Ej: 50"
                   className={inputClass}
                   min={0}
+                  step={pasoCantidad(form.unidad_medida)}
+                  inputMode={permiteDecimales(form.unidad_medida) ? "decimal" : "numeric"}
                   required={showStock}
                 />
               </div>

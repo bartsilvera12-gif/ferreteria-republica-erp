@@ -329,7 +329,11 @@ export async function updateProductoPrecios(
 /** Actualiza producto via API server-side (PATCH /api/productos/[id]). */
 export async function updateProducto(
   id: string,
-  datos: Partial<Omit<Producto, "id">>
+  /**
+   * `motivo_ajuste` no es un campo del producto: es la referencia que queda en
+   * el movimiento de inventario cuando se cambia el stock desde la ficha.
+   */
+  datos: Partial<Omit<Producto, "id">> & { motivo_ajuste?: string | null }
 ): Promise<Producto | null> {
   const body: Record<string, unknown> = {};
   if (datos.nombre !== undefined) body.nombre = datos.nombre;
@@ -341,6 +345,7 @@ export async function updateProducto(
   if (datos.precio_distribuidor !== undefined) body.precio_distribuidor = datos.precio_distribuidor ?? null;
   if (datos.stock_actual !== undefined) body.stock_actual = datos.stock_actual;
   if (datos.stock_minimo !== undefined) body.stock_minimo = datos.stock_minimo;
+  if (datos.motivo_ajuste !== undefined) body.motivo_ajuste = datos.motivo_ajuste;
   if (datos.unidad_medida !== undefined) body.unidad_medida = datos.unidad_medida;
   if (datos.metodo_valuacion !== undefined) body.metodo_valuacion = datos.metodo_valuacion;
   if (datos.codigo_barras !== undefined) body.codigo_barras = datos.codigo_barras ?? null;

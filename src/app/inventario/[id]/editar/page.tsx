@@ -12,6 +12,7 @@ import ProductImageUploader from "@/components/inventario/ProductImageUploader";
 import SelectFromList from "@/components/inventario/SelectFromList";
 import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
+import { permiteDecimales, pasoCantidad, redondearCantidad } from "@/lib/productos/unidades";
 
 // Opciones estándar de unidad de medida (UX simplificada gastro)
 const UNIDADES_OPCIONES = [
@@ -54,7 +55,10 @@ export default function EditarProductoPage() {
     stock_minimo: "",
     unidad_medida: "",
     metodo_valuacion: "CPP" as MetodoValuacion,
+    motivo_ajuste: "",
   });
+  /** Stock con el que se cargó la ficha, para saber si el usuario lo cambió. */
+  const [stockOriginal, setStockOriginal] = useState<string>("");
   const [imagenPath, setImagenPath] = useState<string | null>(null);
   const [imagenUrl, setImagenUrl] = useState<string | null>(null);
   const [codigoOriginal, setCodigoOriginal] = useState<string | null>(null);
@@ -215,7 +219,9 @@ export default function EditarProductoPage() {
         stock_minimo: String(p.stock_minimo),
         unidad_medida: p.unidad_medida,
         metodo_valuacion: p.metodo_valuacion,
+        motivo_ajuste: "",
       });
+      setStockOriginal(String(p.stock_actual));
       setCodigoOriginal(p.codigo_barras ?? null);
       setImagenPath(p.imagen_path ?? null);
       setImagenUrl(p.imagen_url ?? null);
@@ -368,8 +374,12 @@ export default function EditarProductoPage() {
         precio_mayorista: form.precio_mayorista.trim() !== "" ? parseFloat(form.precio_mayorista) || null : null,
         cantidad_minima_mayorista: form.cantidad_minima_mayorista.trim() !== "" ? parseFloat(form.cantidad_minima_mayorista) || null : null,
         precio_distribuidor: form.precio_distribuidor.trim() !== "" ? parseFloat(form.precio_distribuidor) || null : null,
-        stock_actual: parseInt(form.stock_actual) || 0,
-        stock_minimo: parseInt(form.stock_minimo) || 0,
+        // parseFloat, no parseInt: con parseInt un producto por kilo perdía los
+        // decimales al guardar (19,89 kg se convertía en 19).
+        stock_actual: redondearCantidad(parseFloat(form.stock_actual.replace(",", ".")) || 0, form.unidad_medida),
+        stock_minimo: redondearCantidad(parseFloat(form.stock_minimo.replace(",", ".")) || 0, form.unidad_medida),
+        // El backend registra el movimiento de ajuste con este motivo y el usuario.
+        motivo_ajuste: stockCambio ? form.motivo_ajuste.trim() || null : null,
         unidad_medida: form.unidad_medida.trim().toUpperCase() || "UNIDAD",
         metodo_valuacion: form.metodo_valuacion,
         categoria_principal_id: categoriaId,
@@ -435,6 +445,11 @@ export default function EditarProductoPage() {
 
   // Reventa y Materia prima mantienen stock visible; el Menú no descuenta stock propio.
   const showStock = tipoGastro === "reventa" || tipoGastro === "materia";
+  /** ¿El usuario tocó el stock? Se compara numérico para que "19.90" == "19.9". */
+  const stockCambio =
+    stockOriginal !== "" &&
+    redondearCantidad(parseFloat(form.stock_actual.replace(",", ".")) || 0, form.unidad_medida) !==
+      redondearCantidad(parseFloat(stockOriginal) || 0, form.unidad_medida);
   const showPrecioVenta = tipoGastro !== "materia";
 
   return (
@@ -1101,11 +1116,30 @@ export default function EditarProductoPage() {
                 onChange={handleChange}
                 className={inputClass}
                 min={0}
+                step={pasoCantidad(form.unidad_medida)}
+                inputMode={permiteDecimales(form.unidad_medida) ? "decimal" : "numeric"}
                 required={showStock}
               />
               <p className="mt-1 text-xs text-gray-400">
-                Para ajustes de stock, preferí registrar un <Link href="/inventario/movimientos/nuevo" className="underline">movimiento</Link>.
+                Si cambiás este valor se registra un movimiento de ajuste a tu nombre.
+                También podés cargar un <Link href="/inventario/movimientos/nuevo" className="underline">movimiento</Link> directo.
               </p>
+              {stockCambio && (
+                <div className="mt-2">
+                  <label className="block text-xs font-semibold text-slate-600">
+                    Motivo del ajuste <span className="font-normal text-slate-400">(queda en el historial)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="motivo_ajuste"
+                    value={form.motivo_ajuste}
+                    onChange={handleChange}
+                    placeholder="Ej: recuento físico, rotura, diferencia de inventario"
+                    className={inputClass}
+                    maxLength={200}
+                  />
+                </div>
+              )}
             </div>
             <div>
               <label className={labelClass}>Stock mínimo</label>
