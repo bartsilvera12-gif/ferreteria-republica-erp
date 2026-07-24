@@ -753,10 +753,28 @@ export default function NuevaVentaPage() {
     if (isSubmittingRef.current) return;
     isSubmittingRef.current = true;
     setGuardando(true);
+
+    // La ventana del documento se abre ACÁ, todavía dentro del clic del cajero.
+    // Si se abriera después del `await` de guardar la venta, el navegador ya no
+    // la considera abierta por el usuario y la bloquea: por eso la factura no
+    // salía sola. Se abre en blanco y luego se la manda al documento.
+    // Declarada fuera del try para poder cerrarla en el finally.
+    let ventanaDoc: Window | null = null;
     try {
       // El cliente se elige (o se crea con el modal "Crear cliente") antes de
       // confirmar. Si no hay ninguno, la venta se registra sin cliente.
       const clienteIdFinal = clienteId;
+
+      try {
+        ventanaDoc = window.open("", "_blank");
+        if (ventanaDoc) {
+          ventanaDoc.document.write(
+            `<!doctype html><meta charset="utf-8"><title>Preparando documento…</title>` +
+            `<body style="font-family:system-ui,sans-serif;display:grid;place-items:center;height:100vh;margin:0;color:#3F8E91">` +
+            `<p>Registrando la venta…</p></body>`
+          );
+        }
+      } catch { ventanaDoc = null; }
 
       const resultado = await saveVenta(
         {
@@ -788,6 +806,9 @@ export default function NuevaVentaPage() {
       );
 
       if (!resultado.success) {
+        // La venta no se registró: se cierra la ventana que se había abierto
+        // para el documento, si no queda una pestaña vacía dando vueltas.
+        try { ventanaDoc?.close(); } catch {}
         // Falta stock sin autorizar → abrir modal de confirmación con el detalle.
         // (El guard se libera en el finally para permitir confirmar sin stock.)
         if (resultado.faltantes && resultado.faltantes.length > 0) {
@@ -808,15 +829,23 @@ export default function NuevaVentaPage() {
       // Si se seleccionó cliente, la venta se factura: abrimos la FACTURA (mismo
       // ticket pero con los datos fiscales). Sin cliente, el ticket interno.
       const docUrl = clienteId ? facturaUrl : ticketUrl;
-      // Intento de apertura automática (popup; el navegador puede bloquearlo).
-      // Si pasa, el cajero puede reimprimir el documento desde el listado.
-      try { window.open(docUrl, "_blank", "noopener"); } catch {}
+      // Se reutiliza la ventana abierta durante el clic. Si el navegador la
+      // bloqueó igual, se intenta abrir ahora como último recurso.
+      if (ventanaDoc && !ventanaDoc.closed) {
+        try { ventanaDoc.location.replace(docUrl); }
+        catch { try { window.open(docUrl, "_blank", "noopener"); } catch {} }
+      } else {
+        try { window.open(docUrl, "_blank", "noopener"); } catch {}
+      }
       if (generaNota) { try { window.open(remisionUrl, "_blank", "noopener"); } catch {} }
       // Redirige directo al listado de ventas en lugar de mostrar el modal
       // post-venta. El cajero queda libre para registrar otra venta de
       // inmediato. El ticket sigue accesible desde el listado.
       router.push("/ventas");
+      ventanaDoc = null; // ya navegó al documento: el finally no debe cerrarla
     } finally {
+      // Si quedó abierta sin destino (excepción inesperada), se cierra.
+      try { ventanaDoc?.close(); } catch {}
       // Liberar el guard SIEMPRE: éxito, error o flujo de "confirmar sin stock".
       isSubmittingRef.current = false;
       setGuardando(false);
