@@ -8,6 +8,8 @@ import { getOrdenCompra, confirmarRecepcionOrdenCompra, type ExcedenteDetalle } 
 import { uploadComprobante } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { OrdenCompra } from "@/lib/ordenes-compra/types";
+import { parseCantidad, pasoCantidad, permiteDecimales } from "@/lib/productos/unidades";
+import ConfirmModal from "@/components/ui/ConfirmModal";
 
 function fmtGs(v: number) {
   return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`;
@@ -52,6 +54,7 @@ export default function DesdeOrdenRecepcionPage() {
   const [procesando, setProcesando] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [excedentes, setExcedentes] = useState<ExcedenteDetalle[] | null>(null);
+  const [confirmarOpen, setConfirmarOpen] = useState(false);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -94,7 +97,7 @@ export default function DesdeOrdenRecepcionPage() {
   const totalRecibidoAhora = useMemo(() => {
     return lineas.reduce((s, l) => {
       const r = recepcion[l.id];
-      const cant = r?.llego ? Number(r.cantidad) || 0 : 0;
+      const cant = r?.llego ? (parseCantidad(r.cantidad, l.unidad_medida) ?? 0) : 0;
       return s + cant * l.costo_unitario;
     }, 0);
   }, [lineas, recepcion]);
@@ -114,6 +117,25 @@ export default function DesdeOrdenRecepcionPage() {
     });
   }
 
+  /**
+   * Valida lo mínimo y, si está OK, abre el modal de confirmación. La
+   * confirmación real (que impacta stock y cierra la OC) la hace `enviar`.
+   */
+  function pedirConfirmacion() {
+    setErr(null);
+    if (!numeroFactura.trim()) { setErr("Ingresá el N° de factura."); return; }
+    if (!nroTimbrado.trim()) { setErr("Ingresá el N° de timbrado."); return; }
+    const hayRecibido = lineasConPendiente.some((l) => {
+      const r = recepcion[l.id];
+      return r?.llego && (parseCantidad(r.cantidad, l.unidad_medida) ?? 0) > 0;
+    });
+    if (!hayRecibido) {
+      setErr("Marcá al menos un producto como recibido para confirmar la compra.");
+      return;
+    }
+    setConfirmarOpen(true);
+  }
+
   async function enviar(permitirExcedente: boolean) {
     setErr(null);
     if (!numeroFactura.trim()) { setErr("Ingresá el N° de factura."); return; }
@@ -122,7 +144,7 @@ export default function DesdeOrdenRecepcionPage() {
     const items = lineasConPendiente
       .map((l) => {
         const r = recepcion[l.id];
-        const cantidad = r?.llego ? Number(r.cantidad) || 0 : 0;
+        const cantidad = r?.llego ? (parseCantidad(r.cantidad, l.unidad_medida) ?? 0) : 0;
         return { orden_item_id: l.id, cantidad_recibida: cantidad, observacion: r?.observacion || null };
       })
       .filter((it) => it.cantidad_recibida > 0);
@@ -133,7 +155,7 @@ export default function DesdeOrdenRecepcionPage() {
     }
     for (const l of lineasConPendiente) {
       const r = recepcion[l.id];
-      const cantidad = r?.llego ? Number(r.cantidad) || 0 : 0;
+      const cantidad = r?.llego ? (parseCantidad(r.cantidad, l.unidad_medida) ?? 0) : 0;
       if (cantidad < 0) { setErr(`${l.producto_nombre}: la cantidad recibida no puede ser negativa.`); return; }
     }
 
@@ -229,7 +251,7 @@ export default function DesdeOrdenRecepcionPage() {
             {lineas.map((l) => {
               const yaCompleta = l.cantidad_pendiente <= 0;
               const r = recepcion[l.id] ?? { llego: false, cantidad: "0", observacion: "" };
-              const cantidadAhora = r.llego ? Number(r.cantidad) || 0 : 0;
+              const cantidadAhora = r.llego ? (parseCantidad(r.cantidad, l.unidad_medida) ?? 0) : 0;
               const excede = cantidadAhora > l.cantidad_pendiente;
               return (
                 <tr key={l.id} className={yaCompleta ? "bg-slate-50/60 opacity-60" : ""}>
@@ -254,15 +276,25 @@ export default function DesdeOrdenRecepcionPage() {
                     {yaCompleta ? (
                       <span className="text-xs text-slate-400">completo</span>
                     ) : (
-                      <input
-                        type="number"
-                        min={0}
-                        step="any"
-                        disabled={!r.llego}
-                        value={r.cantidad}
-                        onChange={(e) => setLinea(l.id, { cantidad: e.target.value })}
-                        className={`w-24 rounded-lg border px-2 py-1.5 text-right text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 disabled:bg-slate-100 disabled:text-slate-400 ${excede ? "border-amber-400" : "border-slate-200"}`}
-                      />
+                      <div className="flex items-center justify-end gap-1.5">
+                        <input
+                          type="number"
+                          min={0}
+                          step={pasoCantidad(l.unidad_medida)}
+                          inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
+                          disabled={!r.llego}
+                          value={r.cantidad}
+                          onChange={(e) => setLinea(l.id, { cantidad: e.target.value })}
+                          onBlur={(e) => {
+                            // Normaliza a la unidad al salir del campo (coma→punto,
+                            // enteros en discretas), sin pisar mientras se escribe.
+                            const n = parseCantidad(e.target.value, l.unidad_medida);
+                            setLinea(l.id, { cantidad: n === null ? "" : String(n) });
+                          }}
+                          className={`w-24 rounded-lg border px-2 py-1.5 text-right text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 disabled:bg-slate-100 disabled:text-slate-400 ${excede ? "border-amber-400" : "border-slate-200"}`}
+                        />
+                        <span className="text-[10px] uppercase text-slate-400">{l.unidad_medida}</span>
+                      </div>
                     )}
                     {excede && <p className="mt-0.5 text-[10px] font-semibold text-amber-600">Excede lo pendiente</p>}
                   </td>
@@ -354,13 +386,25 @@ export default function DesdeOrdenRecepcionPage() {
             className="rounded-lg border border-slate-200 px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50">
             Cancelar
           </Link>
-          <button type="button" onClick={() => enviar(false)} disabled={procesando}
+          <button type="button" onClick={pedirConfirmacion} disabled={procesando}
             className="inline-flex items-center gap-2 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white hover:bg-[#3F8E91] disabled:opacity-50">
             {procesando && <Loader2 className="h-4 w-4 animate-spin" />}
             Confirmar compra y recepción
           </button>
         </div>
       </div>
+
+      {/* Confirmación de finalización: una vez confirmada, la OC no se edita. */}
+      <ConfirmModal
+        open={confirmarOpen}
+        title="Finalizar orden de compra"
+        message="¿Estás seguro de que deseas finalizar esta orden de compra? Una vez finalizada no podrá editarse."
+        confirmLabel="Finalizar orden"
+        cancelLabel="Cancelar"
+        loading={procesando}
+        onCancel={() => setConfirmarOpen(false)}
+        onConfirm={() => { setConfirmarOpen(false); enviar(false); }}
+      />
 
       {/* Modal de confirmación de excedente */}
       {excedentes && (

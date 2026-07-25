@@ -2,7 +2,8 @@ import type { OrdenCompra } from "./types";
 
 interface OrdenApiRow {
   id: string; numero_oc: string; proveedor_id: string; proveedor_nombre: string;
-  producto_id: string; producto_nombre: string; cantidad: string | number;
+  producto_id: string; producto_nombre: string; unidad_medida?: string | null;
+  cantidad: string | number;
   cantidad_recibida: string | number; moneda: string;
   tipo_cambio: string | number; costo_unitario_original: string | number;
   costo_unitario: string | number; iva_tipo: string;
@@ -23,6 +24,7 @@ function mapRow(r: OrdenApiRow): OrdenCompra {
     proveedor_nombre: r.proveedor_nombre,
     producto_id: r.producto_id,
     producto_nombre: r.producto_nombre,
+    unidad_medida: (r.unidad_medida ?? "UNIDAD") || "UNIDAD",
     cantidad,
     cantidad_recibida: cantidadRecibida,
     cantidad_pendiente: Math.max(0, cantidad - cantidadRecibida),

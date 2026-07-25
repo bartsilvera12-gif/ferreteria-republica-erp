@@ -329,6 +329,9 @@ export interface SearchHitRow {
   proveedor_nombre: string | null;
   ubicacion_nombre: string | null;
   ubicacion_tipo: string | null;
+  es_vendible: boolean;
+  es_insumo: boolean;
+  controla_stock: boolean;
 }
 
 /**
@@ -377,6 +380,7 @@ export async function searchProductosPg(
     SELECT p.id, p.nombre, p.sku, p.codigo_barras, p.codigo_barras_interno,
            p.precio_venta, p.costo_promedio, p.stock_actual, p.stock_minimo,
            p.unidad_medida, p.metodo_valuacion, p.imagen_path, p.imagen_url,
+           p.es_vendible, p.es_insumo, p.controla_stock,
            c.nombre  AS categoria_nombre,
            pr.nombre AS proveedor_nombre,
            u.nombre  AS ubicacion_nombre,

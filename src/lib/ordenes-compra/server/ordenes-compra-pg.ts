@@ -28,6 +28,8 @@ export interface OrdenCompraRow {
   proveedor_nombre: string;
   producto_id: string;
   producto_nombre: string;
+  /** Solo lo devuelve getOrdenCompra (via JOIN). En list/insert es undefined. */
+  unidad_medida?: string | null;
   cantidad: string | number;
   cantidad_recibida: string | number;
   moneda: string;
@@ -112,10 +114,15 @@ export async function getOrdenCompra(
 ): Promise<OrdenCompraRow[]> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const t = quoteSchemaTable(schema, "ordenes_compra");
+  const tProd = quoteSchemaTable(schema, "productos");
+  // JOIN a productos solo para traer la unidad de medida (define si la
+  // cantidad recibida admite decimales). La OC no la guarda denormalizada.
   const { rows } = await pool().query<OrdenCompraRow>(
-    `SELECT ${COLS} FROM ${t}
-      WHERE empresa_id = $1::uuid AND numero_oc = $2
-      ORDER BY created_at ASC`,
+    `SELECT oc.*, p.unidad_medida AS unidad_medida
+       FROM ${t} oc
+       LEFT JOIN ${tProd} p ON p.id = oc.producto_id
+      WHERE oc.empresa_id = $1::uuid AND oc.numero_oc = $2
+      ORDER BY oc.created_at ASC`,
     [empresaId, numeroOc]
   );
   return rows;

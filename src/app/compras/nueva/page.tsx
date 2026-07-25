@@ -6,11 +6,13 @@ import { Search, Trash2, X } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import { saveCompraMulti, uploadComprobante, type CompraItemPayload } from "@/lib/compras/storage";
 import { getProveedores, proveedorExiste, createProveedor } from "@/lib/proveedores/storage";
-import { getProductos, productoExiste, saveProducto } from "@/lib/inventario/storage";
+import { productoExiste, saveProducto } from "@/lib/inventario/storage";
 import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
 import type { Proveedor } from "@/lib/proveedores/types";
-import type { MetodoValuacion, Producto } from "@/lib/inventario/types";
+import type { MetodoValuacion } from "@/lib/inventario/types";
+import ProductoBuscadorInline from "@/components/inventario/ProductoBuscadorInline";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
+import { parseCantidad, pasoCantidad, permiteDecimales } from "@/lib/productos/unidades";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -46,6 +48,7 @@ type LineaCompra = {
   producto_id: string;
   producto_nombre: string;
   sku: string;
+  unidad_medida: string;
   es_insumo_no_vendible: boolean;
   cantidad: number;
   costo_unitario_input: number; // en la moneda de la cabecera
@@ -89,7 +92,6 @@ export default function NuevaCompraPage() {
   const router = useRouter();
 
   const [proveedores, setProveedores] = useState<Proveedor[]>([]);
-  const [productos, setProductos] = useState<Producto[]>([]);
 
   // Cabecera (compartida por toda la compra)
   const [cab, setCab] = useState({
@@ -148,8 +150,7 @@ export default function NuevaCompraPage() {
     const data = await getProveedores();
     setProveedores(data.filter((p) => p.estado === "activo"));
   }
-  function recargarProductos() { getProductos().then(setProductos); }
-  useEffect(() => { recargarProveedores(); recargarProductos(); }, []);
+  useEffect(() => { recargarProveedores(); }, []);
 
   const tipoCambioNum = cab.moneda === "USD" ? parseFloat(cab.tipo_cambio) || 0 : 1;
 
@@ -189,7 +190,10 @@ export default function NuevaCompraPage() {
   }, [lineas]);
 
   // ── Agregar / editar / quitar línea ─────────────────────────────────────────
-  function agregarProducto(prod: Producto) {
+  function agregarProducto(prod: {
+    id: string; nombre: string; sku: string; unidad_medida?: string;
+    es_insumo?: boolean; es_vendible?: boolean; costo_promedio?: number; precio_venta?: number;
+  }) {
     setErrorLinea(null);
     if (lineas.some((l) => l.producto_id === prod.id)) {
       setErrorLinea(`"${prod.nombre}" ya está en la compra. Ajustá su cantidad en la lista.`);
@@ -202,6 +206,7 @@ export default function NuevaCompraPage() {
         producto_id: prod.id,
         producto_nombre: prod.nombre,
         sku: prod.sku,
+        unidad_medida: prod.unidad_medida || "UNIDAD",
         es_insumo_no_vendible: insumoNoVendible,
         cantidad: 1,
         costo_unitario_input: prod.costo_promedio || 0,
@@ -366,9 +371,7 @@ export default function NuevaCompraPage() {
       ...flags,
     });
     if (!creado) return;
-    // Insert optimista + agregar como línea de la compra (auto-cargado).
-    setProductos((prev) => (prev.some((p) => p.id === creado.id) ? prev : [...prev, creado]));
-    recargarProductos();
+    // Recién creado: se agrega como línea de la compra (auto-cargado).
     agregarProducto(creado);
     setProductoCreado(creado.nombre);
     setMostrarFormProducto(false);
@@ -516,10 +519,9 @@ export default function NuevaCompraPage() {
             {/* Buscador: cada producto que elegís se agrega a la lista de abajo */}
             <div className="rounded-xl border border-dashed border-slate-300 p-4 space-y-3 bg-slate-50/40">
               <label className={labelSmClass}>Buscá y agregá productos <span className="text-red-500">*</span></label>
-              <ProductoBuscador
-                productos={productos}
+              <ProductoBuscadorInline
                 excludeIds={lineas.map((l) => l.producto_id)}
-                onPick={agregarProducto}
+                onSelect={agregarProducto}
               />
               {productoCreado && (
                 <p className="text-xs text-green-600">✓ Producto &quot;{productoCreado}&quot; creado y agregado a la compra.</p>
@@ -629,9 +631,27 @@ export default function NuevaCompraPage() {
                           )}
                         </td>
                         <td className="py-2 px-3">
-                          <input type="number" min={0} step="any" value={l.cantidad || ""}
-                            onChange={(e) => editarLinea(i, { cantidad: parseFloat(e.target.value) || 0 })}
-                            className="w-16 rounded-md border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20" />
+                          <div className="flex items-center justify-end gap-1.5">
+                            <input
+                              type="number"
+                              min={0}
+                              step={pasoCantidad(l.unidad_medida)}
+                              inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
+                              value={l.cantidad || ""}
+                              onChange={(e) => {
+                                const n = parseCantidad(e.target.value, l.unidad_medida);
+                                editarLinea(i, { cantidad: n ?? 0 });
+                              }}
+                              onBlur={(e) => {
+                                const n = parseCantidad(e.target.value, l.unidad_medida);
+                                editarLinea(i, { cantidad: n && n > 0 ? n : 0 });
+                              }}
+                              className={`rounded-md border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 ${
+                                permiteDecimales(l.unidad_medida) ? "w-24" : "w-16"
+                              }`}
+                            />
+                            <span className="text-[10px] uppercase text-slate-400">{l.unidad_medida}</span>
+                          </div>
                         </td>
                         <td className="py-2 px-3">
                           <MontoInput value={l.costo_unitario_input}
@@ -729,113 +749,6 @@ export default function NuevaCompraPage() {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest">{children}</h3>;
-}
-
-/**
- * Buscador de productos multi-carga. Filtra por nombre/SKU en cliente (soporta
- * miles de productos e incluye insumos). Cada clic agrega el producto y limpia
- * la búsqueda para cargar el siguiente; los ya agregados no vuelven a aparecer.
- */
-function ProductoBuscador({
-  productos,
-  excludeIds,
-  onPick,
-}: {
-  productos: Producto[];
-  excludeIds: string[];
-  onPick: (p: Producto) => void;
-}) {
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [hl, setHl] = useState(-1);
-  const boxRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-
-  const excluidos = useMemo(() => new Set(excludeIds), [excludeIds]);
-
-  const resultados = useMemo(() => {
-    const q = query.trim();
-    const base = productos.filter((p) => !excluidos.has(p.id));
-    const filt = q
-      ? base.filter((p) => productoMatchesQuery(q, p.nombre, p.sku))
-      : base;
-    return filt.slice(0, 50);
-  }, [productos, excluidos, query]);
-
-  useEffect(() => {
-    function onDown(e: MouseEvent) {
-      if (boxRef.current && !boxRef.current.contains(e.target as Node)) setOpen(false);
-    }
-    document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, []);
-
-  useEffect(() => {
-    if (open && hl >= 0) listRef.current?.querySelector(`[data-idx="${hl}"]`)?.scrollIntoView({ block: "nearest" });
-  }, [open, hl]);
-
-  function pick(p: Producto) {
-    onPick(p);
-    setQuery("");
-    setHl(-1);
-    // Mantener el buscador enfocado y abierto para cargar el siguiente.
-    setTimeout(() => inputRef.current?.focus(), 0);
-  }
-
-  return (
-    <div ref={boxRef} className="relative">
-      <Search className="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" />
-      <input
-        ref={inputRef}
-        type="text"
-        value={query}
-        onChange={(e) => { setQuery(e.target.value); setOpen(true); setHl(-1); }}
-        onFocus={() => setOpen(true)}
-        onKeyDown={(e) => {
-          if (e.key === "ArrowDown") { e.preventDefault(); setOpen(true); setHl((h) => Math.min(h + 1, resultados.length - 1)); }
-          else if (e.key === "ArrowUp") { e.preventDefault(); setHl((h) => Math.max(h - 1, 0)); }
-          else if (e.key === "Enter") { e.preventDefault(); if (open && hl >= 0 && resultados[hl]) pick(resultados[hl]); }
-          else if (e.key === "Escape") { setOpen(false); }
-        }}
-        placeholder="Buscar producto por nombre o SKU…"
-        autoComplete="off"
-        className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm shadow-sm outline-none transition-all placeholder:text-slate-400 hover:border-[#4FAEB2]/60 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20"
-      />
-      {open && (
-        <div className="absolute left-0 right-0 z-50 mt-1.5">
-          <ul ref={listRef} className="max-h-[280px] overflow-y-auto rounded-xl border border-slate-200 bg-white p-1 shadow-xl ring-1 ring-[#4FAEB2]/15">
-            {resultados.length === 0 ? (
-              <li className="px-3 py-3 text-center text-xs text-slate-400">
-                {query.trim() ? "Sin productos que coincidan." : "No hay más productos para agregar."}
-              </li>
-            ) : (
-              resultados.map((p, i) => (
-                <li key={p.id}>
-                  <button type="button" data-idx={i}
-                    onMouseEnter={() => setHl(i)} onClick={() => pick(p)}
-                    className={`flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition-colors ${
-                      i === hl ? "bg-[#4FAEB2]/10 text-[#2F6E71]" : "text-slate-700 hover:bg-slate-50"
-                    }`}>
-                    <span className="min-w-0 flex-1 truncate">
-                      <span className="font-medium">{p.nombre}</span>
-                      <span className="ml-2 font-mono text-xs text-slate-400">{p.sku}</span>
-                    </span>
-                    <span className={`shrink-0 text-xs ${p.stock_actual <= 0 ? "text-red-500" : "text-slate-400"}`}>stock: {p.stock_actual}</span>
-                  </button>
-                </li>
-              ))
-            )}
-            {query.trim() === "" && productos.length - excluidos.size > 50 && (
-              <li className="px-3 py-1.5 text-center text-[11px] text-slate-400">
-                Mostrando 50 · escribí para filtrar entre {(productos.length).toLocaleString("es-PY")} productos
-              </li>
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
 }
 
 /**

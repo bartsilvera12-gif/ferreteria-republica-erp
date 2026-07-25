@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { parseCantidad, pasoCantidad, minimoCantidad, permiteDecimales } from "@/lib/productos/unidades";
 
 export interface ProductoPickerItem {
   id: string;
@@ -122,6 +123,11 @@ export default function ProductPickerModal({
   const [presentacionId, setPresentacionId] = useState<string>("");
   const presSel = presentaciones.find((pp) => pp.id === presentacionId) ?? null;
 
+  // Unidad que gobierna la cantidad tecleada: si se elige una presentación de
+  // varias unidades (Caja, Paquete), la cantidad es en esa presentación y va
+  // entera; si no, manda la unidad base del producto (KG/METRO → fracciones).
+  const unidadCant = presSel && presSel.cantidad_base !== 1 ? "UNIDAD" : (sel?.unidad_medida ?? "UNIDAD");
+
   /** Precio en la moneda activa de la venta (string para el input). */
   function precioEnMonedaStr(precioGs: number): string {
     if (moneda === "USD" && tipoCambio > 0) return String(Math.round((precioGs / tipoCambio) * 100) / 100);
@@ -236,7 +242,7 @@ export default function ProductPickerModal({
 
   function handleAgregar() {
     if (!sel) return;
-    const cantNum = parseInt(cantidad, 10) || 0;
+    const cantNum = parseCantidad(cantidad, unidadCant) ?? 0;
     const precioNum = parseFloat(precio) || 0;
     if (cantNum <= 0) { setFeedback("Cantidad debe ser > 0"); return; }
     if (precioNum <= 0) { setFeedback("Precio debe ser > 0"); return; }
@@ -540,16 +546,19 @@ export default function ProductPickerModal({
                         Cantidad{presSel && presSel.nombre !== sel.unidad_medida ? ` (${presSel.nombre})` : ""}
                       </label>
                       <input
-                        type="number" min={1}
+                        type="number"
+                        min={minimoCantidad(unidadCant)}
+                        step={pasoCantidad(unidadCant)}
+                        inputMode={permiteDecimales(unidadCant) ? "decimal" : "numeric"}
                         value={cantidad}
                         onChange={(e) => setCantidad(e.target.value)}
                         className="w-full border border-slate-200 rounded-lg px-2 py-1.5 text-sm"
                       />
-                      {presSel && presSel.cantidad_base !== 1 && (parseInt(cantidad, 10) || 0) > 0 && (
+                      {presSel && presSel.cantidad_base !== 1 && (parseCantidad(cantidad, unidadCant) ?? 0) > 0 && (
                         <p className="mt-1 text-[11px] text-slate-500 tabular-nums">
                           ={" "}
                           <span className="font-semibold">
-                            {(parseInt(cantidad, 10) || 0) * presSel.cantidad_base}
+                            {(parseCantidad(cantidad, unidadCant) ?? 0) * presSel.cantidad_base}
                           </span>{" "}
                           {sel.unidad_medida}
                         </p>

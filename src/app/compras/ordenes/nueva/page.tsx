@@ -9,6 +9,7 @@ import { saveOrdenCompra, type OrdenItemPayload } from "@/lib/ordenes-compra/sto
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { Proveedor } from "@/lib/proveedores/types";
 import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
+import { parseCantidad, pasoCantidad, minimoCantidad, clampCantidad, permiteDecimales } from "@/lib/productos/unidades";
 
 /** Miniatura con fallback si no hay imagen o falla. */
 function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
@@ -32,6 +33,7 @@ type ComboHit = {
   precio_venta: number;
   stock_actual: number;
   controla_stock: boolean;
+  unidad_medida: string;
   imagen_url: string | null;
 };
 
@@ -50,6 +52,7 @@ type Linea = {
   producto_id: string;
   producto_nombre: string;
   sku: string;
+  unidad_medida: string;
   cantidad: number;
   costo_input: number; // en la moneda de la cabecera
   iva_tipo: TipoIva;
@@ -107,7 +110,9 @@ export default function NuevaOrdenCompraPage() {
         setHits(((j?.data?.items ?? []) as Record<string, unknown>[]).map((p): ComboHit => ({
           id: String(p.id), nombre: String(p.nombre ?? ""), sku: String(p.sku ?? ""),
           precio_venta: Number(p.precio_venta) || 0, stock_actual: Number(p.stock_actual) || 0,
-          controla_stock: p.controla_stock !== false, imagen_url: (p.imagen_url as string | null) ?? null,
+          controla_stock: p.controla_stock !== false,
+          unidad_medida: String(p.unidad_medida ?? "UNIDAD"),
+          imagen_url: (p.imagen_url as string | null) ?? null,
         })));
       } catch { setHits([]); }
       finally { setBuscando(false); }
@@ -131,6 +136,7 @@ export default function NuevaOrdenCompraPage() {
           producto_id: p.id,
           producto_nombre: p.nombre,
           sku: p.sku,
+          unidad_medida: p.unidad_medida || "UNIDAD",
           cantidad: 1,
           costo_input: 0,
           iva_tipo: "10",
@@ -354,9 +360,27 @@ export default function NuevaOrdenCompraPage() {
                         <p className="font-mono text-[11px] text-slate-500">{l.sku}</p>
                       </td>
                       <td className="px-3 py-3">
-                        <input type="number" min={1} value={l.cantidad}
-                          onChange={(e) => updateLinea(l.producto_id, { cantidad: Math.max(1, parseInt(e.target.value) || 1) })}
-                          className="mx-auto h-8 w-16 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums" />
+                        <div className="mx-auto flex w-fit items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={minimoCantidad(l.unidad_medida)}
+                            step={pasoCantidad(l.unidad_medida)}
+                            inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
+                            value={l.cantidad}
+                            onChange={(e) => {
+                              const n = parseCantidad(e.target.value, l.unidad_medida);
+                              if (n !== null) updateLinea(l.producto_id, { cantidad: n });
+                            }}
+                            onBlur={(e) => {
+                              const n = parseCantidad(e.target.value, l.unidad_medida);
+                              updateLinea(l.producto_id, { cantidad: clampCantidad(n ?? 0, l.unidad_medida) });
+                            }}
+                            className={`h-8 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums ${
+                              permiteDecimales(l.unidad_medida) ? "w-24" : "w-16"
+                            }`}
+                          />
+                          <span className="text-[10px] uppercase text-slate-400">{l.unidad_medida}</span>
+                        </div>
                       </td>
                       <td className="px-3 py-3 text-right">
                         <input type="number" min={0} value={l.costo_input}
