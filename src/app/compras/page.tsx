@@ -278,13 +278,14 @@ export default function ComprasPage() {
                 <th className="py-3 pr-4 font-medium text-right">Ítems</th>
                 <th className="py-3 pr-4 font-medium text-right">Total</th>
                 <th className="hidden py-3 pr-4 font-medium lg:table-cell">Pago</th>
-                <th className="py-3 font-medium">Fecha</th>
+                <th className="py-3 pr-4 font-medium">Fecha</th>
+                <th className="py-3 font-medium text-right">Acciones</th>
               </tr>
             </thead>
             <tbody>
               {filtrados.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-12 text-center text-gray-400">
+                  <td colSpan={8} className="py-12 text-center text-gray-400">
                     {grupos.length === 0 ? "No hay compras registradas" : "Ninguna compra coincide con los filtros"}
                   </td>
                 </tr>
@@ -301,16 +302,6 @@ export default function ComprasPage() {
                         <td className="py-4 pr-4 font-mono text-xs text-gray-500">
                           {multi && <span className="mr-1 inline-block text-gray-400">{abierto ? "▾" : "▸"}</span>}
                           {g.numero_control}
-                          {/* Editar: solo compras manuales (las de OC se ajustan desde la orden). */}
-                          {!g.orden_compra_numero && (
-                            <Link
-                              href={`/compras/${encodeURIComponent(g.numero_control)}/editar`}
-                              onClick={(e) => e.stopPropagation()}
-                              className="ml-2 inline-flex items-center gap-0.5 font-sans text-[11px] font-semibold text-[#4FAEB2] hover:text-[#3F8E91] hover:underline"
-                            >
-                              <Pencil className="h-3 w-3" /> Editar
-                            </Link>
-                          )}
                         </td>
                         <td className="py-4 pr-4 font-medium text-gray-800">{g.proveedor_nombre}</td>
                         <td className="py-4 pr-4 text-gray-600">
@@ -343,7 +334,22 @@ export default function ComprasPage() {
                             {g.tipo_pago === "contado" ? "Contado" : g.tipo_pago === "credito" ? `Crédito ${g.plazo_dias ?? ""}d` : "—"}
                           </span>
                         </td>
-                        <td className="py-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
+                        <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
+                        <td className="py-4 text-right">
+                          {/* Editar: solo compras manuales (las de OC se ajustan desde la orden). */}
+                          {!g.orden_compra_numero ? (
+                            <Link
+                              href={`/compras/${encodeURIComponent(g.numero_control)}/editar`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#4FAEB2]/30 px-2.5 py-1 text-xs font-semibold text-[#3F8E91] transition-colors hover:border-[#4FAEB2] hover:bg-[#4FAEB2] hover:text-white"
+                              title="Editar compra"
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> Editar
+                            </Link>
+                          ) : (
+                            <span className="text-[11px] text-slate-300">—</span>
+                          )}
+                        </td>
                       </tr>
 
                       {abierto && multi && g.items.map((it) => (
@@ -357,6 +363,7 @@ export default function ComprasPage() {
                           <td className="py-2 pr-4 text-right tabular-nums text-gray-600">{it.cantidad}</td>
                           <td className="py-2 pr-4 text-right tabular-nums text-gray-700">{formatGs(it.total)}</td>
                           <td className="hidden lg:table-cell" />
+                          <td />
                           <td />
                         </tr>
                       ))}
