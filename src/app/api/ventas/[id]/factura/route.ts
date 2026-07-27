@@ -107,7 +107,8 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     ruc: cfg.ruc_emisor?.trim() || "—",
     direccion: cfg.direccion_matriz?.trim() || "",
     telefono: cfg.telefono?.trim() || EMPRESA_DOC.telefono || "",
-    logoUrl: EMPRESA_DOC.logoUrl,
+    // Ticket térmico: logo en negro puro (imprime nítido en B/N).
+    logoUrl: EMPRESA_DOC.logoTicketUrl,
   };
 
   const puedeEmitir =

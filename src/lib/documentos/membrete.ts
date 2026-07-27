@@ -19,6 +19,12 @@ export const EMPRESA_DOC = {
   direccion: ["Paraguay"],
   /** Logo del cliente (alta calidad, sin fondo). Servido desde /public. */
   logoUrl: "/brand/ferreteriarepublica-doc-logo.png",
+  /**
+   * Logo en NEGRO PURO (silueta 1-bit sobre transparente) para tickets térmicos.
+   * La ticketera imprime en blanco/negro: el logo a color se dithera sucio y el
+   * texto gris claro ("REPÚBLICA") desaparece. Esta versión imprime nítida.
+   */
+  logoTicketUrl: "/brand/ferreteriarepublica-ticket-logo-bw.png",
 };
 
 function esc(v: unknown): string {
@@ -55,10 +61,11 @@ export function membreteA4(origin = ""): string {
  */
 export function membreteTicket(origin = ""): string {
   const e = EMPRESA_DOC;
-  const logo = origin ? `${origin}${e.logoUrl}` : e.logoUrl;
+  // Ticket térmico: usar el logo en negro puro (imprime nítido en B/N).
+  const logo = origin ? `${origin}${e.logoTicketUrl}` : e.logoTicketUrl;
   return `
   <div style="text-align:center;padding-bottom:6px;margin-bottom:6px;border-bottom:1px dashed #000;">
-    <img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:150px;max-height:72px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0 auto 4px;" />
+    <img src="${esc(logo)}" alt="${esc(e.nombre)}" style="max-width:150px;max-height:72px;width:auto;height:auto;object-fit:contain;display:inline-block;margin:0 auto 4px;-webkit-print-color-adjust:exact;print-color-adjust:exact;" />
     <div style="font-weight:700;font-size:12px;">${esc(e.nombre)}</div>
     <div style="font-size:10px;">Tel: ${esc(e.telefono)}</div>
     <div style="font-size:10px;">${esc(e.direccion[0])}</div>

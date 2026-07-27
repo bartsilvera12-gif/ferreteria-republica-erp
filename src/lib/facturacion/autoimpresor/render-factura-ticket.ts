@@ -171,7 +171,7 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
   .paper { background:#fff; width:${d.widthMm}mm; margin:0 auto; padding:6mm 4mm; box-shadow:0 1px 4px rgba(0,0,0,.1); }
   .head { text-align:center; }
   .logo { text-align:center; }
-  .logo img { max-width:${d.widthMm === 58 ? 130 : 150}px; max-height:70px; width:auto; height:auto; object-fit:contain; display:inline-block; margin:0 auto 3px; }
+  .logo img { max-width:${d.widthMm === 58 ? 130 : 150}px; max-height:70px; width:auto; height:auto; object-fit:contain; display:inline-block; margin:0 auto 3px; -webkit-print-color-adjust:exact; print-color-adjust:exact; }
   .rs { text-align:center; font-weight:700; font-size:${fontPx + 1}px; line-height:1.2; }
   .em { text-align:center; font-size:${fontPx - 1}px; line-height:1.3; }
   hr { border:none; border-top:1px dashed #000; margin:2mm 0; }
