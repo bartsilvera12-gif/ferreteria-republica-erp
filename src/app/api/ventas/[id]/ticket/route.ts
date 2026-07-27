@@ -575,7 +575,10 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   .actions a { margin-left: 12px; font-size: 13px; color: #444; }
   @media print {
     body { background: #fff; padding: 0; }
-    .paper { width: ${widthMm}mm; box-shadow: none; padding: 2mm; margin: 0; }
+    /* Ancho REAL imprimible: en papel de 80mm la cabeza imprime ~72mm, en 58mm
+       ~48mm. Usar el ancho del papel completo recorta los bordes. El ticket se
+       centra en la hoja con margin auto. */
+    .paper { width: ${widthMm === 58 ? 48 : 72}mm; box-shadow: none; padding: 1mm 1mm; margin: 0 auto; }
     .actions { display: none; }
     @page { margin: 0; size: ${widthMm}mm auto; }
   }
