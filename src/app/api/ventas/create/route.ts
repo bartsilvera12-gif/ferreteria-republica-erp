@@ -381,11 +381,14 @@ export async function POST(request: NextRequest) {
       }
       const resto = Math.round((totalDeclarado - saldoUsado) * 100) / 100;
       if (resto > 0) {
+        // Monto: el que ingresó el cajero en el modal (transferencia/tarjeta) si
+        // es válido; si no, el resto calculado (total − saldo).
+        const montoIngresado = pd?.monto != null && Number(pd.monto) > 0 ? Math.round(Number(pd.monto) * 100) / 100 : null;
         await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
           metodo_pago: metodoPago,
           entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
           entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
-          monto: resto,
+          monto: montoIngresado ?? resto,
           referencia: str(pd?.referencia),
           titular: str(pd?.titular),
           fecha_acreditacion: fechaAcred,

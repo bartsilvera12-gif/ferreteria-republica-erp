@@ -32,6 +32,8 @@ export type PedidoCocinaInput = {
 export type PagoDetalleInput = {
   entidad_bancaria_id?: string | null;
   entidad_nombre_snapshot?: string | null;
+  /** Monto del pago por este medio. Si no viene, el backend usa el total. */
+  monto?: number | null;
   referencia?: string | null;
   titular?: string | null;
   observacion?: string | null;

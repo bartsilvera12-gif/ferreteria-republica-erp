@@ -219,6 +219,9 @@ export default function NuevaVentaPage() {
   const [pagoReferencia, setPagoReferencia] = useState("");
   const [pagoTitular, setPagoTitular] = useState("");
   const [pagoObservacion] = useState("");
+  // Monto cobrado por el medio (transferencia/tarjeta). Se precarga con lo que
+  // resta cobrar y el cajero lo puede ajustar.
+  const [pagoMonto, setPagoMonto] = useState(0);
   // Modal de cobro (transferencia / tarjeta) + buscador de entidad.
   const [cobroModalOpen, setCobroModalOpen] = useState(false);
   const [entidadQuery, setEntidadQuery] = useState("");
@@ -613,6 +616,12 @@ export default function NuevaVentaPage() {
   const saldoAplicado = Math.max(0, Math.min(usarSaldo, saldoFavor, totalGeneral));
   /** Lo que falta cobrar por los medios normales (efectivo, tarjeta, etc.). */
   const restaCobrar = Math.max(0, totalGeneral - saldoAplicado);
+
+  // Al abrir el modal de cobro, precargar el monto con lo que resta cobrar.
+  useEffect(() => {
+    if (cobroModalOpen) setPagoMonto(restaCobrar);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cobroModalOpen]);
   /** Crédito que le sobra al cliente después de pagar esta venta. */
   const saldoRestante = Math.max(0, saldoFavor - saldoAplicado);
 
@@ -794,6 +803,7 @@ export default function NuevaVentaPage() {
         {
           entidad_bancaria_id: pagoEntidadId || null,
           entidad_nombre_snapshot: entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null,
+          monto: pagoMonto > 0 ? pagoMonto : null,
           referencia: pagoReferencia.trim() || null,
           titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
           observacion: pagoObservacion.trim() || null,
@@ -1486,6 +1496,18 @@ export default function NuevaVentaPage() {
                 {metodoPago === "transferencia" ? "Datos de transferencia" : "Datos de tarjeta / débito"}
               </h3>
               <button type="button" onClick={() => setCobroModalOpen(false)} className="text-slate-400 hover:text-slate-700 text-lg leading-none">✕</button>
+            </div>
+
+            <div>
+              <label className="block text-xs text-gray-600 mb-1">Monto</label>
+              <MontoInput
+                value={pagoMonto}
+                onChange={(n) => setPagoMonto(n)}
+                className={inputClass}
+              />
+              {restaCobrar > 0 && Math.abs(pagoMonto - restaCobrar) > 0.5 && (
+                <p className="mt-1 text-[11px] text-amber-600">A cobrar por esta venta: {formatGs(restaCobrar)}</p>
+              )}
             </div>
 
             <div>
