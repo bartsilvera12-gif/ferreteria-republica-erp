@@ -208,7 +208,10 @@ export async function saveCompra(
 // ── Edición de compra ────────────────────────────────────────────────────────
 
 export interface EditarCompraLineaPayload {
-  id: string;
+  /** Presente = línea existente. Ausente/null = línea nueva (requiere producto_id). */
+  id?: string | null;
+  producto_id?: string;
+  producto_nombre?: string;
   cantidad: number;
   costo_unitario_original: number;
   costo_unitario: number;
@@ -226,6 +229,8 @@ export interface EditarCompraPayload {
   fecha_factura: string | null;
   observacion: string | null;
   lineas: EditarCompraLineaPayload[];
+  /** ids de líneas existentes a eliminar. */
+  eliminar: string[];
 }
 
 export async function editarCompra(

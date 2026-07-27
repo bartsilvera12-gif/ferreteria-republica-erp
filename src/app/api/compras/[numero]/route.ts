@@ -37,8 +37,9 @@ export async function PATCH(
     for (let i = 0; i < rawLineas.length; i++) {
       const it = rawLineas[i];
       const label = `Producto ${i + 1}`;
-      if (it.id == null || String(it.id).trim() === "")
-        return NextResponse.json(errorResponse(`${label}: falta el identificador de línea.`), { status: 400 });
+      const esNueva = it.id == null || String(it.id).trim() === "";
+      if (esNueva && (it.producto_id == null || String(it.producto_id).trim() === ""))
+        return NextResponse.json(errorResponse(`${label}: falta el producto.`), { status: 400 });
       if (!(Number(it.cantidad) > 0))
         return NextResponse.json(errorResponse(`${label}: la cantidad debe ser mayor a 0.`), { status: 400 });
       if (!(Number(it.costo_unitario) > 0))
@@ -46,7 +47,9 @@ export async function PATCH(
       if (it.precio_venta != null && Number(it.precio_venta) < 0)
         return NextResponse.json(errorResponse(`${label}: el precio de venta no puede ser negativo.`), { status: 400 });
       lineas.push({
-        id: String(it.id),
+        id: esNueva ? null : String(it.id),
+        producto_id: esNueva ? String(it.producto_id) : undefined,
+        producto_nombre: esNueva ? String(it.producto_nombre ?? "") : undefined,
         cantidad: Number(it.cantidad) || 0,
         costo_unitario_original: Number(it.costo_unitario_original) || Number(it.costo_unitario) || 0,
         costo_unitario: Number(it.costo_unitario) || 0,
@@ -59,6 +62,10 @@ export async function PATCH(
       });
     }
 
+    const eliminar = Array.isArray(body.eliminar)
+      ? (body.eliminar as unknown[]).map((x) => String(x)).filter((x) => x.trim() !== "")
+      : [];
+
     const req = (k: string) => body[k] != null && String(body[k]).trim() !== "";
     const header: EditarCompraHeader = {
       numero_factura: req("numero_factura") ? String(body.numero_factura).trim() : null,
@@ -69,7 +76,7 @@ export async function PATCH(
 
     try {
       const out = await editarCompraConMovimiento(
-        schema, empresaId, numeroControl, header, lineas,
+        schema, empresaId, numeroControl, header, lineas, eliminar,
         { id: ctx.auth.usuarioCatalogId ?? null, nombre: ctx.auth.user?.email ?? null }
       );
       return NextResponse.json(successResponse(out));

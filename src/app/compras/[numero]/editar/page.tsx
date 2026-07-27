@@ -10,12 +10,13 @@
  * Las compras que vienen de una orden de compra NO se editan acá (descuadraría
  * la orden): se muestra un aviso.
  */
-import { useEffect, useMemo, useState, use } from "react";
+import { useEffect, useMemo, useRef, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Loader2, Save, ArrowLeft } from "lucide-react";
+import { Loader2, Save, ArrowLeft, Trash2 } from "lucide-react";
 import MontoInput from "@/components/ui/MontoInput";
 import ConfirmModal from "@/components/ui/ConfirmModal";
+import ProductoBuscadorInline from "@/components/inventario/ProductoBuscadorInline";
 import { getCompras, editarCompra, type EditarCompraLineaPayload } from "@/lib/compras/storage";
 import type { Compra, TipoIva } from "@/lib/compras/types";
 import { parseCantidad, pasoCantidad, permiteDecimales, formatCantidad } from "@/lib/productos/unidades";
@@ -31,7 +32,11 @@ function desglosarIva(bruto: number, iva: TipoIva): { subtotal: number; monto_iv
 }
 
 interface LineaEdit {
-  id: string;
+  /** Clave estable para React y para editar (las nuevas no tienen id de BD). */
+  key: string;
+  /** id real de la fila `compras` (existente) o null si es una línea nueva. */
+  id: string | null;
+  producto_id: string;
   producto_nombre: string;
   unidad_medida: string;
   cantidad: number;
@@ -57,8 +62,10 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
   const [fechaFactura, setFechaFactura] = useState("");
   const [observacion, setObservacion] = useState("");
   const [lineas, setLineas] = useState<LineaEdit[]>([]);
+  const [eliminadas, setEliminadas] = useState<string[]>([]);
   const [guardando, setGuardando] = useState(false);
   const [confirmar, setConfirmar] = useState(false);
+  const keySeq = useRef(0);
 
   useEffect(() => {
     let cancel = false;
@@ -76,7 +83,9 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
       setFechaFactura((cab.fecha_factura ?? "").slice(0, 10));
       setObservacion(cab.observacion ?? "");
       setLineas(rows.map((r: Compra) => ({
+        key: r.id,
         id: r.id,
+        producto_id: r.producto_id,
         producto_nombre: r.producto_nombre,
         unidad_medida: r.unidad_medida || "UNIDAD",
         cantidad: r.cantidad,
@@ -90,8 +99,32 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
     return () => { cancel = true; };
   }, [numeroControl]);
 
-  function setLinea(id: string, patch: Partial<LineaEdit>) {
-    setLineas((prev) => prev.map((l) => (l.id === id ? { ...l, ...patch } : l)));
+  function setLinea(key: string, patch: Partial<LineaEdit>) {
+    setLineas((prev) => prev.map((l) => (l.key === key ? { ...l, ...patch } : l)));
+  }
+  function quitarLinea(l: LineaEdit) {
+    // Si la línea ya existía en la compra, se marca para eliminar en el backend.
+    if (l.id) setEliminadas((prev) => [...prev, l.id!]);
+    setLineas((prev) => prev.filter((x) => x.key !== l.key));
+  }
+  function agregarProducto(p: { id: string; nombre: string; unidad_medida?: string; costo_promedio?: number; precio_venta?: number }) {
+    if (lineas.some((l) => l.producto_id === p.id)) {
+      setError(`"${p.nombre}" ya está en la compra.`);
+      return;
+    }
+    setError(null);
+    setLineas((prev) => [...prev, {
+      key: `nueva-${keySeq.current++}`,
+      id: null,
+      producto_id: p.id,
+      producto_nombre: p.nombre,
+      unidad_medida: p.unidad_medida || "UNIDAD",
+      cantidad: 1,
+      cantidadOriginal: 0,
+      costo_unitario: p.costo_promedio || 0,
+      iva_tipo: "10",
+      precio_venta: p.precio_venta || 0,
+    }]);
   }
 
   const totales = useMemo(() => {
@@ -104,12 +137,13 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
   }, [lineas]);
 
   const hayCambios = useMemo(
-    () => lineas.some((l) => l.cantidad !== l.cantidadOriginal),
-    [lineas]
+    () => eliminadas.length > 0 || lineas.some((l) => !l.id || l.cantidad !== l.cantidadOriginal),
+    [lineas, eliminadas]
   );
 
   async function guardar() {
     setError(null);
+    if (lineas.length === 0) { setError("La compra debe tener al menos un producto."); return; }
     for (const l of lineas) {
       if (!(l.cantidad > 0)) { setError(`${l.producto_nombre}: la cantidad debe ser mayor a 0.`); return; }
       if (!(l.costo_unitario > 0)) { setError(`${l.producto_nombre}: el costo debe ser mayor a 0.`); return; }
@@ -122,6 +156,8 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
         ? ((l.precio_venta - l.costo_unitario) / l.precio_venta) * 100 : null;
       return {
         id: l.id,
+        producto_id: l.id ? undefined : l.producto_id,
+        producto_nombre: l.id ? undefined : l.producto_nombre,
         cantidad: l.cantidad,
         costo_unitario_original: l.costo_unitario,
         costo_unitario: l.costo_unitario,
@@ -137,6 +173,7 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
       fecha_factura: fechaFactura || null,
       observacion: observacion.trim() || null,
       lineas: payloadLineas,
+      eliminar: eliminadas,
     });
     setGuardando(false);
     if (!r.ok) { setError(r.error); return; }
@@ -169,16 +206,20 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
                     <th className="py-2 text-right">Cantidad</th>
                     <th className="py-2 text-right">Costo unit.</th>
                     <th className="py-2 text-right">Total</th>
+                    <th className="py-2 w-8" />
                   </tr>
                 </thead>
                 <tbody>
                   {lineas.map((l) => {
-                    const cambio = l.cantidad !== l.cantidadOriginal;
+                    const cambio = !l.id || l.cantidad !== l.cantidadOriginal;
                     return (
-                      <tr key={l.id} className="border-t border-slate-100">
+                      <tr key={l.key} className="border-t border-slate-100">
                         <td className="py-2.5">
-                          <p className="font-medium text-slate-800">{l.producto_nombre}</p>
-                          {cambio && (
+                          <p className="font-medium text-slate-800">
+                            {l.producto_nombre}
+                            {!l.id && <span className="ml-2 rounded-full bg-emerald-100 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-700">Nuevo</span>}
+                          </p>
+                          {l.id && cambio && (
                             <p className="text-[11px] text-amber-600">
                               antes: {formatCantidad(l.cantidadOriginal, l.unidad_medida)} {l.unidad_medida}
                             </p>
@@ -194,7 +235,7 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
                               value={l.cantidad || ""}
                               onChange={(e) => {
                                 const n = parseCantidad(e.target.value, l.unidad_medida);
-                                setLinea(l.id, { cantidad: n ?? 0 });
+                                setLinea(l.key, { cantidad: n ?? 0 });
                               }}
                               className={`${inputCls} ${permiteDecimales(l.unidad_medida) ? "w-24" : "w-16"}`}
                             />
@@ -204,18 +245,34 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
                         <td className="py-2.5 text-right">
                           <MontoInput
                             value={l.costo_unitario}
-                            onChange={(n) => setLinea(l.id, { costo_unitario: n })}
+                            onChange={(n) => setLinea(l.key, { costo_unitario: n })}
                             className={`${inputCls} w-28`}
                           />
                         </td>
                         <td className="py-2.5 text-right tabular-nums font-semibold text-slate-800">
                           {fmtGs(l.cantidad * l.costo_unitario)}
                         </td>
+                        <td className="py-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() => quitarLinea(l)}
+                            className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                            aria-label="Quitar"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </div>
+
+            {/* Agregar producto a la compra */}
+            <div className="mt-3 border-t border-slate-100 pt-3">
+              <p className="mb-1.5 text-[11px] font-semibold uppercase text-slate-500">Agregar producto</p>
+              <ProductoBuscadorInline onSelect={agregarProducto} excludeIds={lineas.map((l) => l.producto_id)} />
             </div>
             <div className="mt-3 flex justify-end gap-6 border-t border-slate-100 pt-3 text-sm">
               <span className="text-slate-500">IVA <span className="font-semibold text-slate-700">{fmtGs(totales.iva)}</span></span>

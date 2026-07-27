@@ -493,8 +493,11 @@ export async function insertCompraConImpacto(
 // ── Edición de compra ────────────────────────────────────────────────────────
 
 export interface EditarCompraLinea {
-  /** id de la fila `compras` a corregir. */
-  id: string;
+  /** Presente = línea existente a modificar. Ausente/null = línea nueva. */
+  id?: string | null;
+  /** Requeridos si la línea es nueva. */
+  producto_id?: string;
+  producto_nombre?: string;
   cantidad: number;
   costo_unitario_original: number;
   costo_unitario: number;
@@ -516,6 +519,8 @@ export interface EditarCompraHeader {
 export interface EditarCompraResult {
   numero_control: string;
   lineas_actualizadas: number;
+  lineas_agregadas: number;
+  lineas_eliminadas: number;
   movimientos_generados: number;
   unidades_ajustadas: number;
 }
@@ -536,14 +541,38 @@ export async function editarCompraConMovimiento(
   numeroControl: string,
   header: EditarCompraHeader,
   lineas: EditarCompraLinea[],
+  eliminar: string[],
   usuario: { id: string | null; nombre: string | null }
 ): Promise<EditarCompraResult> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tC = quoteSchemaTable(schema, "compras");
   const tM = quoteSchemaTable(schema, "movimientos_inventario");
   const tP = quoteSchemaTable(schema, "productos");
+  const ref = `Edición de compra ${numeroControl}`;
 
   const client = await pool().connect();
+
+  /** Ajuste de stock + movimiento 'edicion_compra' por un delta (±). */
+  async function ajustar(productoId: string, productoNombre: string, delta: number, costo: number) {
+    if (delta === 0) return;
+    await client.query(
+      `UPDATE ${tP} SET stock_actual = stock_actual + $1::numeric, updated_at = now()
+        WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+      [delta, productoId, empresaId]
+    );
+    await client.query(
+      `INSERT INTO ${tM} (
+         empresa_id, producto_id, producto_nombre, producto_sku,
+         tipo, cantidad, costo_unitario, origen, referencia, fecha, created_by, usuario_nombre
+       )
+       SELECT $1::uuid, $2::uuid, $3, COALESCE(p.sku, ''),
+              $4, $5::numeric, $6::numeric, 'edicion_compra', $7, now(), $8::uuid, $9
+       FROM ${tP} p WHERE p.id = $2::uuid`,
+      [empresaId, productoId, productoNombre, delta > 0 ? "ENTRADA" : "SALIDA",
+       Math.abs(delta), costo, ref, usuario.id, usuario.nombre]
+    );
+  }
+
   try {
     await client.query("BEGIN");
 
@@ -557,84 +586,97 @@ export async function editarCompraConMovimiento(
       throw new Error("Esta compra proviene de una orden de compra y no se puede editar acá. Ajustá la orden de compra.");
     }
 
+    const cab = actuales[0]; // cabecera compartida (proveedor, moneda, etc.)
     const porId = new Map(actuales.map((r) => [r.id, r]));
-    let movimientos = 0;
-    let unidades = 0;
+    let movimientos = 0, unidades = 0, modificadas = 0, agregadas = 0, eliminadas = 0;
 
-    for (const l of lineas) {
-      const actual = porId.get(l.id);
-      if (!actual) continue; // ignora ids que no pertenecen a esta compra
-      const cantAnterior = Number(actual.cantidad) || 0;
-      const cantNueva = Number(l.cantidad) || 0;
-      const delta = Math.round((cantNueva - cantAnterior) * 1e6) / 1e6;
+    // No permitir vaciar la compra por completo.
+    const quedan = actuales.length - eliminar.length + lineas.filter((l) => !l.id).length;
+    if (quedan <= 0) throw new Error("La compra debe tener al menos un producto.");
 
-      // 1) Actualizar la fila de la compra con los nuevos valores.
-      await client.query(
-        `UPDATE ${tC} SET
-           cantidad = $1::numeric, costo_unitario_original = $2::numeric,
-           costo_unitario = $3::numeric, iva_tipo = $4,
-           subtotal = $5::numeric, monto_iva = $6::numeric, total = $7::numeric,
-           precio_venta = $8::numeric, margen_venta = $9::numeric,
-           numero_factura = $10, nro_timbrado = $11, fecha_factura = $12::date,
-           observacion = $13, updated_at = now()
-         WHERE id = $14::uuid AND empresa_id = $15::uuid`,
-        [cantNueva, l.costo_unitario_original, l.costo_unitario, l.iva_tipo,
-         l.subtotal, l.monto_iva, l.total, l.precio_venta, l.margen_venta,
-         header.numero_factura, header.nro_timbrado, header.fecha_factura,
-         header.observacion, l.id, empresaId]
-      );
-
-      // 2) Ajuste de stock + movimiento NUEVO por la diferencia de cantidad.
-      if (delta !== 0) {
-        await client.query(
-          `UPDATE ${tP} SET stock_actual = stock_actual + $1::numeric, updated_at = now()
-            WHERE id = $2::uuid AND empresa_id = $3::uuid`,
-          [delta, actual.producto_id, empresaId]
-        );
-        await client.query(
-          `INSERT INTO ${tM} (
-             empresa_id, producto_id, producto_nombre, producto_sku,
-             tipo, cantidad, costo_unitario, origen, referencia, fecha,
-             created_by, usuario_nombre
-           )
-           SELECT $1::uuid, $2::uuid, $3, COALESCE(p.sku, ''),
-                  $4, $5::numeric, $6::numeric, 'edicion_compra', $7, now(),
-                  $8::uuid, $9
-           FROM ${tP} p WHERE p.id = $2::uuid`,
-          [empresaId, actual.producto_id, actual.producto_nombre,
-           delta > 0 ? "ENTRADA" : "SALIDA", Math.abs(delta), l.costo_unitario,
-           `Edición de compra ${numeroControl}`, usuario.id, usuario.nombre]
-        );
-        movimientos++;
-        unidades += Math.abs(delta);
-      }
-
-      // 3) Actualizar costo y precio del producto (mismo criterio que al comprar).
-      await client.query(
-        `UPDATE ${tP} SET
-           costo_promedio = $1::numeric,
-           precio_venta = CASE WHEN $2::numeric > 0 THEN $2::numeric ELSE precio_venta END,
-           updated_at = now()
-         WHERE id = $3::uuid AND empresa_id = $4::uuid`,
-        [l.costo_unitario, l.precio_venta, actual.producto_id, empresaId]
-      );
+    // ── 1) Eliminar líneas: revierte su stock y borra la fila ──
+    for (const id of eliminar) {
+      const actual = porId.get(id);
+      if (!actual) continue;
+      const cant = Number(actual.cantidad) || 0;
+      await ajustar(actual.producto_id, actual.producto_nombre, -cant, Number(actual.costo_unitario) || 0);
+      if (cant !== 0) { movimientos++; unidades += cant; }
+      await client.query(`DELETE FROM ${tC} WHERE id = $1::uuid AND empresa_id = $2::uuid`, [id, empresaId]);
+      eliminadas++;
     }
 
-    // Datos de factura: se aplican a TODAS las filas de la compra (por si alguna
-    // línea no vino en el payload).
+    // ── 2) Líneas existentes (modificar) y nuevas (agregar) ──
+    for (const l of lineas) {
+      if (l.id && porId.has(l.id)) {
+        // Modificar
+        const actual = porId.get(l.id)!;
+        const delta = Math.round(((Number(l.cantidad) || 0) - (Number(actual.cantidad) || 0)) * 1e6) / 1e6;
+        await client.query(
+          `UPDATE ${tC} SET
+             cantidad = $1::numeric, costo_unitario_original = $2::numeric,
+             costo_unitario = $3::numeric, iva_tipo = $4,
+             subtotal = $5::numeric, monto_iva = $6::numeric, total = $7::numeric,
+             precio_venta = $8::numeric, margen_venta = $9::numeric, updated_at = now()
+           WHERE id = $10::uuid AND empresa_id = $11::uuid`,
+          [l.cantidad, l.costo_unitario_original, l.costo_unitario, l.iva_tipo,
+           l.subtotal, l.monto_iva, l.total, l.precio_venta, l.margen_venta, l.id, empresaId]
+        );
+        if (delta !== 0) { await ajustar(actual.producto_id, actual.producto_nombre, delta, l.costo_unitario); movimientos++; unidades += Math.abs(delta); }
+        await client.query(
+          `UPDATE ${tP} SET costo_promedio = $1::numeric,
+             precio_venta = CASE WHEN $2::numeric > 0 THEN $2::numeric ELSE precio_venta END,
+             updated_at = now() WHERE id = $3::uuid AND empresa_id = $4::uuid`,
+          [l.costo_unitario, l.precio_venta, actual.producto_id, empresaId]
+        );
+        modificadas++;
+      } else if (!l.id && l.producto_id) {
+        // Agregar: nueva fila con la cabecera compartida de la compra.
+        await client.query(
+          `INSERT INTO ${tC} (
+             empresa_id, proveedor_id, proveedor_nombre, producto_id, producto_nombre,
+             cantidad, moneda, tipo_cambio, costo_unitario_original, costo_unitario,
+             iva_tipo, subtotal, monto_iva, total, precio_venta, margen_venta,
+             tipo_pago, plazo_dias, nro_timbrado, numero_factura, fecha_factura, observacion,
+             numero_control, estado, fecha, created_by, usuario_nombre
+           ) VALUES (
+             $1::uuid,$2::uuid,$3,$4::uuid,$5,
+             $6::numeric,$7,$8::numeric,$9::numeric,$10::numeric,
+             $11,$12::numeric,$13::numeric,$14::numeric,$15::numeric,$16::numeric,
+             $17,$18::integer,$19,$20,$21::date,$22,
+             $23,'registrada',now(),$24::uuid,$25
+           )`,
+          [empresaId, cab.proveedor_id, cab.proveedor_nombre, l.producto_id, l.producto_nombre ?? "",
+           l.cantidad, cab.moneda, cab.tipo_cambio, l.costo_unitario_original, l.costo_unitario,
+           l.iva_tipo, l.subtotal, l.monto_iva, l.total, l.precio_venta, l.margen_venta,
+           cab.tipo_pago, cab.plazo_dias, header.nro_timbrado, header.numero_factura, header.fecha_factura, header.observacion,
+           numeroControl, usuario.id, usuario.nombre]
+        );
+        await ajustar(l.producto_id, l.producto_nombre ?? "", Number(l.cantidad) || 0, l.costo_unitario);
+        if ((Number(l.cantidad) || 0) !== 0) { movimientos++; unidades += Number(l.cantidad) || 0; }
+        await client.query(
+          `UPDATE ${tP} SET costo_promedio = $1::numeric,
+             precio_venta = CASE WHEN $2::numeric > 0 THEN $2::numeric ELSE precio_venta END,
+             updated_at = now() WHERE id = $3::uuid AND empresa_id = $4::uuid`,
+          [l.costo_unitario, l.precio_venta, l.producto_id, empresaId]
+        );
+        agregadas++;
+      }
+    }
+
+    // ── 3) Datos de factura en todas las filas que quedaron ──
     await client.query(
-      `UPDATE ${tC} SET
-         numero_factura = $1, nro_timbrado = $2, fecha_factura = $3::date,
+      `UPDATE ${tC} SET numero_factura = $1, nro_timbrado = $2, fecha_factura = $3::date,
          observacion = $4, updated_at = now()
        WHERE empresa_id = $5::uuid AND numero_control = $6`,
-      [header.numero_factura, header.nro_timbrado, header.fecha_factura,
-       header.observacion, empresaId, numeroControl]
+      [header.numero_factura, header.nro_timbrado, header.fecha_factura, header.observacion, empresaId, numeroControl]
     );
 
     await client.query("COMMIT");
     return {
       numero_control: numeroControl,
-      lineas_actualizadas: lineas.length,
+      lineas_actualizadas: modificadas,
+      lineas_agregadas: agregadas,
+      lineas_eliminadas: eliminadas,
       movimientos_generados: movimientos,
       unidades_ajustadas: unidades,
     };
