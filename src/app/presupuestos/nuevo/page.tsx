@@ -396,7 +396,7 @@ export default function NuevoPresupuestoPage() {
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {comboHits.map((p, i) => {
-                    const sinStock = p.controla_stock && p.stock_actual <= 0;
+                    const sinStock = p.stock_actual <= 0;
                     return (
                       <li key={p.id}>
                         <button
@@ -411,8 +411,8 @@ export default function NuevoPresupuestoPage() {
                             <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                               <span className="font-mono">{p.sku || "—"}</span>
                               <span className="text-slate-300">·</span>
-                              <span className={`font-semibold ${!p.controla_stock ? "text-slate-400" : sinStock ? "text-red-600" : p.stock_actual < 5 ? "text-amber-600" : "text-emerald-700"}`}>
-                                {!p.controla_stock ? "Sin control" : sinStock ? "Sin stock" : `${p.stock_actual} ${p.unidad_medida ?? ""}`}
+                              <span className={`font-semibold ${sinStock ? "text-red-600" : p.stock_actual < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                                {sinStock ? "Sin stock" : `${p.stock_actual} ${p.unidad_medida ?? ""}`}
                               </span>
                             </div>
                           </div>

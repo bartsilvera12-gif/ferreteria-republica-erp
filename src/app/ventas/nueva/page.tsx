@@ -1089,8 +1089,7 @@ export default function NuevaVentaPage() {
                 ) : (
                   <ul className="divide-y divide-slate-100">
                     {comboResultados.map((p, i) => {
-                      const controla = p.controla_stock !== false;
-                      const sinStock = controla && (p.stock_actual ?? 0) <= 0;
+                      const sinStock = (p.stock_actual ?? 0) <= 0;
                       return (
                         <li key={p.id}>
                           <button
@@ -1106,8 +1105,8 @@ export default function NuevaVentaPage() {
                               <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                                 <span className="font-mono">{p.sku}</span>
                                 <span className="text-slate-300">·</span>
-                                <span className={`font-semibold ${!controla ? "text-slate-400" : sinStock ? "text-red-600" : (p.stock_actual ?? 0) < 5 ? "text-amber-600" : "text-emerald-700"}`}>
-                                  {!controla ? "Sin control" : sinStock ? "Sin stock" : formatStockConUnidad(p.stock_actual ?? 0, p.unidad_medida)}
+                                <span className={`font-semibold ${sinStock ? "text-red-600" : (p.stock_actual ?? 0) < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                                  {sinStock ? "Sin stock" : formatStockConUnidad(p.stock_actual ?? 0, p.unidad_medida)}
                                 </span>
                               </div>
                             </div>

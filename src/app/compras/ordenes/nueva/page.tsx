@@ -300,7 +300,7 @@ export default function NuevaOrdenCompraPage() {
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {resultados.map((p, i) => {
-                    const sinStock = p.controla_stock && p.stock_actual <= 0;
+                    const sinStock = p.stock_actual <= 0;
                     return (
                       <li key={p.id}>
                         <button type="button"
@@ -313,8 +313,8 @@ export default function NuevaOrdenCompraPage() {
                             <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
                               <span className="font-mono">{p.sku || "—"}</span>
                               <span className="text-slate-300">·</span>
-                              <span className={`font-semibold ${!p.controla_stock ? "text-slate-400" : sinStock ? "text-red-600" : p.stock_actual < 5 ? "text-amber-600" : "text-emerald-700"}`}>
-                                {!p.controla_stock ? "Sin control" : sinStock ? "Sin stock" : `${p.stock_actual} en stock`}
+                              <span className={`font-semibold ${sinStock ? "text-red-600" : p.stock_actual < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                                {sinStock ? "Sin stock" : `${p.stock_actual} en stock`}
                               </span>
                             </div>
                           </div>
