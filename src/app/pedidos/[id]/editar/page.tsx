@@ -26,6 +26,7 @@ import {
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
+import ClienteBuscador from "@/components/clientes/ClienteBuscador";
 
 type PresentacionLite = {
   id: string;
@@ -715,18 +716,11 @@ export default function EditarPedidoPage({
                 <User className="h-3 w-3" />
                 Cliente (opcional)
               </label>
-              <select
+              <ClienteBuscador
+                clientes={clientes}
                 value={clienteId}
-                onChange={(e) => setClienteId(e.target.value)}
-                className={`${inputClass} w-full text-xs`}
-              >
-                <option value="">— Sin cliente —</option>
-                {clientes.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.empresa || c.nombre_contacto || "Cliente"}
-                  </option>
-                ))}
-              </select>
+                onChange={setClienteId}
+              />
             </div>
 
             <div className="flex items-center justify-between border-t border-slate-200 pt-3">

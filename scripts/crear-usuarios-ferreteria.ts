@@ -62,11 +62,11 @@ const USUARIOS: NuevoUsuario[] = [
   // ── Caja / Ventas ────────────────────────────────────────────────────────
   // Los usuarios sin perfil completo llevan también `clientes`.
   { auth_id: "3c7994da-066e-4375-aa3f-8ee16546e59e", nombre: "Pablino Caballero",
-    rol: "vendedor", modulos: ["ventas", "presupuestos", "clientes"], nota: "Ventas, presupuestos y clientes" },
+    rol: "vendedor", modulos: ["ventas", "presupuestos", "clientes", "inventario"], nota: "Ventas, presupuestos y clientes" },
   { auth_id: "bdea35f3-f455-4d23-a71a-a1334c0adfc1", nombre: "Julio Aranda",
-    rol: "vendedor", modulos: ["ventas", "presupuestos", "clientes"], nota: "Caja, ventas, presupuestos y clientes" },
+    rol: "vendedor", modulos: ["ventas", "presupuestos", "clientes", "inventario"], nota: "Caja, ventas, presupuestos y clientes" },
   { auth_id: "8c735f1f-2573-4aa2-8574-1ba91e1ef210", nombre: "Thiago Sanabria",
-    rol: "vendedor", modulos: ["ventas", "presupuestos", "clientes"], nota: "Caja, ventas, presupuestos y clientes" },
+    rol: "vendedor", modulos: ["ventas", "presupuestos", "clientes", "inventario"], nota: "Caja, ventas, presupuestos y clientes" },
 ];
 
 const has = (n: string) => process.argv.includes(`--${n}`);
