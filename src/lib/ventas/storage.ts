@@ -10,6 +10,8 @@ export type FaltanteStock = {
   stock_actual: number;
   solicitado: number;
   faltante: number;
+  /** true = producto con controla_stock: no se puede vender sin stock. */
+  bloqueante?: boolean;
 };
 
 export type ResultadoGuardarVenta =

@@ -15,6 +15,12 @@ export interface FaltanteStock {
   stock_actual: number;
   solicitado: number;
   faltante: number;
+  /**
+   * Bloqueante: producto con `controla_stock=true`. No se puede vender sin
+   * stock ni con la confirmación "vender sin stock". Los faltantes de insumos
+   * o de producción previa NO son bloqueantes (se pueden autorizar).
+   */
+  bloqueante?: boolean;
 }
 
 /**
@@ -425,6 +431,8 @@ export async function createVentaTransaccionalPg(
       faltantes.push({
         tipo: "producto", producto_id: pid, nombre: p.nombre, sku: p.sku,
         stock_actual: p.stock, solicitado: need, faltante: Math.round((need - p.stock) * 1e6) / 1e6,
+        // controla_stock=true: bloqueo DURO, no se puede vender/facturar sin stock.
+        bloqueante: p.controlaStock === true,
       });
     }
   }
@@ -440,7 +448,11 @@ export async function createVentaTransaccionalPg(
     }
   }
 
-  if (faltantes.length > 0 && !params.permitirSinStock) {
+  // Faltantes bloqueantes (controla_stock=true): SIEMPRE cortan, aunque se haya
+  // autorizado "vender sin stock". Los no bloqueantes solo cortan si no se
+  // autorizó.
+  const hayBloqueante = faltantes.some((f) => f.bloqueante);
+  if (faltantes.length > 0 && (hayBloqueante || !params.permitirSinStock)) {
     throw new StockInsuficienteError(faltantes);
   }
 

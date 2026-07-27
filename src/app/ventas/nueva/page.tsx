@@ -1544,13 +1544,24 @@ export default function NuevaVentaPage() {
       {confirmSinStockOpen && faltantes.length > 0 && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => setConfirmSinStockOpen(false)}>
           <div className="w-full max-w-lg rounded-xl bg-white p-5 shadow-xl space-y-4" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-start gap-2">
-              <span className="text-amber-500 text-xl leading-none">⚠</span>
-              <div>
-                <h3 className="text-sm font-semibold text-slate-800">Hay productos/insumos sin stock suficiente</h3>
-                <p className="text-xs text-slate-500 mt-0.5">Revisá el detalle. Podés vender igual: el stock quedará negativo y se registrará el movimiento de salida.</p>
+            {(() => {
+              const hayBloqueante = faltantes.some((f) => f.bloqueante);
+              return (
+              <div className="flex items-start gap-2">
+                <span className={`${hayBloqueante ? "text-red-500" : "text-amber-500"} text-xl leading-none`}>⚠</span>
+                <div>
+                  <h3 className="text-sm font-semibold text-slate-800">
+                    {hayBloqueante ? "No se puede vender sin stock" : "Hay productos/insumos sin stock suficiente"}
+                  </h3>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    {hayBloqueante
+                      ? "Los productos marcados controlan stock: no se pueden facturar con stock 0. Quitalos, ajustá el stock o cargá una compra."
+                      : "Revisá el detalle. Podés vender igual: el stock quedará negativo y se registrará el movimiento de salida."}
+                  </p>
+                </div>
               </div>
-            </div>
+              );
+            })()}
 
             <div className="overflow-x-auto rounded-lg border border-slate-200">
               <table className="w-full text-left text-sm">
@@ -1570,6 +1581,11 @@ export default function NuevaVentaPage() {
                         <span className={`ml-2 rounded-full px-1.5 py-0.5 text-[10px] font-semibold ${f.tipo === "insumo" ? "bg-amber-100 text-amber-700" : "bg-slate-100 text-slate-600"}`}>
                           {f.tipo === "insumo" ? "Insumo" : "Producto"}
                         </span>
+                        {f.bloqueante && (
+                          <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-[10px] font-semibold text-red-700">
+                            Controla stock
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 px-3 text-right tabular-nums">{f.stock_actual}</td>
                       <td className="py-2 px-3 text-right tabular-nums">{f.solicitado}</td>
@@ -1582,11 +1598,14 @@ export default function NuevaVentaPage() {
 
             <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
               <button type="button" onClick={() => setConfirmSinStockOpen(false)} className="rounded-lg border border-slate-200 px-4 py-2 text-sm hover:bg-slate-50">
-                Cancelar
+                {faltantes.some((f) => f.bloqueante) ? "Entendido" : "Cancelar"}
               </button>
-              <button type="button" disabled={guardando} aria-busy={guardando} onClick={() => void confirmarVentaSinStock()} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed">
-                {guardando ? "Guardando…" : "Confirmar venta de todos modos"}
-              </button>
+              {/* El "vender igual" solo aparece si NINGÚN faltante es bloqueante. */}
+              {!faltantes.some((f) => f.bloqueante) && (
+                <button type="button" disabled={guardando} aria-busy={guardando} onClick={() => void confirmarVentaSinStock()} className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-medium text-white hover:bg-amber-600 disabled:opacity-50 disabled:cursor-not-allowed">
+                  {guardando ? "Guardando…" : "Confirmar venta de todos modos"}
+                </button>
+              )}
             </div>
           </div>
         </div>
