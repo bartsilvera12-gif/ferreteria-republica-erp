@@ -102,7 +102,9 @@ export default function EditarPedidoPage({
   const [q, setQ] = useState("");
   const [hits, setHits] = useState<ProductoHit[]>([]);
   const [buscando, setBuscando] = useState(false);
+  const [hlIdx, setHlIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
+  const resultsRef = useRef<HTMLUListElement>(null);
 
   // ---- Guardar ----
   const [guardando, setGuardando] = useState(false);
@@ -413,6 +415,25 @@ export default function EditarPedidoPage({
     }
   }
 
+  // Resaltar el primer resultado al cambiar los hits.
+  useEffect(() => { setHlIdx(0); }, [hits]);
+  useEffect(() => {
+    if (hlIdx >= 0) resultsRef.current?.querySelector(`[data-idx="${hlIdx}"]`)?.scrollIntoView({ block: "nearest" });
+  }, [hlIdx]);
+
+  // Atajos globales de teclado (última versión de guardar via ref).
+  const guardarRef = useRef(guardar);
+  guardarRef.current = guardar;
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "Enter") { e.preventDefault(); guardarRef.current(); }
+      else if (ctrl && (e.key === "k" || e.key === "K")) { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const inputClass =
     "h-10 rounded-lg border-2 border-slate-200 bg-white px-3 text-sm outline-none transition-all hover:border-slate-300 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20";
 
@@ -476,6 +497,15 @@ export default function EditarPedidoPage({
                 type="text"
                 value={q}
                 onChange={(e) => setQ(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowDown") { e.preventDefault(); setHlIdx((i) => Math.min(i + 1, hits.length - 1)); }
+                  else if (e.key === "ArrowUp") { e.preventDefault(); setHlIdx((i) => Math.max(i - 1, 0)); }
+                  else if (e.key === "Enter") {
+                    e.preventDefault();
+                    const p = hits[hlIdx] ?? hits[0];
+                    if (p && !cart.some((c) => c.producto_id === p.id)) { addToCart(p); setQ(""); }
+                  } else if (e.key === "Escape") { setQ(""); }
+                }}
                 placeholder="Agregar más productos al pedido..."
                 className={`${inputClass} w-full pl-10 pr-9 h-12 text-base`}
                 autoComplete="off"
@@ -495,13 +525,17 @@ export default function EditarPedidoPage({
           </div>
 
           {q.trim().length >= 2 && hits.length > 0 && (
-            <ul className="space-y-2">
-              {hits.map((p) => {
+            <ul ref={resultsRef} className="space-y-2">
+              {hits.map((p, i) => {
                 const yaEnCarrito = cart.some((c) => c.producto_id === p.id);
                 return (
                   <li
                     key={p.id}
-                    className="rounded-xl border-2 border-slate-100 bg-white p-3.5 hover:border-[#4FAEB2]/40 transition-all"
+                    data-idx={i}
+                    onMouseEnter={() => setHlIdx(i)}
+                    className={`rounded-xl border-2 bg-white p-3.5 transition-all ${
+                      i === hlIdx ? "border-[#4FAEB2]/60 ring-2 ring-[#4FAEB2]/15" : "border-slate-100 hover:border-[#4FAEB2]/40"
+                    }`}
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="min-w-0 flex-1">
@@ -548,7 +582,15 @@ export default function EditarPedidoPage({
                 return (
                   <li
                     key={it.producto_id}
-                    className="rounded-xl border border-slate-200 bg-slate-50/40 p-3"
+                    tabIndex={0}
+                    onKeyDown={(e) => {
+                      const tag = (e.target as HTMLElement).tagName;
+                      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+                      if (e.key === "+" || e.key === "=") { e.preventDefault(); changeCantidad(it.producto_id, 1); }
+                      else if (e.key === "-") { e.preventDefault(); changeCantidad(it.producto_id, -1); }
+                      else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeFromCart(it.producto_id); }
+                    }}
+                    className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/40"
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
@@ -753,7 +795,14 @@ export default function EditarPedidoPage({
                 <Save className="h-4 w-4" />
               )}
               Guardar cambios
+              <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold">Ctrl↵</kbd>
             </button>
+
+            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
+              <span><kbd className="rounded border border-slate-300 bg-slate-50 px-1">↑</kbd><kbd className="rounded border border-slate-300 bg-slate-50 px-1">↓</kbd> elegir · <kbd className="rounded border border-slate-300 bg-slate-50 px-1">↵</kbd> agregar</span>
+              <span>fila: <kbd className="rounded border border-slate-300 bg-slate-50 px-1">+</kbd><kbd className="rounded border border-slate-300 bg-slate-50 px-1">−</kbd> · <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Supr</kbd> quita</span>
+              <span><kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl</kbd>+<kbd className="rounded border border-slate-300 bg-slate-50 px-1">K</kbd> buscar</span>
+            </div>
           </div>
         </aside>
       </div>
