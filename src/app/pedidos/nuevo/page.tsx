@@ -115,8 +115,11 @@ export default function NuevoPedidoPage() {
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
   const [searchOpen, setSearchOpen] = useState(false);
+  // Índice resaltado en el dropdown de búsqueda (navegación con flechas).
+  const [hlIdx, setHlIdx] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchBoxRef = useRef<HTMLDivElement>(null);
+  const resultsRef = useRef<HTMLUListElement>(null);
 
   // Busqueda con debounce
   useEffect(() => {
@@ -388,6 +391,33 @@ export default function NuevoPedidoPage() {
     }
   }
 
+  // El dropdown vuelve a resaltar el primer resultado cada vez que cambian los
+  // hits, para que Enter agregue la mejor coincidencia sin tocar el mouse.
+  useEffect(() => { setHlIdx(0); }, [hits]);
+
+  // Mantener visible el resultado resaltado al navegar con flechas.
+  useEffect(() => {
+    if (searchOpen && hlIdx >= 0) {
+      resultsRef.current?.querySelector(`[data-idx="${hlIdx}"]`)?.scrollIntoView({ block: "nearest" });
+    }
+  }, [hlIdx, searchOpen]);
+
+  // Mantener la última versión de `enviar` para los atajos globales (evita
+  // capturar un `enviar` viejo con carrito desactualizado).
+  const enviarRef = useRef(enviar);
+  enviarRef.current = enviar;
+
+  // Atajos globales de teclado.
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      const ctrl = e.ctrlKey || e.metaKey;
+      if (ctrl && e.key === "Enter") { e.preventDefault(); enviarRef.current(); }
+      else if (ctrl && (e.key === "k" || e.key === "K")) { e.preventDefault(); inputRef.current?.focus(); inputRef.current?.select(); }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   const inputClass =
     "h-10 rounded-lg border-2 border-slate-200 bg-white px-3 text-sm outline-none transition-all hover:border-slate-300 focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20";
 
@@ -424,6 +454,12 @@ export default function NuevoPedidoPage() {
           value={q}
           onChange={(e) => { setQ(e.target.value); setSearchOpen(true); }}
           onFocus={() => setSearchOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") { e.preventDefault(); setSearchOpen(true); setHlIdx((i) => Math.min(i + 1, hits.length - 1)); }
+            else if (e.key === "ArrowUp") { e.preventDefault(); setHlIdx((i) => Math.max(i - 1, 0)); }
+            else if (e.key === "Enter") { e.preventDefault(); const p = hits[hlIdx] ?? hits[0]; if (p) selectFromSearch(p); }
+            else if (e.key === "Escape") { setSearchOpen(false); setQ(""); }
+          }}
           placeholder="Buscar producto por nombre, SKU o palabras clave…"
           className="w-full h-14 rounded-2xl border-2 border-[#4FAEB2]/25 bg-white pl-12 pr-11 text-base text-slate-800 outline-none transition-all focus:border-[#4FAEB2] focus:ring-4 focus:ring-[#4FAEB2]/15 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.15)]"
           autoComplete="off"
@@ -453,15 +489,19 @@ export default function NuevoPedidoPage() {
                 Sin resultados para &quot;{q}&quot;
               </div>
             ) : (
-              <ul className="divide-y divide-slate-100">
-                {hits.map((p) => {
+              <ul ref={resultsRef} className="divide-y divide-slate-100">
+                {hits.map((p, i) => {
                   const yaEnCarrito = cart.some((c) => c.producto_id === p.id);
                   return (
                     <li key={p.id}>
                       <button
                         type="button"
+                        data-idx={i}
+                        onMouseEnter={() => setHlIdx(i)}
                         onClick={() => selectFromSearch(p)}
-                        className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-[#4FAEB2]/8"
+                        className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${
+                          i === hlIdx ? "bg-[#4FAEB2]/12" : "hover:bg-[#4FAEB2]/8"
+                        }`}
                       >
                         <ProductoThumb url={p.imagen_url} alt={p.nombre} />
                         <div className="min-w-0 flex-1">
@@ -493,6 +533,15 @@ export default function NuevoPedidoPage() {
             )}
           </div>
         )}
+      </div>
+
+      {/* Ayuda de teclado */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[11px] text-slate-400">
+        <span className="font-semibold uppercase tracking-wide text-slate-500">Teclado:</span>
+        <span><kbd className="rounded border border-slate-300 bg-slate-50 px-1">↑</kbd><kbd className="rounded border border-slate-300 bg-slate-50 px-1">↓</kbd> elegir producto</span>
+        <span><kbd className="rounded border border-slate-300 bg-slate-50 px-1">↵</kbd> agregar</span>
+        <span>en la fila: <kbd className="rounded border border-slate-300 bg-slate-50 px-1">+</kbd><kbd className="rounded border border-slate-300 bg-slate-50 px-1">−</kbd> cantidad · <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Supr</kbd> quitar</span>
+        <span><kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl</kbd>+<kbd className="rounded border border-slate-300 bg-slate-50 px-1">K</kbd> buscar · <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl</kbd>+<kbd className="rounded border border-slate-300 bg-slate-50 px-1">↵</kbd> enviar</span>
       </div>
 
       {/* Mensajes (visibles aunque el carrito quede vacío tras enviar) */}
@@ -541,7 +590,19 @@ export default function NuevoPedidoPage() {
                 {cart.map((it) => {
                   const cantBase = it.presentacion_cantidad_base ?? 1;
                   return (
-                    <tr key={it.producto_id} className="align-middle transition-colors hover:bg-[#4FAEB2]/5">
+                    <tr
+                      key={it.producto_id}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        // No robar teclas mientras se escribe en un campo de la fila.
+                        const tag = (e.target as HTMLElement).tagName;
+                        if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+                        if (e.key === "+" || e.key === "=") { e.preventDefault(); changeCantidad(it.producto_id, 1); }
+                        else if (e.key === "-") { e.preventDefault(); changeCantidad(it.producto_id, -1); }
+                        else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeFromCart(it.producto_id); }
+                      }}
+                      className="align-middle outline-none transition-colors hover:bg-[#4FAEB2]/5 focus:bg-[#4FAEB2]/10 focus:ring-2 focus:ring-inset focus:ring-[#4FAEB2]/50"
+                    >
                       {/* Producto */}
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-3">
@@ -740,6 +801,7 @@ export default function NuevoPedidoPage() {
             >
               {enviando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
               Enviar a Caja
+              <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold">Ctrl↵</kbd>
             </button>
             <p className="mt-3 text-center text-[11px] text-slate-400">
               Queda pendiente en{" "}
