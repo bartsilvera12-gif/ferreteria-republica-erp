@@ -4,10 +4,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Trash2, Loader2, Plus, ImageIcon } from "lucide-react";
-import { getProveedores } from "@/lib/proveedores/storage";
+import ProveedorPicker from "@/components/proveedores/ProveedorPicker";
 import { saveOrdenCompra, type OrdenItemPayload } from "@/lib/ordenes-compra/storage";
+import { uploadComprobante } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import type { Proveedor } from "@/lib/proveedores/types";
 import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
 import { parseCantidad, pasoCantidad, minimoCantidad, clampCantidad, permiteDecimales } from "@/lib/productos/unidades";
 
@@ -63,15 +63,19 @@ const inputClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm 
 
 export default function NuevaOrdenCompraPage() {
   const router = useRouter();
-  const [proveedores, setProveedores] = useState<Proveedor[]>([]);
   const [cab, setCab] = useState({
     proveedor_id: "",
+    proveedor_nombre: "",
+    nro_timbrado: "",
+    numero_factura: "",
     moneda: "PYG" as Moneda,
     tipo_cambio: "",
     tipo_pago: "contado" as TipoPago,
     plazo_dias: "",
     observacion: "",
   });
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
+  const [comprobanteError, setComprobanteError] = useState<string | null>(null);
   const [lineas, setLineas] = useState<Linea[]>([]);
   const [q, setQ] = useState("");
   const [searchOpen, setSearchOpen] = useState(false);
@@ -85,16 +89,28 @@ export default function NuevaOrdenCompraPage() {
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
-    getProveedores().then(setProveedores).catch(() => setProveedores([]));
-  }, []);
-
-  useEffect(() => {
     function onDown(e: MouseEvent) {
       if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) setSearchOpen(false);
     }
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
+
+  function handleComprobanteChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setComprobanteError(null);
+    const f = e.target.files?.[0] ?? null;
+    if (f && !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(f.type)) {
+      setComprobanteError("Formato no permitido. Usá JPG, PNG, WebP o PDF.");
+      setComprobanteFile(null);
+      return;
+    }
+    if (f && f.size > 10 * 1024 * 1024) {
+      setComprobanteError("Archivo demasiado grande (máx. 10 MB).");
+      setComprobanteFile(null);
+      return;
+    }
+    setComprobanteFile(f);
+  }
 
   // Autocomplete server-side por tokens (todo el catálogo), con debounce —
   // mismo endpoint que el buscador de Caja.
@@ -179,9 +195,6 @@ export default function NuevaOrdenCompraPage() {
     const mala = lineas.find((l) => l.cantidad <= 0 || l.costo_input <= 0);
     if (mala) return setErr(`Revisá "${mala.producto_nombre}": cantidad y costo deben ser mayores a 0.`);
 
-    const prov = proveedores.find((p) => String(p.id) === cab.proveedor_id);
-    if (!prov) return setErr("Proveedor no encontrado.");
-
     const items: OrdenItemPayload[] = lineas.map((l) => {
       const costoPyg = l.costo_input * tc;
       const totalLinea = costoPyg * l.cantidad;
@@ -203,15 +216,29 @@ export default function NuevaOrdenCompraPage() {
 
     setEnviando(true);
     try {
+      // Comprobante opcional (presupuesto/cotización): se sube primero y se
+      // asocia a toda la orden.
+      let comprobante: { comprobante_storage_path: string; comprobante_nombre: string; comprobante_mime_type: string } | null = null;
+      if (comprobanteFile) {
+        const up = await uploadComprobante(comprobanteFile);
+        if (!up.ok) { setErr(`Comprobante: ${up.error}`); return; }
+        comprobante = up.data;
+      }
+
       const res = await saveOrdenCompra(
         {
-          proveedor_id: String(prov.id),
-          proveedor_nombre: prov.nombre,
+          proveedor_id: cab.proveedor_id,
+          proveedor_nombre: cab.proveedor_nombre,
           moneda: cab.moneda,
           tipo_cambio: tc,
           tipo_pago: cab.tipo_pago,
           plazo_dias: cab.tipo_pago === "credito" && cab.plazo_dias ? parseInt(cab.plazo_dias) : undefined,
           observacion: cab.observacion.trim() || null,
+          nro_timbrado: cab.nro_timbrado.trim() || null,
+          numero_factura: cab.numero_factura.trim() || null,
+          comprobante_storage_path: comprobante?.comprobante_storage_path ?? null,
+          comprobante_nombre: comprobante?.comprobante_nombre ?? null,
+          comprobante_mime_type: comprobante?.comprobante_mime_type ?? null,
         },
         items
       );
@@ -229,22 +256,49 @@ export default function NuevaOrdenCompraPage() {
       </Link>
       <div>
         <h1 className="text-2xl font-bold tracking-tight text-slate-900">Nueva orden de compra</h1>
-        <p className="mt-1 text-sm text-slate-500">Productos y costos pactados con el proveedor. No pide factura ni impacta stock — eso se hace al recibir.</p>
+        <p className="mt-1 text-sm text-slate-500">Productos y costos pactados con el proveedor. No impacta stock — eso se hace al recibir. Los datos de factura y el comprobante son opcionales.</p>
       </div>
 
       <form onSubmit={onSubmit} className="space-y-6">
         {/* Cabecera */}
-        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="sm:col-span-2">
-              <label className="mb-1 block text-xs font-semibold text-slate-600">Proveedor <span className="text-red-500">*</span></label>
-              <select value={cab.proveedor_id} onChange={(e) => setCab((p) => ({ ...p, proveedor_id: e.target.value }))} className={inputClass}>
-                <option value="">— Seleccioná un proveedor —</option>
-                {proveedores.map((p) => (
-                  <option key={p.id} value={String(p.id)}>{p.nombre}{p.ruc ? ` · ${p.ruc}` : ""}</option>
-                ))}
-              </select>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+          {/* Proveedor */}
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-600">Proveedor <span className="text-red-500">*</span></label>
+            <ProveedorPicker
+              value={cab.proveedor_id}
+              onChange={(id, nombre) => setCab((p) => ({ ...p, proveedor_id: id, proveedor_nombre: nombre }))}
+            />
+          </div>
+
+          {/* Comprobante / factura (opcional — presupuesto o cotización) */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">N° de timbrado <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input value={cab.nro_timbrado} onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: e.target.value }))} placeholder="Ej: 001-001-0000001" className={inputClass} />
             </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">N° de factura <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input value={cab.numero_factura} onChange={(e) => setCab((p) => ({ ...p, numero_factura: e.target.value }))} placeholder="Ej: 001-001-0000123" className={inputClass} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Comprobante / presupuesto <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={handleComprobanteChange}
+                className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#4FAEB2] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#3F8E91]"
+              />
+              {comprobanteFile && !comprobanteError && (
+                <p className="mt-1.5 text-xs text-green-600">✓ {comprobanteFile.name} listo para subir al crear la orden.</p>
+              )}
+              {comprobanteError && <p className="mt-1.5 text-xs text-red-600">{comprobanteError}</p>}
+              <p className="mt-1 text-xs text-slate-400">JPG, PNG, WebP o PDF — máx. 10 MB. Se asocia a toda la orden.</p>
+            </div>
+          </div>
+
+          {/* Condiciones */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">Moneda</label>
               <select value={cab.moneda} onChange={(e) => setCab((p) => ({ ...p, moneda: e.target.value as Moneda }))} className={inputClass}>

@@ -97,6 +97,11 @@ export interface OrdenHeaderPayload {
   tipo_pago: "contado" | "credito";
   plazo_dias?: number;
   observacion?: string | null;
+  nro_timbrado?: string | null;
+  numero_factura?: string | null;
+  comprobante_storage_path?: string | null;
+  comprobante_nombre?: string | null;
+  comprobante_mime_type?: string | null;
 }
 
 interface OkOrden { success: true; numero_oc: string; ordenes: OrdenCompra[]; }

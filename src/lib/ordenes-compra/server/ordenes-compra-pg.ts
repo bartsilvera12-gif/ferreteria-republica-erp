@@ -46,6 +46,12 @@ export interface OrdenCompraRow {
   plazo_dias: number | null;
   estado: string;
   observacion: string | null;
+  nro_timbrado: string | null;
+  numero_factura: string | null;
+  comprobante_url: string | null;
+  comprobante_storage_path: string | null;
+  comprobante_nombre: string | null;
+  comprobante_mime_type: string | null;
   compra_numero_control: string | null;
   recibida_at: string | null;
   cancelada_at: string | null;
@@ -62,6 +68,8 @@ const COLS = `
   cantidad, cantidad_recibida, moneda, tipo_cambio, costo_unitario_original, costo_unitario,
   iva_tipo, subtotal, monto_iva, total, precio_venta, margen_venta,
   tipo_pago, plazo_dias, estado, observacion,
+  nro_timbrado, numero_factura,
+  comprobante_url, comprobante_storage_path, comprobante_nombre, comprobante_mime_type,
   compra_numero_control, recibida_at, cancelada_at, cancelada_motivo,
   fecha, created_at, updated_at, created_by, usuario_nombre
 `;
@@ -74,6 +82,12 @@ export interface OrdenCompraHeaderInput {
   tipo_pago: string;
   plazo_dias: number | null;
   observacion: string | null;
+  nro_timbrado: string | null;
+  numero_factura: string | null;
+  comprobante_url: string | null;
+  comprobante_storage_path: string | null;
+  comprobante_nombre: string | null;
+  comprobante_mime_type: string | null;
   created_by: string | null;
   usuario_nombre: string | null;
 }
@@ -176,12 +190,18 @@ export async function insertOrdenCompra(
            empresa_id, numero_oc, proveedor_id, proveedor_nombre, producto_id, producto_nombre,
            cantidad, moneda, tipo_cambio, costo_unitario_original, costo_unitario,
            iva_tipo, subtotal, monto_iva, total, precio_venta, margen_venta,
-           tipo_pago, plazo_dias, estado, observacion, fecha, created_by, usuario_nombre
+           tipo_pago, plazo_dias, estado, observacion,
+           nro_timbrado, numero_factura,
+           comprobante_url, comprobante_storage_path, comprobante_nombre, comprobante_mime_type,
+           fecha, created_by, usuario_nombre
          ) VALUES (
            $1::uuid, $2, $3::uuid, $4, $5::uuid, $6,
            $7::numeric, $8, $9::numeric, $10::numeric, $11::numeric,
            $12, $13::numeric, $14::numeric, $15::numeric, $16::numeric, $17::numeric,
-           $18, $19::integer, 'pendiente', $20, now(), $21::uuid, $22
+           $18, $19::integer, 'pendiente', $20,
+           $21, $22,
+           $23, $24, $25, $26,
+           now(), $27::uuid, $28
          )
          RETURNING ${COLS}`,
         [
@@ -191,6 +211,9 @@ export async function insertOrdenCompra(
           it.costo_unitario_original, it.costo_unitario,
           it.iva_tipo, it.subtotal, it.monto_iva, it.total, it.precio_venta, it.margen_venta,
           header.tipo_pago, header.plazo_dias, header.observacion,
+          header.nro_timbrado, header.numero_factura,
+          header.comprobante_url, header.comprobante_storage_path,
+          header.comprobante_nombre, header.comprobante_mime_type,
           header.created_by, header.usuario_nombre,
         ]
       );

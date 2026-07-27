@@ -55,6 +55,12 @@ export async function POST(request: NextRequest) {
           ? parseInt(String(body.plazo_dias), 10) || null
           : null,
       observacion: req("observacion") ? String(body.observacion).trim().slice(0, 2000) : null,
+      nro_timbrado: req("nro_timbrado") ? String(body.nro_timbrado).trim().toUpperCase() : null,
+      numero_factura: req("numero_factura") ? String(body.numero_factura).trim() : null,
+      comprobante_url: req("comprobante_url") ? String(body.comprobante_url) : null,
+      comprobante_storage_path: req("comprobante_storage_path") ? String(body.comprobante_storage_path) : null,
+      comprobante_nombre: req("comprobante_nombre") ? String(body.comprobante_nombre) : null,
+      comprobante_mime_type: req("comprobante_mime_type") ? String(body.comprobante_mime_type) : null,
       created_by: ctx.auth.usuarioCatalogId ?? null,
       // Auditoría: nombre del catálogo si existe; el email es solo el último
       // recurso (así el correo dice "Juan Pérez" y no "juan@empresa.com").
