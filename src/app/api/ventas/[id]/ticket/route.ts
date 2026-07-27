@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { asciiTicket } from "@/lib/text/ascii-ticket";
 import { membreteA4, membreteTicket } from "@/lib/documentos/membrete";
 
 /**
@@ -451,7 +452,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     }
     const itemsRem = itemsRaw.map((it) => ({ ...it, unidad: unidadByProd.get(it.producto_id) ?? "UNIDAD" }));
     const htmlRem = renderNotaRemision({ negocio, venta, items: itemsRem, cliente: clienteRem });
-    return new NextResponse(htmlRem, { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
+    return new NextResponse(asciiTicket(htmlRem), { status: 200, headers: { "Content-Type": "text/html; charset=utf-8" } });
   }
 
   // Pedido cocina (opcional) — busca card de Pedidos vinculada a esta venta.
@@ -597,7 +598,9 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 </body>
 </html>`;
 
-  return new NextResponse(html, {
+  // ASCII-fold del HTML completo: la ticketera no imprime tildes/ñ ni símbolos
+  // tipográficos. Solo afecta el texto visible (tags/CSS ya son ASCII).
+  return new NextResponse(asciiTicket(html), {
     status: 200,
     headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" },
   });

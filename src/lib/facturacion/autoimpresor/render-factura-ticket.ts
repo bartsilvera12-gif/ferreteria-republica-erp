@@ -11,6 +11,7 @@
  */
 import type { LiquidacionIva } from "./emitir-factura";
 import { EMPRESA_DOC } from "@/lib/documentos/membrete";
+import { asciiTicket } from "@/lib/text/ascii-ticket";
 
 export interface FacturaTicketData {
   borrador: boolean;
@@ -160,7 +161,7 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
     ? `<div class="borrador">*** SIN VALIDEZ FISCAL ***<br>Borrador — ${esc(d.motivoBorrador || "autoimpresor inactivo")}</div>`
     : "";
 
-  return `<!doctype html>
+  const html = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8" />
 <title>Factura ${esc(d.numeroCompleto)} — ${esc(d.emisor.razon_social)}</title>
 <style>
@@ -248,4 +249,7 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
   </div>
   <script>try{ if(new URL(location.href).searchParams.get('auto')==='1'){ setTimeout(function(){window.print();},250); } }catch(e){}</script>
 </body></html>`;
+  // La ticketera no imprime tildes/ñ: se transliteran a ASCII. Los datos
+  // fiscales (RUC, timbrado, totales) son numéricos y no se ven afectados.
+  return asciiTicket(html);
 }
