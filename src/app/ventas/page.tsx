@@ -405,8 +405,39 @@ export default function VentasPage() {
 
 // ── Modal de detalle de venta ───────────────────────────────────────────────────
 
+interface PagoDetalle {
+  id: string;
+  metodo_pago: string;
+  entidad_nombre_snapshot: string | null;
+  monto: string | number;
+  referencia: string | null;
+  titular: string | null;
+  fecha_acreditacion: string | null;
+  observacion: string | null;
+}
+
 function VentaDetalleModal({ venta, onClose }: { venta: Venta; onClose: () => void }) {
   const cantTotal = venta.items.reduce((s, i) => s + i.cantidad, 0);
+  const esElectronico = venta.metodo_pago === "tarjeta" || venta.metodo_pago === "transferencia";
+  const [pagos, setPagos] = useState<PagoDetalle[]>([]);
+
+  // Solo para pagos electrónicos: traer banco/comprobante/monto de la venta.
+  useEffect(() => {
+    if (!esElectronico) return;
+    let cancel = false;
+    fetch(`/api/ventas/${venta.id}/pagos`, { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel && j?.success) setPagos((j.data?.pagos ?? []) as PagoDetalle[]); })
+      .catch(() => {});
+    return () => { cancel = true; };
+  }, [venta.id, esElectronico]);
+
+  const pagoLabel =
+    venta.metodo_pago === "tarjeta" ? "Tarjeta / débito"
+    : venta.metodo_pago === "transferencia" ? "Transferencia"
+    : venta.metodo_pago === "efectivo" ? "Efectivo"
+    : "—";
+
   return (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4"
@@ -439,19 +470,40 @@ function VentaDetalleModal({ venta, onClose }: { venta: Venta; onClose: () => vo
             label="Tipo"
             value={venta.tipo_venta === "CONTADO" ? "Contado" : `Crédito ${venta.plazo_dias ?? ""}d`}
           />
-          <Meta
-            label="Pago"
-            value={
-              venta.metodo_pago === "tarjeta" ? "Tarjeta"
-              : venta.metodo_pago === "transferencia" ? "Transferencia"
-              : venta.metodo_pago === "efectivo" ? "Efectivo"
-              : "—"
-            }
-          />
+          <Meta label="Pago" value={pagoLabel} />
         </div>
 
+        {/* Datos del pago electrónico (transferencia / tarjeta) */}
+        {esElectronico && (
+          <div className="px-5 pb-1">
+            <div className="rounded-xl border border-[#4FAEB2]/25 bg-[#4FAEB2]/[0.05] p-4">
+              <p className="mb-2.5 text-[11px] font-bold uppercase tracking-wider text-[#3F8E91]">
+                Datos del pago · {pagoLabel}
+              </p>
+              {pagos.length === 0 ? (
+                <p className="text-xs text-slate-400">Sin datos de pago registrados para esta venta.</p>
+              ) : (
+                <div className="space-y-3">
+                  {pagos.map((p) => (
+                    <div key={p.id} className="grid grid-cols-2 gap-x-4 gap-y-2 sm:grid-cols-4">
+                      {p.entidad_nombre_snapshot && (
+                        <Meta label={venta.metodo_pago === "tarjeta" ? "Banco / POS" : "Banco"} value={p.entidad_nombre_snapshot} />
+                      )}
+                      <Meta label="Monto" value={formatGs(Number(p.monto) || 0)} />
+                      {p.referencia && <Meta label="N° comprobante" value={p.referencia} />}
+                      {p.titular && <Meta label="Titular" value={p.titular} />}
+                      {p.fecha_acreditacion && <Meta label="Acreditación" value={p.fecha_acreditacion} />}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Ítems */}
-        <div className="max-h-[50vh] overflow-y-auto px-5 pb-2">
+        <div className="max-h-[50vh] overflow-y-auto px-5 pb-2 pt-3">
+          <p className="mb-2 text-[11px] font-bold uppercase tracking-wider text-slate-400">Productos</p>
           <div className="overflow-x-auto rounded-xl border border-slate-200">
             <table className="w-full min-w-[520px] text-sm">
               <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">

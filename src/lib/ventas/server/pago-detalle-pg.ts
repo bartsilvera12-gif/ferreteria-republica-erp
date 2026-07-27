@@ -145,3 +145,33 @@ export async function insertVentaPagoDetalle(
   );
   return rows[0]?.id ?? null;
 }
+
+export interface PagoDetalleRow {
+  id: string;
+  metodo_pago: string;
+  entidad_nombre_snapshot: string | null;
+  monto: string | number;
+  referencia: string | null;
+  titular: string | null;
+  fecha_acreditacion: string | null;
+  observacion: string | null;
+}
+
+/** Detalle(s) de pago de una venta (una o varias filas: pago mixto/saldo). */
+export async function listPagoDetalleVenta(
+  schemaRaw: string,
+  empresaId: string,
+  ventaId: string
+): Promise<PagoDetalleRow[]> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "ventas_pagos_detalle");
+  const { rows } = await pool().query<PagoDetalleRow>(
+    `SELECT id, metodo_pago, entidad_nombre_snapshot, monto, referencia, titular,
+            fecha_acreditacion::text AS fecha_acreditacion, observacion
+       FROM ${t}
+      WHERE empresa_id = $1::uuid AND venta_id = $2::uuid
+      ORDER BY created_at ASC`,
+    [empresaId, ventaId]
+  );
+  return rows;
+}
