@@ -72,6 +72,9 @@ export async function PATCH(
       nro_timbrado: req("nro_timbrado") ? String(body.nro_timbrado).trim().toUpperCase() : null,
       fecha_factura: req("fecha_factura") ? String(body.fecha_factura).trim().slice(0, 10) : null,
       observacion: req("observacion") ? String(body.observacion).trim().slice(0, 2000) : null,
+      comprobante_storage_path: req("comprobante_storage_path") ? String(body.comprobante_storage_path) : null,
+      comprobante_nombre: req("comprobante_nombre") ? String(body.comprobante_nombre) : null,
+      comprobante_mime_type: req("comprobante_mime_type") ? String(body.comprobante_mime_type) : null,
     };
 
     try {

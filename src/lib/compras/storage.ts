@@ -231,6 +231,10 @@ export interface EditarCompraPayload {
   lineas: EditarCompraLineaPayload[];
   /** ids de líneas existentes a eliminar. */
   eliminar: string[];
+  /** Comprobante nuevo (si se subió uno para reemplazar). */
+  comprobante_storage_path?: string | null;
+  comprobante_nombre?: string | null;
+  comprobante_mime_type?: string | null;
 }
 
 export async function editarCompra(

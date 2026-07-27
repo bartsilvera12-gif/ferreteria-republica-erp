@@ -514,6 +514,10 @@ export interface EditarCompraHeader {
   nro_timbrado: string | null;
   fecha_factura: string | null;
   observacion: string | null;
+  /** Si viene, se reemplaza el comprobante (imagen/PDF) de toda la compra. */
+  comprobante_storage_path?: string | null;
+  comprobante_nombre?: string | null;
+  comprobante_mime_type?: string | null;
 }
 
 export interface EditarCompraResult {
@@ -670,6 +674,17 @@ export async function editarCompraConMovimiento(
        WHERE empresa_id = $5::uuid AND numero_control = $6`,
       [header.numero_factura, header.nro_timbrado, header.fecha_factura, header.observacion, empresaId, numeroControl]
     );
+
+    // Comprobante nuevo (imagen/PDF): reemplaza el de toda la compra.
+    if (header.comprobante_storage_path) {
+      await client.query(
+        `UPDATE ${tC} SET comprobante_storage_path = $1, comprobante_nombre = $2,
+           comprobante_mime_type = $3, updated_at = now()
+         WHERE empresa_id = $4::uuid AND numero_control = $5`,
+        [header.comprobante_storage_path, header.comprobante_nombre ?? null,
+         header.comprobante_mime_type ?? null, empresaId, numeroControl]
+      );
+    }
 
     await client.query("COMMIT");
     return {
