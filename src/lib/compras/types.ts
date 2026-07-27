@@ -11,6 +11,8 @@ export interface Compra {
 
   producto_id: string;
   producto_nombre: string;
+  /** Unidad de medida del producto (define si la cantidad admite decimales). */
+  unidad_medida?: string;
 
   cantidad: number;
 

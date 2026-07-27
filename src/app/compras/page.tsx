@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { Pencil } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { getCompras } from "@/lib/compras/storage";
 import { getOrdenesCompra } from "@/lib/ordenes-compra/storage";
@@ -300,6 +301,16 @@ export default function ComprasPage() {
                         <td className="py-4 pr-4 font-mono text-xs text-gray-500">
                           {multi && <span className="mr-1 inline-block text-gray-400">{abierto ? "▾" : "▸"}</span>}
                           {g.numero_control}
+                          {/* Editar: solo compras manuales (las de OC se ajustan desde la orden). */}
+                          {!g.orden_compra_numero && (
+                            <Link
+                              href={`/compras/${encodeURIComponent(g.numero_control)}/editar`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="ml-2 inline-flex items-center gap-0.5 font-sans text-[11px] font-semibold text-[#4FAEB2] hover:text-[#3F8E91] hover:underline"
+                            >
+                              <Pencil className="h-3 w-3" /> Editar
+                            </Link>
+                          )}
                         </td>
                         <td className="py-4 pr-4 font-medium text-gray-800">{g.proveedor_nombre}</td>
                         <td className="py-4 pr-4 text-gray-600">

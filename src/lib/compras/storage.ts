@@ -2,7 +2,8 @@ import type { Compra } from "./types";
 
 interface CompraApiRow {
   id: string; numero_control: string; proveedor_id: string; proveedor_nombre: string;
-  producto_id: string; producto_nombre: string; cantidad: string | number; moneda: string;
+  producto_id: string; producto_nombre: string; unidad_medida?: string | null;
+  cantidad: string | number; moneda: string;
   tipo_cambio: string | number; costo_unitario_original: string | number;
   costo_unitario: string | number; iva_tipo: string;
   subtotal: string | number; monto_iva: string | number; total: string | number;
@@ -27,6 +28,7 @@ function mapRow(r: CompraApiRow): Compra {
     proveedor_nombre: r.proveedor_nombre,
     producto_id: r.producto_id,
     producto_nombre: r.producto_nombre,
+    unidad_medida: (r.unidad_medida ?? "UNIDAD") || "UNIDAD",
     cantidad: Number(r.cantidad),
     moneda: (r.moneda === "USD" ? "USD" : "PYG") as Compra["moneda"],
     tipo_cambio: Number(r.tipo_cambio),
@@ -200,5 +202,47 @@ export async function saveCompra(
     const msg = e instanceof Error ? e.message : "Error de red";
     console.error("[compras] saveCompra:", e);
     return { success: false, error: msg };
+  }
+}
+
+// ── Edición de compra ────────────────────────────────────────────────────────
+
+export interface EditarCompraLineaPayload {
+  id: string;
+  cantidad: number;
+  costo_unitario_original: number;
+  costo_unitario: number;
+  iva_tipo: string;
+  subtotal: number;
+  monto_iva: number;
+  total: number;
+  precio_venta: number;
+  margen_venta: number | null;
+}
+
+export interface EditarCompraPayload {
+  numero_factura: string | null;
+  nro_timbrado: string | null;
+  fecha_factura: string | null;
+  observacion: string | null;
+  lineas: EditarCompraLineaPayload[];
+}
+
+export async function editarCompra(
+  numeroControl: string,
+  payload: EditarCompraPayload
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const r = await fetch(`/api/compras/${encodeURIComponent(numeroControl)}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      credentials: "include",
+      body: JSON.stringify(payload),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.success) return { ok: false, error: (j as { error?: string })?.error ?? "No se pudo editar la compra." };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de conexión." };
   }
 }

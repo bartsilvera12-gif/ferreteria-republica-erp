@@ -62,6 +62,8 @@ export interface CompraRow {
   proveedor_nombre: string;
   producto_id: string;
   producto_nombre: string;
+  /** Solo lo devuelve listCompras (via JOIN); en insert es undefined. */
+  unidad_medida?: string | null;
   cantidad: string | number;
   moneda: string;
   tipo_cambio: string | number;
@@ -134,8 +136,14 @@ export async function listCompras(
 ): Promise<CompraRow[]> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const t = quoteSchemaTable(schema, "compras");
+  const tProd = quoteSchemaTable(schema, "productos");
+  // JOIN a productos para traer la unidad de medida: la usa la edición de
+  // compra para saber si la cantidad admite decimales. La compra no la guarda.
   const { rows } = await pool().query<CompraRow>(
-    `SELECT ${COLS} FROM ${t} WHERE empresa_id = $1::uuid ORDER BY fecha DESC LIMIT 500`,
+    `SELECT ${COLS.split(",").map((c) => `c.${c.trim()}`).join(", ")}, p.unidad_medida AS unidad_medida
+       FROM ${t} c
+       LEFT JOIN ${tProd} p ON p.id = c.producto_id
+      WHERE c.empresa_id = $1::uuid ORDER BY c.fecha DESC LIMIT 500`,
     [empresaId]
   );
   return rows;
@@ -474,6 +482,162 @@ export async function insertCompraConImpacto(
 
     await client.query("COMMIT");
     return { compra, movimiento_id: movimientoId, movimiento_warning: movimientoWarning };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ── Edición de compra ────────────────────────────────────────────────────────
+
+export interface EditarCompraLinea {
+  /** id de la fila `compras` a corregir. */
+  id: string;
+  cantidad: number;
+  costo_unitario_original: number;
+  costo_unitario: number;
+  iva_tipo: string;
+  subtotal: number;
+  monto_iva: number;
+  total: number;
+  precio_venta: number;
+  margen_venta: number | null;
+}
+
+export interface EditarCompraHeader {
+  numero_factura: string | null;
+  nro_timbrado: string | null;
+  fecha_factura: string | null;
+  observacion: string | null;
+}
+
+export interface EditarCompraResult {
+  numero_control: string;
+  lineas_actualizadas: number;
+  movimientos_generados: number;
+  unidades_ajustadas: number;
+}
+
+/**
+ * Corrige una compra ya registrada SIN reescribir la historia: por cada línea
+ * cuya cantidad cambia, aplica la diferencia al stock y deja un movimiento
+ * NUEVO con origen 'edicion_compra' (el movimiento de la compra original queda
+ * intacto). Los datos de la factura (número, timbrado, fecha, observación) se
+ * actualizan en todas las filas del `numero_control`.
+ *
+ * Bloquea compras derivadas de una orden de compra: editar esas descuadraría
+ * la cantidad recibida de la OC.
+ */
+export async function editarCompraConMovimiento(
+  schemaRaw: string,
+  empresaId: string,
+  numeroControl: string,
+  header: EditarCompraHeader,
+  lineas: EditarCompraLinea[],
+  usuario: { id: string | null; nombre: string | null }
+): Promise<EditarCompraResult> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tC = quoteSchemaTable(schema, "compras");
+  const tM = quoteSchemaTable(schema, "movimientos_inventario");
+  const tP = quoteSchemaTable(schema, "productos");
+
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: actuales } = await client.query<CompraRow>(
+      `SELECT ${COLS} FROM ${tC}
+        WHERE empresa_id = $1::uuid AND numero_control = $2 FOR UPDATE`,
+      [empresaId, numeroControl]
+    );
+    if (actuales.length === 0) throw new Error("Compra no encontrada.");
+    if (actuales.some((r) => r.orden_compra_numero)) {
+      throw new Error("Esta compra proviene de una orden de compra y no se puede editar acá. Ajustá la orden de compra.");
+    }
+
+    const porId = new Map(actuales.map((r) => [r.id, r]));
+    let movimientos = 0;
+    let unidades = 0;
+
+    for (const l of lineas) {
+      const actual = porId.get(l.id);
+      if (!actual) continue; // ignora ids que no pertenecen a esta compra
+      const cantAnterior = Number(actual.cantidad) || 0;
+      const cantNueva = Number(l.cantidad) || 0;
+      const delta = Math.round((cantNueva - cantAnterior) * 1e6) / 1e6;
+
+      // 1) Actualizar la fila de la compra con los nuevos valores.
+      await client.query(
+        `UPDATE ${tC} SET
+           cantidad = $1::numeric, costo_unitario_original = $2::numeric,
+           costo_unitario = $3::numeric, iva_tipo = $4,
+           subtotal = $5::numeric, monto_iva = $6::numeric, total = $7::numeric,
+           precio_venta = $8::numeric, margen_venta = $9::numeric,
+           numero_factura = $10, nro_timbrado = $11, fecha_factura = $12::date,
+           observacion = $13, updated_at = now()
+         WHERE id = $14::uuid AND empresa_id = $15::uuid`,
+        [cantNueva, l.costo_unitario_original, l.costo_unitario, l.iva_tipo,
+         l.subtotal, l.monto_iva, l.total, l.precio_venta, l.margen_venta,
+         header.numero_factura, header.nro_timbrado, header.fecha_factura,
+         header.observacion, l.id, empresaId]
+      );
+
+      // 2) Ajuste de stock + movimiento NUEVO por la diferencia de cantidad.
+      if (delta !== 0) {
+        await client.query(
+          `UPDATE ${tP} SET stock_actual = stock_actual + $1::numeric, updated_at = now()
+            WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+          [delta, actual.producto_id, empresaId]
+        );
+        await client.query(
+          `INSERT INTO ${tM} (
+             empresa_id, producto_id, producto_nombre, producto_sku,
+             tipo, cantidad, costo_unitario, origen, referencia, fecha,
+             created_by, usuario_nombre
+           )
+           SELECT $1::uuid, $2::uuid, $3, COALESCE(p.sku, ''),
+                  $4, $5::numeric, $6::numeric, 'edicion_compra', $7, now(),
+                  $8::uuid, $9
+           FROM ${tP} p WHERE p.id = $2::uuid`,
+          [empresaId, actual.producto_id, actual.producto_nombre,
+           delta > 0 ? "ENTRADA" : "SALIDA", Math.abs(delta), l.costo_unitario,
+           `Edición de compra ${numeroControl}`, usuario.id, usuario.nombre]
+        );
+        movimientos++;
+        unidades += Math.abs(delta);
+      }
+
+      // 3) Actualizar costo y precio del producto (mismo criterio que al comprar).
+      await client.query(
+        `UPDATE ${tP} SET
+           costo_promedio = $1::numeric,
+           precio_venta = CASE WHEN $2::numeric > 0 THEN $2::numeric ELSE precio_venta END,
+           updated_at = now()
+         WHERE id = $3::uuid AND empresa_id = $4::uuid`,
+        [l.costo_unitario, l.precio_venta, actual.producto_id, empresaId]
+      );
+    }
+
+    // Datos de factura: se aplican a TODAS las filas de la compra (por si alguna
+    // línea no vino en el payload).
+    await client.query(
+      `UPDATE ${tC} SET
+         numero_factura = $1, nro_timbrado = $2, fecha_factura = $3::date,
+         observacion = $4, updated_at = now()
+       WHERE empresa_id = $5::uuid AND numero_control = $6`,
+      [header.numero_factura, header.nro_timbrado, header.fecha_factura,
+       header.observacion, empresaId, numeroControl]
+    );
+
+    await client.query("COMMIT");
+    return {
+      numero_control: numeroControl,
+      lineas_actualizadas: lineas.length,
+      movimientos_generados: movimientos,
+      unidades_ajustadas: unidades,
+    };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => null);
     throw err;
