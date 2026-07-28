@@ -108,6 +108,8 @@ export async function GET(request: NextRequest) {
           ? "transferencia"
           : (r as unknown as { metodo_pago?: string }).metodo_pago === "efectivo"
           ? "efectivo"
+          : (r as unknown as { metodo_pago?: string }).metodo_pago === "mixto"
+          ? "mixto"
           : undefined,
         cliente_id: (r as unknown as { cliente_id?: string | null }).cliente_id ?? null,
         genera_nota_remision: (r as unknown as { genera_nota_remision?: boolean }).genera_nota_remision === true,

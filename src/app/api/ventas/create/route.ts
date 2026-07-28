@@ -133,8 +133,44 @@ export async function POST(request: NextRequest) {
       tipoVenta === "CREDITO" && o.plazo_dias != null && String(o.plazo_dias).trim() !== ""
         ? parseInt(String(o.plazo_dias), 10)
         : null;
-    const metodoPago: "efectivo" | "tarjeta" | "transferencia" =
+    const metodoPagoBase: "efectivo" | "tarjeta" | "transferencia" =
       o.metodo_pago === "tarjeta" || o.metodo_pago === "transferencia" ? o.metodo_pago : "efectivo";
+
+    // Cobro MIXTO: varias líneas de pago que suman el total. Si vienen, definen
+    // el/los detalle(s) de cobro y el método escalar de la venta ('mixto' si hay
+    // más de un medio, o el único medio si todas las líneas coinciden).
+    const strPago = (v: unknown, max = 200) =>
+      v === null || v === undefined || String(v).trim() === "" ? null : String(v).trim().slice(0, max);
+    type PagoLinea = {
+      metodo_pago: "efectivo" | "transferencia" | "tarjeta";
+      monto: number;
+      entidad_bancaria_id: string | null;
+      entidad_nombre_snapshot: string | null;
+      referencia: string | null;
+      titular: string | null;
+    };
+    const pagosMixtos: PagoLinea[] = [];
+    if (Array.isArray(o.pagos)) {
+      for (const raw of o.pagos as Record<string, unknown>[]) {
+        const m = raw?.metodo_pago;
+        if (m !== "efectivo" && m !== "transferencia" && m !== "tarjeta") continue;
+        const monto = Math.round((Number(raw?.monto) || 0) * 100) / 100;
+        if (!(monto > 0)) continue;
+        pagosMixtos.push({
+          metodo_pago: m,
+          monto,
+          entidad_bancaria_id: raw?.entidad_bancaria_id ? String(raw.entidad_bancaria_id) : null,
+          entidad_nombre_snapshot: strPago(raw?.entidad_nombre_snapshot),
+          referencia: strPago(raw?.referencia),
+          titular: strPago(raw?.titular),
+        });
+      }
+    }
+    const metodoPago: "efectivo" | "tarjeta" | "transferencia" | "mixto" = (() => {
+      if (pagosMixtos.length === 0) return metodoPagoBase;
+      const distintos = [...new Set(pagosMixtos.map((p) => p.metodo_pago))];
+      return distintos.length > 1 ? "mixto" : distintos[0];
+    })();
     const clienteRaw = o.cliente_id;
     const clienteId =
       clienteRaw === null || clienteRaw === undefined || clienteRaw === ""
@@ -379,21 +415,37 @@ export async function POST(request: NextRequest) {
           observacion: "Pagado con saldo a favor del cliente",
         });
       }
-      const resto = Math.round((totalDeclarado - saldoUsado) * 100) / 100;
-      if (resto > 0) {
-        // Monto: el que ingresó el cajero en el modal (transferencia/tarjeta) si
-        // es válido; si no, el resto calculado (total − saldo).
-        const montoIngresado = pd?.monto != null && Number(pd.monto) > 0 ? Math.round(Number(pd.monto) * 100) / 100 : null;
-        await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
-          metodo_pago: metodoPago,
-          entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
-          entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
-          monto: montoIngresado ?? resto,
-          referencia: str(pd?.referencia),
-          titular: str(pd?.titular),
-          fecha_acreditacion: fechaAcred,
-          observacion: str(pd?.observacion, 500),
-        });
+      if (pagosMixtos.length > 0) {
+        // Cobro mixto: una fila por medio de pago. La suma (+ saldo) es el total.
+        for (const p of pagosMixtos) {
+          await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+            metodo_pago: p.metodo_pago,
+            entidad_bancaria_id: p.entidad_bancaria_id,
+            entidad_nombre_snapshot: p.entidad_nombre_snapshot,
+            monto: p.monto,
+            referencia: p.referencia,
+            titular: p.titular,
+            fecha_acreditacion: null,
+            observacion: null,
+          });
+        }
+      } else {
+        const resto = Math.round((totalDeclarado - saldoUsado) * 100) / 100;
+        if (resto > 0) {
+          // Monto: el que ingresó el cajero en el modal (transferencia/tarjeta) si
+          // es válido; si no, el resto calculado (total − saldo).
+          const montoIngresado = pd?.monto != null && Number(pd.monto) > 0 ? Math.round(Number(pd.monto) * 100) / 100 : null;
+          await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+            metodo_pago: metodoPagoBase,
+            entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
+            entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
+            monto: montoIngresado ?? resto,
+            referencia: str(pd?.referencia),
+            titular: str(pd?.titular),
+            fecha_acreditacion: fechaAcred,
+            observacion: str(pd?.observacion, 500),
+          });
+        }
       }
     } catch (e) {
       console.error("[ventas/create] pago_detalle best-effort fallo (venta OK):", e instanceof Error ? e.message : e);

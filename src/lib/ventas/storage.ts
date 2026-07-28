@@ -40,6 +40,16 @@ export type PagoDetalleInput = {
   fecha_acreditacion?: string | null;
 };
 
+/** Una línea de un cobro MIXTO (varios medios para una misma venta). */
+export type PagoLineaInput = {
+  metodo_pago: "efectivo" | "transferencia" | "tarjeta";
+  monto: number;
+  entidad_bancaria_id?: string | null;
+  entidad_nombre_snapshot?: string | null;
+  referencia?: string | null;
+  titular?: string | null;
+};
+
 /**
  * Lista ventas del tenant (misma fuente que el dashboard: tablas `ventas` / `ventas_items`).
  */
@@ -78,6 +88,8 @@ export async function saveVenta(
     usarSaldoFavor?: number;
     /** Excedente de saldo que el cliente pide retirar en efectivo. */
     retirarSaldoEfectivo?: number;
+    /** Cobro mixto: varias líneas de pago que suman el total a cobrar. */
+    pagos?: PagoLineaInput[] | null;
   }
 ): Promise<ResultadoGuardarVenta> {
   if (!datos.items || datos.items.length === 0) {
@@ -102,6 +114,7 @@ export async function saveVenta(
         observaciones: null,
         pedido_cocina: pedidoCocina ?? null,
         pago_detalle: pagoDetalle ?? null,
+        pagos: opts?.pagos && opts.pagos.length > 0 ? opts.pagos : null,
         permitir_sin_stock: opts?.permitirSinStock === true,
         genera_nota_remision: datos.genera_nota_remision === true,
         pedido_id: opts?.pedidoId ?? null,

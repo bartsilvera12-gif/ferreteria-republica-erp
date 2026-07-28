@@ -226,6 +226,10 @@ export default function NuevaVentaPage() {
   const [cobroModalOpen, setCobroModalOpen] = useState(false);
   const [entidadQuery, setEntidadQuery] = useState("");
   const [cobroError, setCobroError] = useState<string | null>(null);
+  // Cobro MIXTO: varias líneas de pago (efectivo + transferencia + tarjeta…).
+  type PagoMixto = { key: number; metodo: "efectivo" | "transferencia" | "tarjeta"; monto: number; entidadId: string; referencia: string; titular: string };
+  const [pagosMixtos, setPagosMixtos] = useState<PagoMixto[]>([]);
+  const mixtoSeq = useRef(0);
 
   // ── Combobox de producto (búsqueda server-side por tokens sobre todo el catálogo) ──
   const [comboQuery,     setComboQuery]     = useState("");
@@ -638,6 +642,31 @@ export default function NuevaVentaPage() {
   const efectivoInsuficiente =
     metodoPago === "efectivo" && montoRecibidoNum > 0 && montoRecibidoNum < restaCobrar - 0.5;
 
+  // ── Cobro mixto: totales y validación ──────────────────────────────────────
+  const pagadoMixto = pagosMixtos.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+  const faltaMixto = Math.max(0, restaCobrar - pagadoMixto);
+  const vueltoMixto = pagadoMixto - restaCobrar;
+  const mixtoEntidadFaltante = pagosMixtos.some((p) => p.metodo !== "efectivo" && !p.entidadId);
+  const mixtoInvalido =
+    metodoPago === "mixto" &&
+    (pagosMixtos.length === 0 || pagadoMixto < restaCobrar - 0.5 || mixtoEntidadFaltante);
+
+  function addPagoMixto() {
+    setCobroError(null);
+    setPagosMixtos((prev) => {
+      const yaPagado = prev.reduce((s, p) => s + (Number(p.monto) || 0), 0);
+      const sugerido = Math.max(0, Math.round((restaCobrar - yaPagado) * 100) / 100);
+      return [...prev, { key: mixtoSeq.current++, metodo: "efectivo", monto: sugerido, entidadId: "", referencia: "", titular: "" }];
+    });
+  }
+  function updatePagoMixto(key: number, patch: Partial<PagoMixto>) {
+    setCobroError(null);
+    setPagosMixtos((prev) => prev.map((p) => (p.key === key ? { ...p, ...patch } : p)));
+  }
+  function removePagoMixto(key: number) {
+    setPagosMixtos((prev) => prev.filter((p) => p.key !== key));
+  }
+
   // ── Productos filtrados para el combobox ──────────────────────────────────
   // Solo vendibles (Reventa + Menú). Excluye materia prima / insumos.
   // Resultados del autocomplete: vienen del endpoint de búsqueda server-side
@@ -648,6 +677,13 @@ export default function NuevaVentaPage() {
   function handleSelectMetodo(m: MetodoPago) {
     setMetodoPago(m);
     setCobroError(null);
+    if (m === "mixto") {
+      setCobroModalOpen(false);
+      // Sembrar con una línea de efectivo por el total a cobrar; el cajero la
+      // ajusta y agrega otras (transferencia, tarjeta…).
+      setPagosMixtos([{ key: mixtoSeq.current++, metodo: "efectivo", monto: Math.round(restaCobrar * 100) / 100, entidadId: "", referencia: "", titular: "" }]);
+      return;
+    }
     if (m === "efectivo") {
       setCobroModalOpen(false);
       // "Caja efectivo" por defecto si existe una entidad tipo caja.
@@ -787,6 +823,23 @@ export default function NuevaVentaPage() {
         return;
       }
     }
+
+    // Cobro mixto: la suma de las líneas debe cubrir el total a cobrar y cada
+    // línea que no sea efectivo necesita su entidad/banco.
+    if (metodoPago === "mixto") {
+      if (pagosMixtos.length === 0) {
+        setErrorVenta("Agregá al menos una línea de pago.");
+        return;
+      }
+      if (mixtoEntidadFaltante) {
+        setErrorVenta("En el cobro mixto, cada pago con transferencia o tarjeta debe tener su entidad / banco.");
+        return;
+      }
+      if (pagadoMixto < restaCobrar - 0.5) {
+        setErrorVenta(`El cobro mixto (${formatGs(pagadoMixto)}) no cubre el total a cobrar (${formatGs(restaCobrar)}). Falta ${formatGs(restaCobrar - pagadoMixto)}.`);
+        return;
+      }
+    }
     // Guard duro contra doble submit: si ya hay una confirmación en vuelo, cortar
     // inmediatamente. El ref se evalúa de forma síncrona (no espera al re-render de React),
     // así que un segundo click/Enter casi simultáneo no puede disparar otra venta.
@@ -831,18 +884,30 @@ export default function NuevaVentaPage() {
           genera_nota_remision: !!clienteIdFinal && generaNotaRemision,
         },
         undefined,
-        {
-          entidad_bancaria_id: pagoEntidadId || null,
-          entidad_nombre_snapshot: entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null,
-          monto: pagoMonto > 0 ? pagoMonto : null,
-          referencia: pagoReferencia.trim() || null,
-          titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
-          observacion: pagoObservacion.trim() || null,
-        },
+        metodoPago === "mixto"
+          ? null
+          : {
+              entidad_bancaria_id: pagoEntidadId || null,
+              entidad_nombre_snapshot: entidades.find((e) => e.id === pagoEntidadId)?.nombre ?? null,
+              monto: pagoMonto > 0 ? pagoMonto : null,
+              referencia: pagoReferencia.trim() || null,
+              titular: metodoPago === "transferencia" ? pagoTitular.trim() || null : null,
+              observacion: pagoObservacion.trim() || null,
+            },
         {
           permitirSinStock, pedidoId, pedidoCajaId, cajaId: cajaActivaFinal,
           usarSaldoFavor: saldoAplicado,
           retirarSaldoEfectivo: retirarExcedente ? saldoRestante : 0,
+          pagos: metodoPago === "mixto"
+            ? pagosMixtos.map((p) => ({
+                metodo_pago: p.metodo,
+                monto: Math.round((Number(p.monto) || 0) * 100) / 100,
+                entidad_bancaria_id: p.metodo === "efectivo" ? null : (p.entidadId || null),
+                entidad_nombre_snapshot: p.metodo === "efectivo" ? null : (entidades.find((e) => e.id === p.entidadId)?.nombre ?? null),
+                referencia: p.referencia.trim() || null,
+                titular: p.metodo === "transferencia" ? (p.titular.trim() || null) : null,
+              }))
+            : null,
         }
       );
 
@@ -1400,11 +1465,12 @@ export default function NuevaVentaPage() {
                       <p className="text-[11px] font-semibold text-gray-500 uppercase tracking-wider">
                         Cobro{usarSaldo > 0 ? ` · resta ${formatGs(restaCobrar)}` : ""}
                       </p>
-                      <div className="grid grid-cols-3 gap-1.5">
+                      <div className="grid grid-cols-2 gap-1.5">
                         {([
                           { v: "efectivo", label: "Efectivo" },
                           { v: "transferencia", label: "Transferencia" },
                           { v: "tarjeta", label: "Tarjeta/Débito" },
+                          { v: "mixto", label: "Mixto" },
                         ] as { v: MetodoPago; label: string }[]).map((m) => (
                           <button
                             key={m.v}
@@ -1462,6 +1528,73 @@ export default function NuevaVentaPage() {
                           )}
                         </div>
                       )}
+
+                      {/* Mixto: varias líneas de pago que suman el total a cobrar */}
+                      {metodoPago === "mixto" && (
+                        <div className="space-y-2">
+                          {pagosMixtos.map((p) => (
+                            <div key={p.key} className="rounded-md border border-slate-200 bg-white p-2 space-y-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <select
+                                  value={p.metodo}
+                                  onChange={(e) => updatePagoMixto(p.key, { metodo: e.target.value as PagoMixto["metodo"], entidadId: e.target.value === "efectivo" ? "" : p.entidadId })}
+                                  className="h-8 rounded-md border border-slate-200 bg-white px-1.5 text-xs outline-none focus:border-[#0EA5E9]"
+                                >
+                                  <option value="efectivo">Efectivo</option>
+                                  <option value="transferencia">Transferencia</option>
+                                  <option value="tarjeta">Tarjeta/Débito</option>
+                                </select>
+                                <MontoInput
+                                  value={p.monto}
+                                  onChange={(n) => updatePagoMixto(p.key, { monto: n })}
+                                  placeholder="Monto"
+                                  decimals={false}
+                                  className="h-8 flex-1 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums outline-none focus:border-[#0EA5E9]"
+                                />
+                                <button type="button" onClick={() => removePagoMixto(p.key)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar pago">
+                                  <Trash2 className="h-4 w-4" />
+                                </button>
+                              </div>
+                              {p.metodo !== "efectivo" && (
+                                <select
+                                  value={p.entidadId}
+                                  onChange={(e) => updatePagoMixto(p.key, { entidadId: e.target.value })}
+                                  className={`h-8 w-full rounded-md border bg-white px-2 text-xs outline-none focus:border-[#0EA5E9] ${p.entidadId ? "border-slate-200" : "border-amber-300 bg-amber-50"}`}
+                                >
+                                  <option value="">— Elegí entidad / banco —</option>
+                                  {entidades.map((en) => (
+                                    <option key={en.id} value={en.id}>{en.codigo ? `${en.codigo} · ` : ""}{en.nombre}</option>
+                                  ))}
+                                </select>
+                              )}
+                            </div>
+                          ))}
+
+                          <button type="button" onClick={addPagoMixto} className="w-full rounded-md border border-dashed border-slate-300 py-1.5 text-xs font-medium text-slate-500 hover:border-[#0EA5E9] hover:text-[#0EA5E9]">
+                            + Agregar pago
+                          </button>
+
+                          <div className="space-y-0.5 border-t border-slate-200 pt-1.5 text-xs">
+                            <div className="flex justify-between text-slate-600">
+                              <span>A cobrar</span><span className="tabular-nums">{formatGs(restaCobrar)}</span>
+                            </div>
+                            <div className="flex justify-between text-slate-600">
+                              <span>Pagado</span><span className="tabular-nums">{formatGs(pagadoMixto)}</span>
+                            </div>
+                            <div className="flex justify-between font-bold">
+                              <span className={faltaMixto > 0.5 ? "text-red-600" : "text-emerald-700"}>
+                                {faltaMixto > 0.5 ? "Falta" : vueltoMixto > 0.5 ? "Vuelto" : "Cubierto"}
+                              </span>
+                              <span className={`tabular-nums ${faltaMixto > 0.5 ? "text-red-600" : "text-emerald-700"}`}>
+                                {formatGs(faltaMixto > 0.5 ? faltaMixto : Math.abs(vueltoMixto))}
+                              </span>
+                            </div>
+                            {mixtoEntidadFaltante && (
+                              <p className="pt-0.5 text-[11px] text-amber-600">Elegí la entidad / banco en los pagos con transferencia o tarjeta.</p>
+                            )}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -1489,9 +1622,9 @@ export default function NuevaVentaPage() {
             </button>
             <button
               type="submit"
-              disabled={!ventaValida || guardando || efectivoInsuficiente}
+              disabled={!ventaValida || guardando || efectivoInsuficiente || mixtoInvalido}
               aria-busy={guardando}
-              title={efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : undefined}
+              title={efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : mixtoInvalido ? "El cobro mixto no cubre el total o falta la entidad." : undefined}
               className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 min-h-[48px] w-full sm:w-auto"
             >
               {guardando ? "Guardando…" : "Confirmar venta"}
