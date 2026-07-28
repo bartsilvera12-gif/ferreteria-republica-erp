@@ -1531,59 +1531,102 @@ export default function NuevaVentaPage() {
 
                       {/* Mixto: varias líneas de pago que suman el total a cobrar */}
                       {metodoPago === "mixto" && (
-                        <div className="space-y-2">
-                          {pagosMixtos.map((p) => (
-                            <div key={p.key} className="rounded-md border border-slate-200 bg-white p-2 space-y-1.5">
-                              <div className="flex items-center gap-1.5">
-                                <select
-                                  value={p.metodo}
-                                  onChange={(e) => updatePagoMixto(p.key, { metodo: e.target.value as PagoMixto["metodo"], entidadId: e.target.value === "efectivo" ? "" : p.entidadId })}
-                                  className="h-8 rounded-md border border-slate-200 bg-white px-1.5 text-xs outline-none focus:border-[#0EA5E9]"
-                                >
-                                  <option value="efectivo">Efectivo</option>
-                                  <option value="transferencia">Transferencia</option>
-                                  <option value="tarjeta">Tarjeta/Débito</option>
-                                </select>
-                                <MontoInput
-                                  value={p.monto}
-                                  onChange={(n) => updatePagoMixto(p.key, { monto: n })}
-                                  placeholder="Monto"
-                                  decimals={false}
-                                  className="h-8 flex-1 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums outline-none focus:border-[#0EA5E9]"
-                                />
-                                <button type="button" onClick={() => removePagoMixto(p.key)} className="rounded p-1 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar pago">
-                                  <Trash2 className="h-4 w-4" />
-                                </button>
+                        <div className="space-y-2.5">
+                          {pagosMixtos.map((p, i) => (
+                            <div key={p.key} className="rounded-lg border border-slate-200 bg-white p-2.5 shadow-sm">
+                              <div className="mb-1.5 flex items-center justify-between">
+                                <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Pago {i + 1}</span>
+                                {pagosMixtos.length > 1 && (
+                                  <button type="button" onClick={() => removePagoMixto(p.key)} className="rounded p-0.5 text-slate-300 hover:bg-red-50 hover:text-red-600" aria-label="Quitar pago">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                )}
                               </div>
+                              <div className="grid grid-cols-2 gap-2">
+                                <div>
+                                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Medio</label>
+                                  <select
+                                    value={p.metodo}
+                                    onChange={(e) => updatePagoMixto(p.key, { metodo: e.target.value as PagoMixto["metodo"], entidadId: e.target.value === "efectivo" ? "" : p.entidadId })}
+                                    className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-xs outline-none focus:border-[#0EA5E9] focus:ring-2 focus:ring-[#0EA5E9]/15"
+                                  >
+                                    <option value="efectivo">Efectivo</option>
+                                    <option value="transferencia">Transferencia</option>
+                                    <option value="tarjeta">Tarjeta/Débito</option>
+                                  </select>
+                                </div>
+                                <div>
+                                  <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Monto (Gs.)</label>
+                                  <MontoInput
+                                    value={p.monto}
+                                    onChange={(n) => updatePagoMixto(p.key, { monto: n })}
+                                    placeholder="0"
+                                    decimals={false}
+                                    className="h-9 w-full rounded-md border border-slate-200 px-2 text-right text-sm font-semibold tabular-nums outline-none focus:border-[#0EA5E9] focus:ring-2 focus:ring-[#0EA5E9]/15"
+                                  />
+                                </div>
+                              </div>
+
                               {p.metodo !== "efectivo" && (
-                                <select
-                                  value={p.entidadId}
-                                  onChange={(e) => updatePagoMixto(p.key, { entidadId: e.target.value })}
-                                  className={`h-8 w-full rounded-md border bg-white px-2 text-xs outline-none focus:border-[#0EA5E9] ${p.entidadId ? "border-slate-200" : "border-amber-300 bg-amber-50"}`}
-                                >
-                                  <option value="">— Elegí entidad / banco —</option>
-                                  {entidades.map((en) => (
-                                    <option key={en.id} value={en.id}>{en.codigo ? `${en.codigo} · ` : ""}{en.nombre}</option>
-                                  ))}
-                                </select>
+                                <div className="mt-2 space-y-2">
+                                  <div>
+                                    <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">
+                                      {p.metodo === "tarjeta" ? "Entidad / banco / POS" : "Entidad / banco"}
+                                    </label>
+                                    <select
+                                      value={p.entidadId}
+                                      onChange={(e) => updatePagoMixto(p.key, { entidadId: e.target.value })}
+                                      className={`h-9 w-full rounded-md border bg-white px-2 text-xs outline-none focus:border-[#0EA5E9] focus:ring-2 focus:ring-[#0EA5E9]/15 ${p.entidadId ? "border-slate-200" : "border-amber-300 bg-amber-50"}`}
+                                    >
+                                      <option value="">— Elegí entidad / banco —</option>
+                                      {entidades.map((en) => (
+                                        <option key={en.id} value={en.id}>{en.codigo ? `${en.codigo} · ` : ""}{en.nombre}</option>
+                                      ))}
+                                    </select>
+                                  </div>
+                                  <div className={p.metodo === "transferencia" ? "grid grid-cols-2 gap-2" : ""}>
+                                    <div>
+                                      <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">N° de comprobante</label>
+                                      <input
+                                        type="text"
+                                        value={p.referencia}
+                                        onChange={(e) => updatePagoMixto(p.key, { referencia: e.target.value })}
+                                        placeholder="Comprobante / transacción"
+                                        className="h-9 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:border-[#0EA5E9] focus:ring-2 focus:ring-[#0EA5E9]/15"
+                                      />
+                                    </div>
+                                    {p.metodo === "transferencia" && (
+                                      <div>
+                                        <label className="mb-1 block text-[10px] font-semibold uppercase tracking-wide text-slate-400">Titular</label>
+                                        <input
+                                          type="text"
+                                          value={p.titular}
+                                          onChange={(e) => updatePagoMixto(p.key, { titular: e.target.value })}
+                                          placeholder="Nombre del titular"
+                                          className="h-9 w-full rounded-md border border-slate-200 px-2 text-xs outline-none focus:border-[#0EA5E9] focus:ring-2 focus:ring-[#0EA5E9]/15"
+                                        />
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
                               )}
                             </div>
                           ))}
 
-                          <button type="button" onClick={addPagoMixto} className="w-full rounded-md border border-dashed border-slate-300 py-1.5 text-xs font-medium text-slate-500 hover:border-[#0EA5E9] hover:text-[#0EA5E9]">
-                            + Agregar pago
+                          <button type="button" onClick={addPagoMixto} className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#0EA5E9]/40 py-2 text-xs font-semibold text-[#0284C7] transition-colors hover:border-[#0EA5E9] hover:bg-[#0EA5E9]/5">
+                            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Agregar otro medio de pago
                           </button>
 
-                          <div className="space-y-0.5 border-t border-slate-200 pt-1.5 text-xs">
-                            <div className="flex justify-between text-slate-600">
+                          <div className="space-y-1 rounded-lg bg-slate-100/70 p-2.5 text-xs">
+                            <div className="flex justify-between text-slate-500">
                               <span>A cobrar</span><span className="tabular-nums">{formatGs(restaCobrar)}</span>
                             </div>
-                            <div className="flex justify-between text-slate-600">
-                              <span>Pagado</span><span className="tabular-nums">{formatGs(pagadoMixto)}</span>
+                            <div className="flex justify-between text-slate-500">
+                              <span>Pagado</span><span className="tabular-nums font-semibold text-slate-700">{formatGs(pagadoMixto)}</span>
                             </div>
-                            <div className="flex justify-between font-bold">
+                            <div className="flex justify-between border-t border-slate-200 pt-1 text-sm font-bold">
                               <span className={faltaMixto > 0.5 ? "text-red-600" : "text-emerald-700"}>
-                                {faltaMixto > 0.5 ? "Falta" : vueltoMixto > 0.5 ? "Vuelto" : "Cubierto"}
+                                {faltaMixto > 0.5 ? "Falta" : vueltoMixto > 0.5 ? "Vuelto" : "Cubierto ✓"}
                               </span>
                               <span className={`tabular-nums ${faltaMixto > 0.5 ? "text-red-600" : "text-emerald-700"}`}>
                                 {formatGs(faltaMixto > 0.5 ? faltaMixto : Math.abs(vueltoMixto))}
