@@ -56,6 +56,7 @@ type ProductoHit = {
   precio_venta: number;
   precio_mayorista: number;
   precio_distribuidor?: number | null;
+  cantidad_minima_mayorista?: number | null;
   stock_actual: number;
   unidad_medida: string;
   imagen_url: string | null;
@@ -70,9 +71,15 @@ type CartItem = {
   cantidad: number;
   tipo_precio: "minorista" | "mayorista" | "distribuidor";
   tipo_iva: "EXENTA" | "5%" | "10%";
+  /** Precio efectivo mostrado/cobrado (tipo + presentación aplicados). */
   precio_venta: number;
+  /** Precio minorista base del producto (estable, no se pisa al cambiar tipo). */
+  precio_minorista: number;
   precio_mayorista: number;
   precio_distribuidor: number;
+  cantidad_minima_mayorista: number | null;
+  /** true si se fijó el tipo/precio a mano: no auto-cambiar por cantidad. */
+  precio_manual?: boolean;
   imagen_url: string | null;
   // Presentacion (siempre presente — al menos la default 'Unidad')
   presentacion_id: string | null;
@@ -94,6 +101,27 @@ function precioPorTipoBase(
   if (tipo === "mayorista") return p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
   if (tipo === "distribuidor") return p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
   return p.precio_venta;
+}
+
+/** Precio efectivo de un ítem para un tipo: base por canal × cantidad_base de la
+ *  presentación (o el precio propio de la presentación si lo tiene). */
+function precioEfectivoItem(it: CartItem, tipo: "minorista" | "mayorista" | "distribuidor"): number {
+  const base = precioPorTipoBase(
+    { precio_venta: it.precio_minorista, precio_mayorista: it.precio_mayorista, precio_distribuidor: it.precio_distribuidor },
+    tipo
+  );
+  const cantBase = it.presentacion_cantidad_base ?? 1;
+  const pres = it.presentaciones.find((p) => p.id === it.presentacion_id);
+  return Math.round(pres && pres.precio_venta != null && pres.precio_venta > 0 ? pres.precio_venta : base * cantBase);
+}
+
+/** Aplica el precio por canal según la cantidad (mayorista al llegar al mínimo),
+ *  salvo que el tipo/precio se haya fijado a mano. */
+function conTierAuto(it: CartItem): CartItem {
+  if (it.precio_manual) return it;
+  const min = it.cantidad_minima_mayorista;
+  const tipo = it.precio_mayorista > 0 && min != null && min > 0 && it.cantidad >= min ? "mayorista" : "minorista";
+  return { ...it, tipo_precio: tipo, precio_venta: precioEfectivoItem(it, tipo) };
 }
 
 /** Miniatura de producto con fallback a un placeholder si no hay imagen o falla. */
@@ -154,6 +182,8 @@ export default function NuevoPedidoPage() {
             precio_mayorista: Number(p.precio_mayorista) || 0,
             precio_distribuidor:
               p.precio_distribuidor == null ? null : Number(p.precio_distribuidor),
+            cantidad_minima_mayorista:
+              p.cantidad_minima_mayorista == null ? null : Number(p.cantidad_minima_mayorista),
             stock_actual: Number(p.stock_actual) || 0,
             unidad_medida: String(p.unidad_medida ?? "Unidad"),
             imagen_url: (p.imagen_url as string | null) ?? null,
@@ -207,7 +237,7 @@ export default function NuevoPedidoPage() {
     if (ex) {
       setCart((prev) =>
         prev.map((x) =>
-          x.producto_id === p.id ? { ...x, cantidad: x.cantidad + 1 } : x
+          x.producto_id === p.id ? conTierAuto({ ...x, cantidad: x.cantidad + 1 }) : x
         )
       );
       setOkMsg(null);
@@ -230,8 +260,11 @@ export default function NuevoPedidoPage() {
         tipo_precio: "minorista",
         tipo_iva: "10%",
         precio_venta: p.precio_venta,
+        precio_minorista: p.precio_venta,
         precio_mayorista: p.precio_mayorista,
         precio_distribuidor: p.precio_distribuidor ?? 0,
+        cantidad_minima_mayorista: p.cantidad_minima_mayorista ?? null,
+        precio_manual: false,
         imagen_url: p.imagen_url,
         presentacion_id: def ? def.id : null,
         presentacion_nombre: def ? def.nombre : null,
@@ -268,7 +301,7 @@ export default function NuevoPedidoPage() {
     setCart((prev) =>
       prev.map((x) =>
         x.producto_id === id
-          ? { ...x, cantidad: clampCantidad(x.cantidad + delta * pasoCantidad(x.unidad_medida), x.unidad_medida) }
+          ? conTierAuto({ ...x, cantidad: clampCantidad(x.cantidad + delta * pasoCantidad(x.unidad_medida), x.unidad_medida) })
           : x
       )
     );
@@ -280,24 +313,11 @@ export default function NuevoPedidoPage() {
   ) {
     const it = cart.find((x) => x.producto_id === id);
     if (!it) return;
-    // Recalcular precio_venta con cantidad_base.
-    const base = precioPorTipoBase(
-      {
-        precio_venta: it.precio_venta,
-        precio_mayorista: it.precio_mayorista,
-        precio_distribuidor: it.precio_distribuidor,
-      },
-      tipo
-    );
-    const cantBase = it.presentacion_cantidad_base ?? 1;
-    const pres = it.presentaciones.find((p) => p.id === it.presentacion_id);
-    const efectivo =
-      pres && pres.precio_venta != null && pres.precio_venta > 0
-        ? pres.precio_venta
-        : base * cantBase;
+    // Elegir el tipo a mano fija el precio: no se auto-cambia por cantidad.
     updateCart(id, {
       tipo_precio: tipo,
-      precio_venta: Math.round(efectivo),
+      precio_venta: precioEfectivoItem(it, tipo),
+      precio_manual: true,
     });
   }
 
@@ -308,7 +328,7 @@ export default function NuevoPedidoPage() {
     if (!pres) return;
     const base = precioPorTipoBase(
       {
-        precio_venta: it.precio_venta,
+        precio_venta: it.precio_minorista,
         precio_mayorista: it.precio_mayorista,
         precio_distribuidor: it.precio_distribuidor,
       },
@@ -700,11 +720,11 @@ export default function NuevoPedidoPage() {
                             value={it.cantidad}
                             onChange={(e) => {
                               const n = parseCantidad(e.target.value, it.unidad_medida);
-                              if (n !== null) updateCart(it.producto_id, { cantidad: n });
+                              if (n !== null) setCart((prev) => prev.map((x) => (x.producto_id === it.producto_id ? conTierAuto({ ...x, cantidad: n }) : x)));
                             }}
                             onBlur={(e) => {
                               const n = parseCantidad(e.target.value, it.unidad_medida);
-                              updateCart(it.producto_id, { cantidad: clampCantidad(n ?? 0, it.unidad_medida) });
+                              setCart((prev) => prev.map((x) => (x.producto_id === it.producto_id ? conTierAuto({ ...x, cantidad: clampCantidad(n ?? 0, it.unidad_medida) }) : x)));
                             }}
                             className={`h-8 text-center text-sm tabular-nums outline-none ${
                               permiteDecimales(it.unidad_medida) ? "w-16" : "w-12"
@@ -724,7 +744,7 @@ export default function NuevoPedidoPage() {
                           type="number"
                           min={0}
                           value={it.precio_venta}
-                          onChange={(e) => updateCart(it.producto_id, { precio_venta: Math.max(0, Number(e.target.value) || 0) })}
+                          onChange={(e) => updateCart(it.producto_id, { precio_venta: Math.max(0, Number(e.target.value) || 0), precio_manual: true })}
                           className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
                         />
                       </td>

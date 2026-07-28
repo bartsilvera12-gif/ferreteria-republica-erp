@@ -23,6 +23,14 @@ export interface LineaVenta {
   tipo_iva:              TipoIvaVenta;
   /** Nivel de precio aplicado: minorista (precio_venta) | mayorista (precio_mayorista) | costo (costo_promedio). */
   tipo_precio?:          TipoPrecioVenta;
+  // ── Reglas de precio por canal (para auto-cambiar de tipo según cantidad).
+  // Snapshot del producto al agregar la línea; solo se usan en el cliente.
+  precio_minorista?:        number | null;
+  precio_mayorista?:        number | null;
+  precio_distribuidor?:     number | null;
+  cantidad_minima_mayorista?: number | null;
+  /** true si el cajero fijó manualmente el tipo/precio: no auto-cambiar más. */
+  precio_manual?:           boolean;
   subtotal:              number;  // precio_venta × cantidad
   monto_iva:             number;
   total_linea:           number;  // subtotal + monto_iva

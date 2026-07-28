@@ -307,6 +307,8 @@ export default function NuevaVentaPage() {
         precio_venta: precioPyg,
         tipo_iva: iva,
         tipo_precio,
+        // El modal ya definió cantidad, tipo y precio: se respeta (manual).
+        precio_manual: true,
         subtotal,
         monto_iva: montoIva,
         total_linea: totalLinea,
@@ -373,6 +375,8 @@ export default function NuevaVentaPage() {
               precio_venta: precio,
               tipo_iva: iva,
               tipo_precio: "minorista" as TipoPrecioVenta,
+              // El pedido ya vino con su precio: se respeta tal cual.
+              precio_manual: true,
               subtotal,
               monto_iva: montoIva,
               total_linea: totalLinea,
@@ -444,6 +448,8 @@ export default function NuevaVentaPage() {
               precio_venta: precio,
               tipo_iva: iva,
               tipo_precio: (it.tipo_precio ?? "minorista") as TipoPrecioVenta,
+              // El pedido ya vino con su precio y tipo: se respeta tal cual.
+              precio_manual: true,
               subtotal,
               monto_iva: montoIva,
               total_linea: totalLinea,
@@ -517,6 +523,7 @@ export default function NuevaVentaPage() {
           precio_venta: Number(p.precio_venta) || 0,
           precio_mayorista: p.precio_mayorista != null ? Number(p.precio_mayorista) : null,
           precio_distribuidor: p.precio_distribuidor != null ? Number(p.precio_distribuidor) : null,
+          cantidad_minima_mayorista: p.cantidad_minima_mayorista != null ? Number(p.cantidad_minima_mayorista) : null,
           stock_actual: Number(p.stock_actual) || 0,
           stock_minimo: Number(p.stock_minimo) || 0,
           unidad_medida: String(p.unidad_medida ?? "UNIDAD"),
@@ -700,12 +707,36 @@ export default function NuevaVentaPage() {
     setItems((prev) => prev.filter((_, i) => i !== index));
   }
 
+  // ── Reglas de precio por canal ─────────────────────────────────────────────
+  /** Precio de la línea para un tipo, según su snapshot de precios. */
+  function precioDeTipoLinea(l: LineaVenta, tipo: TipoPrecioVenta): number {
+    const base = l.precio_minorista ?? l.precio_venta;
+    if (tipo === "mayorista") return l.precio_mayorista != null && l.precio_mayorista > 0 ? l.precio_mayorista : base;
+    if (tipo === "distribuidor") return l.precio_distribuidor != null && l.precio_distribuidor > 0 ? l.precio_distribuidor : base;
+    return base;
+  }
+  /** Tipo automático por cantidad: mayorista al llegar a la cantidad mínima. */
+  function tipoPorCantidad(l: LineaVenta): TipoPrecioVenta {
+    const min = l.cantidad_minima_mayorista;
+    const may = l.precio_mayorista;
+    if (may != null && may > 0 && min != null && min > 0 && l.cantidad >= min) return "mayorista";
+    return "minorista";
+  }
+
   // ── Autocomplete rápido + edición inline ──────────────────────────────────
   // Recalcula subtotal/IVA/total de una línea (IVA incluido, igual que calcIva).
+  // Además aplica el precio por canal según la cantidad, salvo que el cajero
+  // haya fijado el precio/tipo a mano (precio_manual).
   function recomputeLinea(l: LineaVenta): LineaVenta {
-    const total_linea = l.cantidad > 0 && l.precio_venta > 0 ? l.cantidad * l.precio_venta : 0;
-    const monto_iva = calcIva(l.tipo_iva, total_linea);
-    return { ...l, total_linea, monto_iva, subtotal: total_linea - monto_iva };
+    let out = l;
+    if (!l.precio_manual) {
+      const tipo = tipoPorCantidad(l);
+      const precio = precioDeTipoLinea(l, tipo);
+      out = { ...l, tipo_precio: tipo, precio_venta: precio, precio_venta_original: precio };
+    }
+    const total_linea = out.cantidad > 0 && out.precio_venta > 0 ? out.cantidad * out.precio_venta : 0;
+    const monto_iva = calcIva(out.tipo_iva, total_linea);
+    return { ...out, total_linea, monto_iva, subtotal: total_linea - monto_iva };
   }
 
   /** Agrega un producto directo desde el autocomplete: si ya está (sin presentación)
@@ -729,6 +760,11 @@ export default function NuevaVentaPage() {
           precio_venta: precio,
           tipo_iva: "10%",
           tipo_precio: "minorista",
+          precio_minorista: precioPorTipo(p, "minorista"),
+          precio_mayorista: p.precio_mayorista ?? null,
+          precio_distribuidor: p.precio_distribuidor ?? null,
+          cantidad_minima_mayorista: p.cantidad_minima_mayorista ?? null,
+          precio_manual: false,
           subtotal: 0,
           monto_iva: 0,
           total_linea: 0,
@@ -762,9 +798,9 @@ export default function NuevaVentaPage() {
     setItems((prev) =>
       prev.map((it, i) => {
         if (i !== idx) return it;
-        const prod = productos.find((p) => p.id === it.producto_id);
-        const precio = prod ? precioPorTipo(prod, tipo) : it.precio_venta;
-        return recomputeLinea({ ...it, tipo_precio: tipo, precio_venta: precio, precio_venta_original: precio });
+        // Elegir el tipo a mano fija el precio: no se auto-cambia por cantidad.
+        const precio = precioDeTipoLinea(it, tipo);
+        return recomputeLinea({ ...it, tipo_precio: tipo, precio_venta: precio, precio_venta_original: precio, precio_manual: true });
       })
     );
   }
@@ -1347,7 +1383,7 @@ export default function NuevaVentaPage() {
                           <td className="px-3 py-2.5 text-right">
                             <input
                               type="number" min={0} value={item.precio_venta}
-                              onChange={(e) => updateItemCampo(idx, { precio_venta: Math.max(0, Number(e.target.value) || 0) })}
+                              onChange={(e) => updateItemCampo(idx, { precio_venta: Math.max(0, Number(e.target.value) || 0), precio_venta_original: Math.max(0, Number(e.target.value) || 0), precio_manual: true })}
                               className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
                             />
                           </td>

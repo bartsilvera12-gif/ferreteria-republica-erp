@@ -14,6 +14,7 @@ interface ProductoSearchHit {
   precio_venta: number;
   precio_mayorista: number;
   precio_distribuidor: number | null;
+  cantidad_minima_mayorista: number | null;
   costo_promedio: number;
   stock_actual: number;
   stock_minimo: number;
@@ -67,7 +68,7 @@ export async function GET(request: NextRequest) {
       .from("productos")
       .select(
         "id, nombre, sku, codigo_barras, codigo_barras_interno, " +
-          "precio_venta, precio_mayorista, precio_distribuidor, costo_promedio, stock_actual, stock_minimo, " +
+          "precio_venta, precio_mayorista, precio_distribuidor, cantidad_minima_mayorista, costo_promedio, stock_actual, stock_minimo, " +
           "unidad_medida, metodo_valuacion, imagen_path, imagen_url, " +
           "categoria_principal_id, proveedor_principal_id, ubicacion_principal_id, " +
           "es_vendible, controla_stock, modo_receta, activo, " +
@@ -106,6 +107,7 @@ export async function GET(request: NextRequest) {
       precio_venta: Number(r.precio_venta ?? 0),
       precio_mayorista: Number(r.precio_mayorista ?? 0),
       precio_distribuidor: r.precio_distribuidor != null ? Number(r.precio_distribuidor) : null,
+      cantidad_minima_mayorista: r.cantidad_minima_mayorista != null ? Number(r.cantidad_minima_mayorista) : null,
       costo_promedio: Number(r.costo_promedio ?? 0),
       stock_actual: Number(r.stock_actual ?? 0),
       stock_minimo: Number(r.stock_minimo ?? 0),
@@ -142,6 +144,7 @@ export async function GET(request: NextRequest) {
       precio_venta: r.precio_venta,
       precio_mayorista: r.precio_mayorista,
       precio_distribuidor: r.precio_distribuidor,
+      cantidad_minima_mayorista: r.cantidad_minima_mayorista,
       costo_promedio: r.costo_promedio,
       stock_actual: r.stock_actual,
       stock_minimo: r.stock_minimo,
