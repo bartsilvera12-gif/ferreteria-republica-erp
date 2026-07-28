@@ -12,9 +12,9 @@
  * cajero tenga la cola de cobro a la vista en su pantalla.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Receipt, ArrowRight, Loader2, Lock, Clock } from "lucide-react";
+import { Receipt, ArrowRight, Loader2, Lock, Clock, RefreshCw } from "lucide-react";
 
 type Pedido = {
   id: string;
@@ -66,36 +66,51 @@ function mapPedido(p: Record<string, unknown>): Pedido {
 export default function PedidosConsultaPendientes() {
   const [pedidos, setPedidos] = useState<Pedido[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refrescando, setRefrescando] = useState(false);
 
-  useEffect(() => {
-    let cancel = false;
-    // Cobrables = pendiente + en_caja (dos consultas en paralelo, se unen).
-    Promise.all([
-      fetch("/api/pedidos-caja?estado=pendiente", { credentials: "include", cache: "no-store" }).then((r) => r.json()),
-      fetch("/api/pedidos-caja?estado=en_caja", { credentials: "include", cache: "no-store" }).then((r) => r.json()),
-    ])
-      .then(([jPend, jCaja]) => {
-        if (cancel) return;
-        const pend = jPend?.success && Array.isArray(jPend.data?.pedidos) ? (jPend.data.pedidos as Array<Record<string, unknown>>) : [];
-        const caja = jCaja?.success && Array.isArray(jCaja.data?.pedidos) ? (jCaja.data.pedidos as Array<Record<string, unknown>>) : [];
-        // Solo los que están en la cola de Caja. Los liberados (en_cola_caja=false)
-        // vuelven al vendedor y no se muestran acá.
-        const merged = [...pend, ...caja].map(mapPedido).filter((p) => p.en_cola_caja);
-        // En caja primero (ya tomados), luego por fecha desc.
-        merged.sort((a, b) => {
-          if (a.estado !== b.estado) return a.estado === "en_caja" ? -1 : 1;
-          return (b.created_at ?? "").localeCompare(a.created_at ?? "");
-        });
-        setPedidos(merged);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (!cancel) setLoading(false);
+  const cargar = useCallback(async () => {
+    setRefrescando(true);
+    try {
+      // Cobrables = pendiente + en_caja (dos consultas en paralelo, se unen).
+      const [jPend, jCaja] = await Promise.all([
+        fetch("/api/pedidos-caja?estado=pendiente", { credentials: "include", cache: "no-store" }).then((r) => r.json()),
+        fetch("/api/pedidos-caja?estado=en_caja", { credentials: "include", cache: "no-store" }).then((r) => r.json()),
+      ]);
+      const pend = jPend?.success && Array.isArray(jPend.data?.pedidos) ? (jPend.data.pedidos as Array<Record<string, unknown>>) : [];
+      const caja = jCaja?.success && Array.isArray(jCaja.data?.pedidos) ? (jCaja.data.pedidos as Array<Record<string, unknown>>) : [];
+      // Solo los que están en la cola de Caja. Los liberados (en_cola_caja=false)
+      // vuelven al vendedor y no se muestran acá.
+      const merged = [...pend, ...caja].map(mapPedido).filter((p) => p.en_cola_caja);
+      // En caja primero (ya tomados), luego por fecha desc.
+      merged.sort((a, b) => {
+        if (a.estado !== b.estado) return a.estado === "en_caja" ? -1 : 1;
+        return (b.created_at ?? "").localeCompare(a.created_at ?? "");
       });
-    return () => {
-      cancel = true;
-    };
+      setPedidos(merged);
+    } catch { /* red: se conserva lo último */ }
+    finally {
+      setLoading(false);
+      setRefrescando(false);
+    }
   }, []);
+
+  useEffect(() => { cargar(); }, [cargar]);
+
+  // Auto-refresh: al finalizar una venta (aviso por BroadcastChannel desde
+  // /ventas/nueva) y al volver el foco a la pantalla de Caja.
+  useEffect(() => {
+    const onFocus = () => cargar();
+    window.addEventListener("focus", onFocus);
+    let bc: BroadcastChannel | null = null;
+    try {
+      bc = new BroadcastChannel("pedidos-caja");
+      bc.onmessage = (e) => { if (e.data === "refresh") cargar(); };
+    } catch { bc = null; }
+    return () => {
+      window.removeEventListener("focus", onFocus);
+      try { bc?.close(); } catch { /* noop */ }
+    };
+  }, [cargar]);
 
   return (
     <div className="rounded-2xl border-2 border-[#4FAEB2]/25 bg-white shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] overflow-hidden">
@@ -118,7 +133,16 @@ export default function PedidosConsultaPendientes() {
             </p>
           </div>
         </div>
-        {loading && <Loader2 className="h-4 w-4 animate-spin text-[#4FAEB2]" />}
+        <button
+          type="button"
+          onClick={() => cargar()}
+          disabled={refrescando}
+          title="Actualizar pedidos"
+          className="inline-flex items-center gap-1.5 rounded-lg border border-[#4FAEB2]/30 bg-white px-3 py-1.5 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10 disabled:opacity-50"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${refrescando ? "animate-spin" : ""}`} />
+          Actualizar
+        </button>
       </div>
 
       {loading ? (

@@ -962,6 +962,10 @@ export default function NuevaVentaPage() {
         setErrorVenta(resultado.error);
         return;
       }
+      // Venta registrada: avisar a la pantalla de Caja (lista "Pedidos por
+      // cobrar") para que refresque su cola automáticamente.
+      try { const bc = new BroadcastChannel("pedidos-caja"); bc.postMessage("refresh"); bc.close(); } catch { /* navegador sin soporte */ }
+
       // Documentos de la venta. La nota de remisión se abre además del ticket
       // SOLO si la venta la genera (cliente con usa_nota_remision o toggle activo).
       const v = resultado.venta;
