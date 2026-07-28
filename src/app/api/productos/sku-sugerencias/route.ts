@@ -61,8 +61,20 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => a.prefix.localeCompare(b.prefix));
 
-    const def = map.get(prefijoTipo) ?? { maxNum: 0, width: 4 };
-    const sugerido = `${prefijoTipo}-${pad(def.maxNum + 1, Math.max(def.width, 4))}`;
+    // SKU sugerido: número correlativo plano (sin prefijo), continuando la
+    // numeración del catálogo del cliente. Toma el mayor SKU puramente numérico
+    // y suma 1, con piso en SKU_BASE para que nunca retroceda por debajo de la
+    // numeración acordada (el próximo después de 17079 es 17080).
+    const SKU_BASE = 17079;
+    let maxNumerico = SKU_BASE;
+    for (const r of (data ?? []) as Array<{ sku: string | null }>) {
+      const s = (r.sku ?? "").trim();
+      if (/^\d+$/.test(s)) {
+        const n = parseInt(s, 10);
+        if (Number.isFinite(n) && n > maxNumerico) maxNumerico = n;
+      }
+    }
+    const sugerido = String(maxNumerico + 1);
 
     return NextResponse.json(successResponse({ sugerido, prefijo_tipo: prefijoTipo, patrones }));
   } catch (err) {

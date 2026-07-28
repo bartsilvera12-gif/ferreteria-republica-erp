@@ -363,6 +363,7 @@ export default function NuevaVentaPage() {
               producto_id: String(it.producto_id),
               producto_nombre: typeof it.producto_nombre === "string" ? it.producto_nombre : "",
               sku: typeof it.sku === "string" ? it.sku : "",
+              unidad_medida: (typeof it.unidad_medida === "string" && it.unidad_medida) ? it.unidad_medida : "UNIDAD",
               cantidad,
               precio_venta_original: precio,
               precio_venta: precio,
@@ -405,6 +406,7 @@ export default function NuevaVentaPage() {
             producto_id: string;
             producto_nombre: string;
             sku: string | null;
+            unidad_medida?: string | null;
             cantidad: number;
             precio_venta: number;
             tipo_precio?: "minorista" | "mayorista" | "distribuidor";
@@ -432,6 +434,7 @@ export default function NuevaVentaPage() {
               producto_id: String(it.producto_id),
               producto_nombre: it.producto_nombre,
               sku: it.sku ?? "",
+              unidad_medida: (typeof it.unidad_medida === "string" && it.unidad_medida) ? it.unidad_medida : "UNIDAD",
               cantidad,
               precio_venta_original: precio,
               precio_venta: precio,

@@ -33,9 +33,29 @@ export async function GET(
     if (q.error) return NextResponse.json(errorResponse(q.error.message), { status: 400 });
     if (!q.data) return NextResponse.json(errorResponse("Pedido no encontrado."), { status: 404 });
 
-    return NextResponse.json(
-      successResponse({ pedido: mapPedidoCaja((q.data as unknown) as Record<string, unknown>) })
-    );
+    const pedido = mapPedidoCaja((q.data as unknown) as Record<string, unknown>);
+
+    // Enriquecer la unidad de medida de los ítems que no la tengan guardada
+    // (pedidos creados antes de persistirla). Es lo que define si la cantidad
+    // admite decimales al cobrar en Caja.
+    const faltanUnidad = pedido.items.filter((it) => !it.unidad_medida && it.producto_id);
+    if (faltanUnidad.length > 0) {
+      const ids = [...new Set(faltanUnidad.map((it) => it.producto_id))];
+      const pq = await ctx.supabase
+        .from("productos")
+        .select("id, unidad_medida")
+        .eq("empresa_id", ctx.auth.empresa_id)
+        .in("id", ids);
+      const unidadPorId = new Map<string, string>();
+      for (const r of (pq.data ?? []) as Array<{ id: string; unidad_medida: string | null }>) {
+        unidadPorId.set(String(r.id), r.unidad_medida ?? "UNIDAD");
+      }
+      pedido.items = pedido.items.map((it) =>
+        it.unidad_medida ? it : { ...it, unidad_medida: unidadPorId.get(it.producto_id) ?? "UNIDAD" }
+      );
+    }
+
+    return NextResponse.json(successResponse({ pedido }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "No se pudo cargar el pedido.";
     return NextResponse.json(errorResponse(msg), { status: 500 });
@@ -46,6 +66,7 @@ interface BodyItem {
   producto_id: string;
   producto_nombre: string;
   sku?: string | null;
+  unidad_medida?: string | null;
   cantidad: number;
   precio_venta: number;
   tipo_precio?: "minorista" | "mayorista" | "distribuidor" | null;
@@ -117,6 +138,7 @@ export async function PATCH(
           producto_id: String(it.producto_id),
           producto_nombre: String(it.producto_nombre ?? ""),
           sku: it.sku ?? null,
+          unidad_medida: it.unidad_medida ?? null,
           cantidad: Number(it.cantidad),
           precio_venta: Math.max(0, Number(it.precio_venta) || 0),
           tipo_precio:

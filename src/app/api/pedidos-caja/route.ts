@@ -19,6 +19,7 @@ interface BodyItem {
   producto_id: string;
   producto_nombre: string;
   sku?: string | null;
+  unidad_medida?: string | null;
   cantidad: number;
   precio_venta: number;
   tipo_precio?: "minorista" | "mayorista" | "distribuidor" | null;
@@ -94,6 +95,7 @@ export async function POST(request: NextRequest) {
         producto_id: String(it.producto_id),
         producto_nombre: String(it.producto_nombre ?? ""),
         sku: it.sku ?? null,
+        unidad_medida: it.unidad_medida ?? null,
         cantidad: Number(it.cantidad),
         precio_venta: Math.max(0, Number(it.precio_venta) || 0),
         tipo_precio:

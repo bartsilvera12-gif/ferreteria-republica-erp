@@ -368,6 +368,7 @@ export default function NuevoPedidoPage() {
           producto_id: it.producto_id,
           producto_nombre: it.producto_nombre,
           sku: it.sku,
+          unidad_medida: it.unidad_medida,
           cantidad: it.cantidad,
           precio_venta: it.precio_venta,
           tipo_precio: it.tipo_precio,

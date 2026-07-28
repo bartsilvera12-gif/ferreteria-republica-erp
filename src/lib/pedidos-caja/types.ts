@@ -16,6 +16,8 @@ export interface PedidoCajaItem {
   producto_id: string;
   producto_nombre: string;
   sku: string | null;
+  /** Unidad del producto (define si la cantidad admite decimales al cobrar). */
+  unidad_medida?: string | null;
   cantidad: number;
   precio_venta: number;
   tipo_precio: "minorista" | "mayorista" | "distribuidor";

@@ -25,6 +25,7 @@ function mapItems(raw: unknown): PedidoCajaItem[] {
       producto_id: String(r.producto_id ?? ""),
       producto_nombre: String(r.producto_nombre ?? ""),
       sku: r.sku == null ? null : String(r.sku),
+      unidad_medida: r.unidad_medida == null ? null : String(r.unidad_medida),
       cantidad: num(r.cantidad),
       precio_venta: num(r.precio_venta),
       tipo_precio:
