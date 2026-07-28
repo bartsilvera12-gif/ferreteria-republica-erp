@@ -82,7 +82,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   .actions { max-width:${widthMm}mm; margin:8mm auto 0; text-align:center; }
   .actions button { padding:8px 16px; font-size:13px; cursor:pointer; border:1px solid #333; background:#fff; border-radius:6px; }
   .actions a { margin-left:12px; font-size:13px; color:#444; }
-  @media print { body { background:#fff; padding:0; } .paper { width:${widthMm}mm; box-shadow:none; padding:2mm; margin:0; } .actions { display:none; } @page { margin:0; size:${widthMm}mm auto; } }
+  @media print { body { background:#fff; padding:0; } .paper { width:${widthMm === 58 ? 48 : 72}mm; box-shadow:none; padding:1mm 1mm; margin:0 auto; } .actions { display:none; } @page { margin:0; size:${widthMm}mm auto; } }
 </style></head>
 <body>
   <section class="paper">
