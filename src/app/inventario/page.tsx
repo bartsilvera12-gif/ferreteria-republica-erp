@@ -391,6 +391,7 @@ export default function InventarioPage() {
           <table className="w-full min-w-[820px] text-left text-sm">
             <thead>
               <tr className="border-b-2 border-[#4FAEB2]/15 bg-[#4FAEB2]/5 text-[11px] font-bold uppercase tracking-wider text-[#3F8E91]">
+                <th className="w-px px-5 py-3 text-center">Acción</th>
                 <th className="px-5 py-3">Producto</th>
                 <th className="hidden px-3 py-3 lg:table-cell">SKU</th>
                 <th className="hidden px-3 py-3 md:table-cell">Categoría</th>
@@ -400,7 +401,6 @@ export default function InventarioPage() {
                 <th className="px-3 py-3 text-center">Rango</th>
                 <th className="hidden px-3 py-3 text-right lg:table-cell">Margen</th>
                 <th className="hidden px-3 py-3 text-center lg:table-cell">Valuación</th>
-                <th className="px-5 py-3 text-center">Acción</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
@@ -438,6 +438,30 @@ export default function InventarioPage() {
                       key={p.id}
                       className="border-b border-slate-100 transition-colors hover:bg-[#4FAEB2]/5"
                     >
+                      <td className="px-5 py-3.5">
+                        <div className="flex items-center justify-center gap-1">
+                          <Link
+                            href={`/inventario/${p.id}/editar`}
+                            title="Editar producto"
+                            aria-label={`Editar ${p.nombre}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-[#4FAEB2]/10 hover:text-[#4FAEB2]"
+                          >
+                            <Pencil className="h-4 w-4" />
+                          </Link>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setDeleting(p);
+                              setDeleteError(null);
+                            }}
+                            title="Eliminar producto"
+                            aria-label={`Eliminar ${p.nombre}`}
+                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-red-50 hover:text-red-600"
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </button>
+                        </div>
+                      </td>
                       <td className="px-5 py-3.5">
                         <div className="flex items-center gap-2">
                           <div className="min-w-0">
@@ -521,30 +545,6 @@ export default function InventarioPage() {
                         >
                           {p.metodo_valuacion}
                         </span>
-                      </td>
-                      <td className="px-5 py-3.5">
-                        <div className="flex items-center justify-center gap-1">
-                          <Link
-                            href={`/inventario/${p.id}/editar`}
-                            title="Editar producto"
-                            aria-label={`Editar ${p.nombre}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-[#4FAEB2]/10 hover:text-[#4FAEB2]"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Link>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setDeleting(p);
-                              setDeleteError(null);
-                            }}
-                            title="Eliminar producto"
-                            aria-label={`Eliminar ${p.nombre}`}
-                            className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-red-50 hover:text-red-600"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
                       </td>
                     </tr>
                   );

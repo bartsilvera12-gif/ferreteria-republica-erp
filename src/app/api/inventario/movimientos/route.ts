@@ -72,6 +72,36 @@ export async function GET(request: NextRequest) {
     const { data, error, count } = await query;
     if (error) throw new Error(error.message);
 
+    // Mostrar el NOMBRE de la persona, no el correo. Los movimientos guardan
+    // `usuario_nombre` que a veces quedó como email (fallback). Se resuelve
+    // contra el catálogo de usuarios por id (created_by) y por email.
+    const filas = (data ?? []) as Array<Record<string, unknown>>;
+    if (filas.length > 0) {
+      const uQ = await ctx.supabase
+        .from("usuarios")
+        .select("id, email, nombre")
+        .eq("empresa_id", empresaId);
+      const porId = new Map<string, string>();
+      const porEmail = new Map<string, string>();
+      for (const u of (uQ.data ?? []) as Array<{ id: string; email: string | null; nombre: string | null }>) {
+        const nombre = (u.nombre ?? "").trim();
+        if (!nombre) continue;
+        if (u.id) porId.set(String(u.id), nombre);
+        if (u.email) porEmail.set(String(u.email).trim().toLowerCase(), nombre);
+      }
+      const esEmail = (s: string) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
+      for (const m of filas) {
+        const actual = typeof m.usuario_nombre === "string" ? m.usuario_nombre.trim() : "";
+        const porCreador = m.created_by ? porId.get(String(m.created_by)) : undefined;
+        // Prioridad: nombre por id; si no, y el guardado parece email, el nombre
+        // por email; si no hay nada mejor, se deja lo que había.
+        const resuelto = porCreador
+          ?? (actual && esEmail(actual) ? porEmail.get(actual.toLowerCase()) : undefined)
+          ?? (actual || null);
+        m.usuario_nombre = resuelto;
+      }
+    }
+
     // Fallback: si planned devolvio 0 pero hay datos en esta pagina, hacemos
     // un count exacto barato (solo cuando hace falta). Cubre tablas pequeñas
     // que pg_stats aun no estimo.
@@ -85,7 +115,7 @@ export async function GET(request: NextRequest) {
     }
 
     return NextResponse.json(
-      successResponse({ movimientos: data ?? [], total })
+      successResponse({ movimientos: filas, total })
     );
   } catch (err) {
     console.error("[/api/inventario/movimientos GET]", err instanceof Error ? err.message : err);
