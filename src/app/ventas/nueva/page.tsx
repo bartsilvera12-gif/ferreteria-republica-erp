@@ -225,6 +225,7 @@ export default function NuevaVentaPage() {
   // Modal de cobro (transferencia / tarjeta) + buscador de entidad.
   const [cobroModalOpen, setCobroModalOpen] = useState(false);
   const [entidadQuery, setEntidadQuery] = useState("");
+  const [cobroError, setCobroError] = useState<string | null>(null);
 
   // ── Combobox de producto (búsqueda server-side por tokens sobre todo el catálogo) ──
   const [comboQuery,     setComboQuery]     = useState("");
@@ -639,6 +640,7 @@ export default function NuevaVentaPage() {
   /** Selecciona método de cobro. Efectivo no pide datos; transferencia/tarjeta abren modal. */
   function handleSelectMetodo(m: MetodoPago) {
     setMetodoPago(m);
+    setCobroError(null);
     if (m === "efectivo") {
       setCobroModalOpen(false);
       // "Caja efectivo" por defecto si existe una entidad tipo caja.
@@ -755,6 +757,19 @@ export default function NuevaVentaPage() {
     if (!cajaActivaFinal) {
       setErrorVenta("Hay varias cajas abiertas: seleccioná la caja activa antes de confirmar.");
       return;
+    }
+    // Transferencia / tarjeta: exigir una entidad REAL seleccionada de la lista
+    // (no basta escribir texto/números en el buscador). Si falta, reabrir el
+    // modal de cobro con el aviso en vez de registrar la venta.
+    if (metodoPago === "transferencia" || metodoPago === "tarjeta") {
+      if (!pagoEntidadId) {
+        const msg = metodoPago === "tarjeta"
+          ? "Seleccioná la entidad / banco / POS de la lista."
+          : "Seleccioná la entidad / banco de la lista.";
+        setCobroError(msg);
+        setCobroModalOpen(true);
+        return;
+      }
     }
     // Guard duro contra doble submit: si ya hay una confirmación en vuelo, cortar
     // inmediatamente. El ref se evalúa de forma síncrona (no espera al re-render de React),
@@ -1530,7 +1545,7 @@ export default function NuevaVentaPage() {
                     <button
                       key={en.id}
                       type="button"
-                      onClick={() => { setPagoEntidadId(en.id); setEntidadQuery(""); }}
+                      onClick={() => { setPagoEntidadId(en.id); setEntidadQuery(""); setCobroError(null); }}
                       className={`block w-full text-left px-3 py-1.5 text-sm hover:bg-slate-50 ${pagoEntidadId === en.id ? "bg-sky-50" : ""}`}
                     >
                       {en.codigo && <span className="font-mono text-xs text-slate-400 mr-2">{en.codigo}</span>}
@@ -1554,7 +1569,26 @@ export default function NuevaVentaPage() {
               <input type="text" value={pagoReferencia} onChange={(e) => setPagoReferencia(e.target.value)} placeholder="Comprobante / transacción" className={inputClass} />
             </div>
 
-            <button type="button" onClick={() => setCobroModalOpen(false)} className="w-full rounded-lg bg-[#0EA5E9] py-2 text-sm font-medium text-white hover:bg-[#0284C7]">
+            {cobroError && (
+              <p className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-xs text-rose-700">{cobroError}</p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => {
+                // Exigir una entidad realmente seleccionada de la lista (no vale
+                // escribir texto/números en el buscador de arriba).
+                if (!pagoEntidadId) {
+                  setCobroError(metodoPago === "tarjeta"
+                    ? "Seleccioná la entidad / banco / POS de la lista."
+                    : "Seleccioná la entidad / banco de la lista.");
+                  return;
+                }
+                setCobroError(null);
+                setCobroModalOpen(false);
+              }}
+              className="w-full rounded-lg bg-[#0EA5E9] py-2 text-sm font-medium text-white hover:bg-[#0284C7]"
+            >
               Listo
             </button>
           </div>
