@@ -973,9 +973,11 @@ export default function NuevaVentaPage() {
       const ticketUrl = `/api/ventas/${v.id}/ticket?mode=comandas&auto=1`;
       const facturaUrl = `/api/ventas/${v.id}/factura?auto=1`;
       const remisionUrl = `/api/ventas/${v.id}/ticket?tipo=remision&auto=1`;
-      // Si se seleccionó cliente, la venta se factura: abrimos la FACTURA (mismo
-      // ticket pero con los datos fiscales). Sin cliente, el ticket interno.
-      const docUrl = clienteId ? facturaUrl : ticketUrl;
+      // TODAS las ventas se facturan: siempre abrimos la FACTURA. Sin cliente
+      // sale a nombre de "Consumidor Final". El ticket interno queda disponible
+      // desde el listado si hace falta.
+      void ticketUrl;
+      const docUrl = facturaUrl;
       // Se reutiliza la ventana abierta durante el clic. Si el navegador la
       // bloqueó igual, se intenta abrir ahora como último recurso.
       if (ventanaDoc && !ventanaDoc.closed) {

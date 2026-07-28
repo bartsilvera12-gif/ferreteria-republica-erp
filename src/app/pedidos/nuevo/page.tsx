@@ -38,6 +38,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import ClienteBuscador from "@/components/clientes/ClienteBuscador";
+import CrearClienteModal from "@/components/clientes/CrearClienteModal";
 
 type PresentacionLite = {
   id: string;
@@ -145,6 +146,7 @@ export default function NuevoPedidoPage() {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState<string>("");
+  const [showCrearCliente, setShowCrearCliente] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [okMsg, setOkMsg] = useState<string | null>(null);
   const [errMsg, setErrMsg] = useState<string | null>(null);
@@ -773,6 +775,7 @@ export default function NuevoPedidoPage() {
               clientes={clientes}
               value={clienteId}
               onChange={setClienteId}
+              onCrearNuevo={() => setShowCrearCliente(true)}
             />
 
             {/* Liquidación de IVA (IVA incluido en el precio) */}
@@ -843,6 +846,21 @@ export default function NuevoPedidoPage() {
             </p>
           </div>
         </div>
+      )}
+
+      {showCrearCliente && (
+        <CrearClienteModal
+          onClose={() => setShowCrearCliente(false)}
+          onCreated={async (c) => {
+            setShowCrearCliente(false);
+            // Refrescar la lista y seleccionar el recién creado.
+            try {
+              const data = await getClientes();
+              setClientes(data);
+            } catch { /* si falla, igual seleccionamos por id */ }
+            setClienteId(c.id);
+          }}
+        />
       )}
     </div>
   );

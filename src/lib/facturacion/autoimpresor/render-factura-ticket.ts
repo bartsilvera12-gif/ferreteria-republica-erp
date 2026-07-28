@@ -154,8 +154,8 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
     })
     .join("");
 
-  const clienteNombre = d.cliente?.nombre?.trim() || "SIN NOMBRE";
-  const clienteRuc = d.cliente?.ruc?.trim() || "—";
+  const clienteNombre = d.cliente?.nombre?.trim() || "Consumidor Final";
+  const clienteRuc = d.cliente?.ruc?.trim() || "Sin RUC";
 
   const avisoBorrador = d.borrador
     ? `<div class="borrador">*** SIN VALIDEZ FISCAL ***<br>Borrador — ${esc(d.motivoBorrador || "autoimpresor inactivo")}</div>`
