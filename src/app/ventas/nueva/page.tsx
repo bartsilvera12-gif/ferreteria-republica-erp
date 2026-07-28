@@ -1001,7 +1001,9 @@ export default function NuevaVentaPage() {
     }
   }
 
-  async function handleSubmit(e: React.FormEvent) {
+  // Confirmar SOLO por click en el botón (no con Enter): el <form> ignora el
+  // submit y el botón es type="button" que llama a esto directamente.
+  async function handleSubmit(e: React.SyntheticEvent) {
     e.preventDefault();
     setErrorVenta(null);
     if (!ventaValida) return;
@@ -1068,7 +1070,7 @@ export default function NuevaVentaPage() {
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6 max-w-7xl">
+      <form onSubmit={(e) => e.preventDefault()} className="space-y-6 max-w-7xl">
 
         {/* ── SECCIÓN 0: Datos de la venta (cliente opcional + condición) ────── */}
         <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-4 sm:p-6">
@@ -1695,7 +1697,8 @@ export default function NuevaVentaPage() {
               Cancelar
             </button>
             <button
-              type="submit"
+              type="button"
+              onClick={handleSubmit}
               disabled={!ventaValida || guardando || efectivoInsuficiente || mixtoInvalido}
               aria-busy={guardando}
               title={efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : mixtoInvalido ? "El cobro mixto no cubre el total o falta la entidad." : undefined}
