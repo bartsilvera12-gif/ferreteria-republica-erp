@@ -29,12 +29,11 @@ import {
   ImageIcon,
 } from "lucide-react";
 import {
-  parseCantidad,
   pasoCantidad,
-  minimoCantidad,
   permiteDecimales,
   clampCantidad,
 } from "@/lib/productos/unidades";
+import CantidadInput from "@/components/ui/CantidadInput";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
@@ -712,20 +711,10 @@ export default function NuevoPedidoPage() {
                           <button onClick={() => changeCantidad(it.producto_id, -1)} className="h-8 w-8 rounded-l-md text-slate-500 hover:bg-slate-100">
                             <Minus className="mx-auto h-3.5 w-3.5" />
                           </button>
-                          <input
-                            type="number"
-                            inputMode={permiteDecimales(it.unidad_medida) ? "decimal" : "numeric"}
-                            min={minimoCantidad(it.unidad_medida)}
-                            step={pasoCantidad(it.unidad_medida)}
+                          <CantidadInput
                             value={it.cantidad}
-                            onChange={(e) => {
-                              const n = parseCantidad(e.target.value, it.unidad_medida);
-                              if (n !== null) setCart((prev) => prev.map((x) => (x.producto_id === it.producto_id ? conTierAuto({ ...x, cantidad: n }) : x)));
-                            }}
-                            onBlur={(e) => {
-                              const n = parseCantidad(e.target.value, it.unidad_medida);
-                              setCart((prev) => prev.map((x) => (x.producto_id === it.producto_id ? conTierAuto({ ...x, cantidad: clampCantidad(n ?? 0, it.unidad_medida) }) : x)));
-                            }}
+                            unidad={it.unidad_medida}
+                            onChange={(n) => setCart((prev) => prev.map((x) => (x.producto_id === it.producto_id ? conTierAuto({ ...x, cantidad: n }) : x)))}
                             className={`h-8 text-center text-sm tabular-nums outline-none ${
                               permiteDecimales(it.unidad_medida) ? "w-16" : "w-12"
                             }`}

@@ -13,9 +13,10 @@ import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, Tipo
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import {
-  permiteDecimales, pasoCantidad, minimoCantidad, parseCantidad, clampCantidad,
+  permiteDecimales, pasoCantidad, clampCantidad,
   formatStockConUnidad,
 } from "@/lib/productos/unidades";
+import CantidadInput from "@/components/ui/CantidadInput";
 import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
 
 /** Miniatura de producto con fallback a un placeholder si no hay imagen o falla. */
@@ -1351,22 +1352,10 @@ export default function NuevaVentaPage() {
                           <td className="px-3 py-2.5">
                             <div className="mx-auto flex w-fit items-center rounded-md border border-slate-200 bg-white">
                               <button type="button" onClick={() => changeCantidadItem(idx, -1)} className="h-8 w-8 rounded-l-md text-slate-500 hover:bg-slate-100"><Minus className="mx-auto h-3.5 w-3.5" /></button>
-                              <input
-                                type="number"
-                                inputMode={permiteDecimales(item.unidad_medida) ? "decimal" : "numeric"}
-                                min={minimoCantidad(item.unidad_medida)}
-                                step={pasoCantidad(item.unidad_medida)}
+                              <CantidadInput
                                 value={item.cantidad}
-                                onChange={(e) => {
-                                  // null = todavía no es un número válido: lo dejamos
-                                  // escribir en vez de saltar a 1.
-                                  const n = parseCantidad(e.target.value, item.unidad_medida);
-                                  if (n !== null) updateItemCampo(idx, { cantidad: n });
-                                }}
-                                onBlur={(e) => {
-                                  const n = parseCantidad(e.target.value, item.unidad_medida);
-                                  updateItemCampo(idx, { cantidad: clampCantidad(n ?? 0, item.unidad_medida) });
-                                }}
+                                unidad={item.unidad_medida}
+                                onChange={(n) => updateItemCampo(idx, { cantidad: n })}
                                 className={`h-8 text-center text-sm tabular-nums outline-none ${
                                   permiteDecimales(item.unidad_medida) ? "w-16" : "w-12"
                                 }`}

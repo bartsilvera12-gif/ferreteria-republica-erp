@@ -26,12 +26,11 @@ import {
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
 import {
-  parseCantidad,
   pasoCantidad,
-  minimoCantidad,
   permiteDecimales,
   clampCantidad,
 } from "@/lib/productos/unidades";
+import CantidadInput from "@/components/ui/CantidadInput";
 import type { Cliente } from "@/lib/clientes/types";
 import ClienteBuscador from "@/components/clientes/ClienteBuscador";
 
@@ -708,20 +707,10 @@ export default function EditarPedidoPage({
                           >
                             <Minus className="h-3 w-3 mx-auto" />
                           </button>
-                          <input
-                            type="number"
-                            inputMode={permiteDecimales(it.unidad_medida) ? "decimal" : "numeric"}
-                            min={minimoCantidad(it.unidad_medida)}
-                            step={pasoCantidad(it.unidad_medida)}
+                          <CantidadInput
                             value={it.cantidad}
-                            onChange={(e) => {
-                              const n = parseCantidad(e.target.value, it.unidad_medida);
-                              if (n !== null) updateCart(it.producto_id, { cantidad: n });
-                            }}
-                            onBlur={(e) => {
-                              const n = parseCantidad(e.target.value, it.unidad_medida);
-                              updateCart(it.producto_id, { cantidad: clampCantidad(n ?? 0, it.unidad_medida) });
-                            }}
+                            unidad={it.unidad_medida}
+                            onChange={(n) => updateCart(it.producto_id, { cantidad: n })}
                             className={`h-7 text-center text-xs tabular-nums outline-none ${
                               permiteDecimales(it.unidad_medida) ? "w-14" : "w-10"
                             }`}
