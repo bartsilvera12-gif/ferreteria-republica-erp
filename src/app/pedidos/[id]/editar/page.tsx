@@ -22,6 +22,7 @@ import {
   User,
   Package,
   Save,
+  ImageIcon,
 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
@@ -33,6 +34,7 @@ import {
 import CantidadInput from "@/components/ui/CantidadInput";
 import type { Cliente } from "@/lib/clientes/types";
 import ClienteBuscador from "@/components/clientes/ClienteBuscador";
+import CrearClienteModal from "@/components/clientes/CrearClienteModal";
 
 type PresentacionLite = {
   id: string;
@@ -50,8 +52,10 @@ type ProductoHit = {
   precio_venta: number;
   precio_mayorista: number;
   precio_distribuidor?: number | null;
+  cantidad_minima_mayorista?: number | null;
   stock_actual: number;
   unidad_medida: string;
+  imagen_url?: string | null;
 };
 
 type CartItem = {
@@ -63,9 +67,16 @@ type CartItem = {
   cantidad: number;
   tipo_precio: "minorista" | "mayorista" | "distribuidor";
   tipo_iva: "EXENTA" | "5%" | "10%";
+  /** Precio efectivo mostrado/cobrado (tipo + presentación aplicados). */
   precio_venta: number;
+  /** Precio minorista base del producto (estable). */
+  precio_minorista: number;
   precio_mayorista: number;
   precio_distribuidor: number;
+  cantidad_minima_mayorista: number | null;
+  /** true si se fijó el tipo/precio a mano: no auto-cambiar por cantidad. */
+  precio_manual?: boolean;
+  imagen_url: string | null;
   presentacion_id: string | null;
   presentacion_nombre: string | null;
   presentacion_cantidad_base: number | null;
@@ -83,6 +94,40 @@ function precioPorTipoBase(
   if (tipo === "mayorista") return p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
   if (tipo === "distribuidor") return p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
   return p.precio_venta;
+}
+
+/** Precio efectivo de un ítem para un tipo (base por canal × cantidad_base). */
+function precioEfectivoItem(it: CartItem, tipo: "minorista" | "mayorista" | "distribuidor"): number {
+  const base = precioPorTipoBase(
+    { precio_venta: it.precio_minorista, precio_mayorista: it.precio_mayorista, precio_distribuidor: it.precio_distribuidor },
+    tipo
+  );
+  const cantBase = it.presentacion_cantidad_base ?? 1;
+  const pres = it.presentaciones.find((p) => p.id === it.presentacion_id);
+  return Math.round(pres && pres.precio_venta != null && pres.precio_venta > 0 ? pres.precio_venta : base * cantBase);
+}
+
+/** Aplica el precio por canal según la cantidad (mayorista al llegar al mínimo),
+ *  salvo que el tipo/precio se haya fijado a mano. */
+function conTierAuto(it: CartItem): CartItem {
+  if (it.precio_manual) return it;
+  const min = it.cantidad_minima_mayorista;
+  const tipo = it.precio_mayorista > 0 && min != null && min > 0 && it.cantidad >= min ? "mayorista" : "minorista";
+  return { ...it, tipo_precio: tipo, precio_venta: precioEfectivoItem(it, tipo) };
+}
+
+/** Miniatura con fallback. */
+function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
+  const [err, setErr] = useState(false);
+  if (!url || err) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-100 bg-slate-50 text-slate-300">
+        <ImageIcon className="h-4 w-4" />
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} loading="lazy" onError={() => setErr(true)} className="h-10 w-10 shrink-0 rounded-md border border-slate-100 object-cover" />;
 }
 
 export default function EditarPedidoPage({
@@ -103,6 +148,7 @@ export default function EditarPedidoPage({
   const [cart, setCart] = useState<CartItem[]>([]);
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState<string>("");
+  const [showCrearCliente, setShowCrearCliente] = useState(false);
 
   // ---- Buscador inline ----
   const [q, setQ] = useState("");
@@ -187,8 +233,11 @@ export default function EditarPedidoPage({
                   precio_mayorista: Number(x.precio_mayorista) || 0,
                   precio_distribuidor:
                     x.precio_distribuidor == null ? null : Number(x.precio_distribuidor),
+                  cantidad_minima_mayorista:
+                    x.cantidad_minima_mayorista == null ? null : Number(x.cantidad_minima_mayorista),
                   stock_actual: Number(x.stock_actual) || 0,
                   unidad_medida: String(x.unidad_medida ?? "Unidad"),
+                  imagen_url: (x.imagen_url as string | null) ?? null,
                 });
               }
               if (jpres?.success) {
@@ -212,8 +261,14 @@ export default function EditarPedidoPage({
             tipo_precio: (it.tipo_precio as CartItem["tipo_precio"]) ?? "minorista",
             tipo_iva: (it.tipo_iva as CartItem["tipo_iva"]) ?? "10%",
             precio_venta: Number(it.precio_venta) || 0,
+            precio_minorista: meta?.precio_venta ?? (Number(it.precio_venta) || 0),
             precio_mayorista: meta?.precio_mayorista ?? 0,
             precio_distribuidor: meta?.precio_distribuidor ?? 0,
+            cantidad_minima_mayorista: meta?.cantidad_minima_mayorista ?? null,
+            // El pedido ya tenía su precio: se respeta (no auto-cambiar) hasta que
+            // el cajero cambie el tipo o la cantidad a mano.
+            precio_manual: true,
+            imagen_url: meta?.imagen_url ?? null,
             presentacion_id: it.presentacion_id ?? null,
             presentacion_nombre: it.presentacion_nombre ?? null,
             presentacion_cantidad_base: it.presentacion_cantidad_base ?? null,
@@ -253,8 +308,10 @@ export default function EditarPedidoPage({
           precio_venta: Number(p.precio_venta) || 0,
           precio_mayorista: Number(p.precio_mayorista) || 0,
           precio_distribuidor: p.precio_distribuidor == null ? null : Number(p.precio_distribuidor),
+          cantidad_minima_mayorista: p.cantidad_minima_mayorista == null ? null : Number(p.cantidad_minima_mayorista),
           stock_actual: Number(p.stock_actual) || 0,
           unidad_medida: String(p.unidad_medida ?? "Unidad"),
+          imagen_url: (p.imagen_url as string | null) ?? null,
         }));
         setHits(items);
       } finally {
@@ -284,7 +341,7 @@ export default function EditarPedidoPage({
     if (ex) {
       setCart((prev) =>
         prev.map((x) =>
-          x.producto_id === p.id ? { ...x, cantidad: x.cantidad + 1 } : x
+          x.producto_id === p.id ? conTierAuto({ ...x, cantidad: x.cantidad + 1 }) : x
         )
       );
       return;
@@ -303,8 +360,12 @@ export default function EditarPedidoPage({
         tipo_precio: "minorista",
         tipo_iva: "10%",
         precio_venta: p.precio_venta,
+        precio_minorista: p.precio_venta,
         precio_mayorista: p.precio_mayorista,
         precio_distribuidor: p.precio_distribuidor ?? 0,
+        cantidad_minima_mayorista: p.cantidad_minima_mayorista ?? null,
+        precio_manual: false,
+        imagen_url: p.imagen_url ?? null,
         presentacion_id: def ? def.id : null,
         presentacion_nombre: def ? def.nombre : null,
         presentacion_cantidad_base: def ? def.cantidad_base : null,
@@ -324,7 +385,7 @@ export default function EditarPedidoPage({
     setCart((prev) =>
       prev.map((x) =>
         x.producto_id === id
-          ? { ...x, cantidad: clampCantidad(x.cantidad + delta * pasoCantidad(x.unidad_medida), x.unidad_medida) }
+          ? conTierAuto({ ...x, cantidad: clampCantidad(x.cantidad + delta * pasoCantidad(x.unidad_medida), x.unidad_medida) })
           : x
       )
     );
@@ -332,21 +393,8 @@ export default function EditarPedidoPage({
   function changeTipoPrecio(id: string, tipo: "minorista" | "mayorista" | "distribuidor") {
     const it = cart.find((x) => x.producto_id === id);
     if (!it) return;
-    const base = precioPorTipoBase(
-      {
-        precio_venta: it.precio_venta,
-        precio_mayorista: it.precio_mayorista,
-        precio_distribuidor: it.precio_distribuidor,
-      },
-      tipo
-    );
-    const cantBase = it.presentacion_cantidad_base ?? 1;
-    const pres = it.presentaciones.find((p) => p.id === it.presentacion_id);
-    const efectivo =
-      pres && pres.precio_venta != null && pres.precio_venta > 0
-        ? pres.precio_venta
-        : base * cantBase;
-    updateCart(id, { tipo_precio: tipo, precio_venta: Math.round(efectivo) });
+    // Elegir el tipo a mano fija el precio: no se auto-cambia por cantidad.
+    updateCart(id, { tipo_precio: tipo, precio_venta: precioEfectivoItem(it, tipo), precio_manual: true });
   }
   function changePresentacion(id: string, presentacionId: string) {
     const it = cart.find((x) => x.producto_id === id);
@@ -355,7 +403,7 @@ export default function EditarPedidoPage({
     if (!pres) return;
     const base = precioPorTipoBase(
       {
-        precio_venta: it.precio_venta,
+        precio_venta: it.precio_minorista,
         precio_mayorista: it.precio_mayorista,
         precio_distribuidor: it.precio_distribuidor,
       },
@@ -496,326 +544,275 @@ export default function EditarPedidoPage({
         </Link>
       </header>
 
-      <div className="grid gap-6 lg:grid-cols-[1fr_400px]">
-        {/* Buscador + resultados */}
-        <div className="space-y-4">
-          <div className="bg-white rounded-2xl border-2 border-[#4FAEB2]/20 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] p-4">
-            <div className="relative">
-              <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-              <input
-                ref={inputRef}
-                type="text"
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "ArrowDown") { e.preventDefault(); setHlIdx((i) => Math.min(i + 1, hits.length - 1)); }
-                  else if (e.key === "ArrowUp") { e.preventDefault(); setHlIdx((i) => Math.max(i - 1, 0)); }
-                  else if (e.key === "Enter") {
-                    e.preventDefault();
-                    const p = hits[hlIdx] ?? hits[0];
-                    if (p && !cart.some((c) => c.producto_id === p.id)) { addToCart(p); setQ(""); }
-                  } else if (e.key === "Escape") { setQ(""); }
-                }}
-                placeholder="Agregar más productos al pedido..."
-                className={`${inputClass} w-full pl-10 pr-9 h-12 text-base`}
-                autoComplete="off"
-              />
-              {q && (
-                <button
-                  onClick={() => setQ("")}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              )}
-              {buscando && (
-                <Loader2 className="absolute right-9 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-[#4FAEB2]" />
-              )}
-            </div>
-          </div>
-
-          {q.trim().length >= 2 && hits.length > 0 && (
-            <ul ref={resultsRef} className="space-y-2">
-              {hits.map((p, i) => {
-                const yaEnCarrito = cart.some((c) => c.producto_id === p.id);
-                return (
-                  <li
-                    key={p.id}
-                    data-idx={i}
-                    onMouseEnter={() => setHlIdx(i)}
-                    className={`rounded-xl border-2 bg-white p-3.5 transition-all ${
-                      i === hlIdx ? "border-[#4FAEB2]/60 ring-2 ring-[#4FAEB2]/15" : "border-slate-100 hover:border-[#4FAEB2]/40"
-                    }`}
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0 flex-1">
-                        <h3 className="font-bold text-slate-800 truncate">{p.nombre}</h3>
-                        <p className="text-xs text-slate-500 mt-0.5">
-                          <span className="font-mono">{p.sku}</span> · {p.stock_actual} {p.unidad_medida} · {fmtGs(p.precio_venta)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => addToCart(p)}
-                        disabled={yaEnCarrito}
-                        className="inline-flex items-center gap-1 rounded-lg bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-xs font-bold px-3 py-1.5"
-                      >
-                        <Plus className="h-3 w-3" />
-                        {yaEnCarrito ? "En pedido" : "Agregar"}
-                      </button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
+      {/* Buscador (full width) */}
+      <div className="rounded-2xl border-2 border-[#4FAEB2]/20 bg-white p-4 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)]">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 h-5 w-5 -translate-y-1/2 text-[#4FAEB2]" />
+          <input
+            ref={inputRef}
+            type="text"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "ArrowDown") { e.preventDefault(); setHlIdx((i) => Math.min(i + 1, hits.length - 1)); }
+              else if (e.key === "ArrowUp") { e.preventDefault(); setHlIdx((i) => Math.max(i - 1, 0)); }
+              else if (e.key === "Enter") {
+                e.preventDefault();
+                const p = hits[hlIdx] ?? hits[0];
+                if (p && !cart.some((c) => c.producto_id === p.id)) { addToCart(p); setQ(""); }
+              } else if (e.key === "Escape") { setQ(""); }
+            }}
+            placeholder="Agregar más productos al pedido…"
+            className="h-14 w-full rounded-2xl border-2 border-[#4FAEB2]/25 bg-white pl-12 pr-10 text-base outline-none focus:border-[#4FAEB2] focus:ring-4 focus:ring-[#4FAEB2]/15"
+            autoComplete="off"
+          />
+          {q && (
+            <button onClick={() => setQ("")} className="absolute right-3 top-1/2 -translate-y-1/2 rounded p-0.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700">
+              <X className="h-4 w-4" />
+            </button>
           )}
+          {buscando && <Loader2 className="absolute right-10 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-[#4FAEB2]" />}
         </div>
 
-        {/* Carrito */}
-        <aside className="bg-white rounded-2xl border-2 border-[#4FAEB2]/20 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)] overflow-hidden h-fit lg:sticky lg:top-4">
-          <div className="px-5 py-4 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent">
-            <h2 className="text-[15px] font-bold text-slate-800 flex items-center gap-2">
-              <Receipt className="h-4 w-4 text-[#4FAEB2]" />
-              {cart.length} {cart.length === 1 ? "producto" : "productos"}
-            </h2>
-          </div>
-
-          {cart.length === 0 ? (
-            <div className="py-10 text-center px-6">
-              <Package className="h-6 w-6 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm font-semibold text-slate-600">Pedido vacío</p>
-            </div>
-          ) : (
-            <ul className="px-3 py-3 space-y-2 max-h-[420px] overflow-y-auto">
-              {cart.map((it) => {
-                const cantBase = it.presentacion_cantidad_base ?? 1;
-                return (
-                  <li
-                    key={it.producto_id}
-                    tabIndex={0}
-                    onKeyDown={(e) => {
-                      const tag = (e.target as HTMLElement).tagName;
-                      if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
-                      if (e.key === "+" || e.key === "=") { e.preventDefault(); changeCantidad(it.producto_id, 1); }
-                      else if (e.key === "-") { e.preventDefault(); changeCantidad(it.producto_id, -1); }
-                      else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeFromCart(it.producto_id); }
-                    }}
-                    className="rounded-xl border border-slate-200 bg-slate-50/40 p-3 outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/40"
+        {q.trim().length >= 2 && hits.length > 0 && (
+          <ul ref={resultsRef} className="mt-3 max-h-[320px] space-y-2 overflow-y-auto">
+            {hits.map((p, i) => {
+              const yaEnCarrito = cart.some((c) => c.producto_id === p.id);
+              return (
+                <li
+                  key={p.id}
+                  data-idx={i}
+                  onMouseEnter={() => setHlIdx(i)}
+                  className={`flex items-center gap-3 rounded-xl border-2 bg-white p-3 transition-all ${
+                    i === hlIdx ? "border-[#4FAEB2]/60 ring-2 ring-[#4FAEB2]/15" : "border-slate-100 hover:border-[#4FAEB2]/40"
+                  }`}
+                >
+                  <ProductoThumb url={p.imagen_url} alt={p.nombre} />
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate font-bold text-slate-800">{p.nombre}</h3>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      <span className="font-mono">{p.sku}</span> · {p.stock_actual} {p.unidad_medida} · {fmtGs(p.precio_venta)}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => addToCart(p)}
+                    disabled={yaEnCarrito}
+                    className="inline-flex items-center gap-1 rounded-lg bg-[#4FAEB2] px-3 py-1.5 text-xs font-bold text-white hover:bg-[#3F8E91] disabled:opacity-50"
                   >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-[13px] font-bold text-slate-800 truncate">
-                          {it.producto_nombre}
-                        </p>
-                        <p className="text-[10.5px] text-slate-500 font-mono">{it.sku}</p>
-                      </div>
-                      <button
-                        onClick={() => removeFromCart(it.producto_id)}
-                        className="text-slate-400 hover:text-red-600 p-1 rounded hover:bg-red-50"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
+                    <Plus className="h-3 w-3" />
+                    {yaEnCarrito ? "En pedido" : "Agregar"}
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
 
-                    {/* Presentacion siempre visible */}
-                    <div className="mt-2">
-                      <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
-                        Presentación
-                      </label>
-                      <select
-                        value={it.presentacion_id ?? ""}
-                        onChange={(e) => changePresentacion(it.producto_id, e.target.value)}
-                        disabled={it.presentaciones.length <= 1}
-                        className="w-full rounded-md border border-slate-200 bg-white px-2 py-1 text-xs disabled:bg-slate-100 disabled:text-slate-500 disabled:cursor-not-allowed"
-                      >
-                        {it.presentaciones.length === 0 ? (
-                          <option value="">— Sin presentación —</option>
-                        ) : (
-                          it.presentaciones.map((pp) => (
-                            <option key={pp.id} value={pp.id}>
-                              {pp.nombre}
-                              {pp.cantidad_base !== 1
-                                ? ` (= ${pp.cantidad_base} ${it.unidad_medida})`
-                                : ""}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </div>
+      {/* Tabla del pedido (full width) — misma vista que Nuevo */}
+      <div className="overflow-hidden rounded-2xl border-2 border-[#4FAEB2]/20 bg-white shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)]">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#4FAEB2]/15 bg-gradient-to-r from-[#4FAEB2]/5 to-transparent px-5 py-4">
+          <h2 className="flex items-center gap-2 text-[15px] font-bold text-slate-800">
+            <Receipt className="h-4 w-4 text-[#4FAEB2]" />
+            Pedido a armar
+            {cart.length > 0 && (
+              <span className="inline-flex h-[22px] min-w-[24px] items-center justify-center rounded-full bg-[#4FAEB2] px-2 text-[11px] font-bold tabular-nums text-white">
+                {cart.length}
+              </span>
+            )}
+          </h2>
+          <p className="text-xs text-slate-500">Elegí productos arriba; revisá cantidades y precios acá.</p>
+        </div>
 
-                    {/* Tipo precio + IVA */}
-                    <div className="mt-2 grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
-                          Tipo de precio
-                        </label>
-                        <div className="grid grid-cols-3 gap-1">
+        {cart.length === 0 ? (
+          <div className="px-6 py-14 text-center">
+            <div className="mb-3 inline-flex h-14 w-14 items-center justify-center rounded-2xl border border-[#4FAEB2]/20 bg-[#4FAEB2]/8">
+              <Package className="h-6 w-6 text-[#4FAEB2]" />
+            </div>
+            <p className="text-sm font-semibold text-slate-700">Sin productos todavía</p>
+            <p className="mt-1 text-xs text-slate-400">Buscá uno arriba y agregalo al pedido.</p>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[920px] text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">Producto</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">Presentación</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">Precio</th>
+                  <th className="px-3 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">IVA</th>
+                  <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">Cant.</th>
+                  <th className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Precio unit.</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Subtotal</th>
+                  <th className="w-10 px-2 py-3" />
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {cart.map((it) => {
+                  const cantBase = it.presentacion_cantidad_base ?? 1;
+                  return (
+                    <tr
+                      key={it.producto_id}
+                      tabIndex={0}
+                      onKeyDown={(e) => {
+                        const tag = (e.target as HTMLElement).tagName;
+                        if (tag === "INPUT" || tag === "SELECT" || tag === "TEXTAREA") return;
+                        if (e.key === "+" || e.key === "=") { e.preventDefault(); changeCantidad(it.producto_id, 1); }
+                        else if (e.key === "-") { e.preventDefault(); changeCantidad(it.producto_id, -1); }
+                        else if (e.key === "Delete" || e.key === "Backspace") { e.preventDefault(); removeFromCart(it.producto_id); }
+                      }}
+                      className="align-middle outline-none transition-colors hover:bg-[#4FAEB2]/5 focus:bg-[#4FAEB2]/10 focus:ring-2 focus:ring-inset focus:ring-[#4FAEB2]/50"
+                    >
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-3">
+                          <ProductoThumb url={it.imagen_url} alt={it.producto_nombre} />
+                          <div className="min-w-0">
+                            <p className="font-semibold leading-snug text-slate-900">{it.producto_nombre}</p>
+                            <p className="font-mono text-[11px] text-slate-500">{it.sku}</p>
+                            {cantBase !== 1 && (
+                              <p className="text-[11px] tabular-nums text-slate-500">= {it.cantidad * cantBase} {it.unidad_medida}</p>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3">
+                        <select
+                          value={it.presentacion_id ?? ""}
+                          onChange={(e) => changePresentacion(it.producto_id, e.target.value)}
+                          disabled={it.presentaciones.length <= 1}
+                          className="w-full min-w-[130px] rounded-md border border-slate-200 bg-white px-2 py-1.5 text-xs disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-slate-500"
+                        >
+                          {it.presentaciones.length === 0 ? (
+                            <option value="">— Sin presentación —</option>
+                          ) : (
+                            it.presentaciones.map((pp) => (
+                              <option key={pp.id} value={pp.id}>
+                                {pp.nombre}{pp.cantidad_base !== 1 ? ` (= ${pp.cantidad_base} ${it.unidad_medida})` : ""}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
                           {(["minorista", "mayorista", "distribuidor"] as const).map((t) => {
                             const sel = it.tipo_precio === t;
                             return (
-                              <button
-                                key={t}
-                                type="button"
-                                onClick={() => changeTipoPrecio(it.producto_id, t)}
-                                className={`rounded-md py-1 text-[10.5px] font-semibold border transition-colors ${
-                                  sel
-                                    ? "border-[#4FAEB2] bg-[#4FAEB2] text-white"
-                                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                                }`}
-                              >
+                              <button key={t} type="button" onClick={() => changeTipoPrecio(it.producto_id, t)}
+                                className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#4FAEB2] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
                                 {t === "minorista" ? "Min" : t === "mayorista" ? "May" : "Dist"}
                               </button>
                             );
                           })}
                         </div>
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
-                          IVA
-                        </label>
-                        <div className="grid grid-cols-3 gap-1">
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
                           {(["EXENTA", "5%", "10%"] as const).map((iva) => {
                             const sel = it.tipo_iva === iva;
                             return (
-                              <button
-                                key={iva}
-                                type="button"
-                                onClick={() => updateCart(it.producto_id, { tipo_iva: iva })}
-                                className={`rounded-md py-1 text-[10.5px] font-semibold border transition-colors ${
-                                  sel
-                                    ? "border-[#4FAEB2] bg-[#4FAEB2] text-white"
-                                    : "border-slate-200 bg-white text-slate-600 hover:bg-slate-100"
-                                }`}
-                              >
+                              <button key={iva} type="button" onClick={() => updateCart(it.producto_id, { tipo_iva: iva })}
+                                className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#4FAEB2] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
                                 {iva === "EXENTA" ? "Ex" : iva}
                               </button>
                             );
                           })}
                         </div>
-                      </div>
-                    </div>
-
-                    <div className="mt-2 grid grid-cols-[auto_1fr_1fr] gap-2 items-end">
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
-                          Cant.
-                        </label>
-                        <div className="flex items-center gap-0 border border-slate-200 rounded-md bg-white">
-                          <button
-                            onClick={() => changeCantidad(it.producto_id, -1)}
-                            className="h-7 w-7 text-slate-500 hover:bg-slate-100 rounded-l-md"
-                          >
-                            <Minus className="h-3 w-3 mx-auto" />
-                          </button>
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="mx-auto flex w-fit items-center rounded-md border border-slate-200 bg-white">
+                          <button onClick={() => changeCantidad(it.producto_id, -1)} className="h-8 w-8 rounded-l-md text-slate-500 hover:bg-slate-100"><Minus className="mx-auto h-3.5 w-3.5" /></button>
                           <CantidadInput
                             value={it.cantidad}
                             unidad={it.unidad_medida}
-                            onChange={(n) => updateCart(it.producto_id, { cantidad: n })}
-                            className={`h-7 text-center text-xs tabular-nums outline-none ${
-                              permiteDecimales(it.unidad_medida) ? "w-14" : "w-10"
-                            }`}
+                            onChange={(n) => setCart((prev) => prev.map((x) => (x.producto_id === it.producto_id ? conTierAuto({ ...x, cantidad: n }) : x)))}
+                            className={`h-8 text-center text-sm tabular-nums outline-none ${permiteDecimales(it.unidad_medida) ? "w-16" : "w-12"}`}
                           />
-                          <button
-                            onClick={() => changeCantidad(it.producto_id, 1)}
-                            className="h-7 w-7 text-slate-500 hover:bg-slate-100 rounded-r-md"
-                          >
-                            <Plus className="h-3 w-3 mx-auto" />
-                          </button>
+                          <button onClick={() => changeCantidad(it.producto_id, 1)} className="h-8 w-8 rounded-r-md text-slate-500 hover:bg-slate-100"><Plus className="mx-auto h-3.5 w-3.5" /></button>
                         </div>
                         {permiteDecimales(it.unidad_medida) && (
                           <p className="mt-0.5 text-center text-[10px] font-semibold uppercase text-[#3F8E91]">{it.unidad_medida}</p>
                         )}
-                      </div>
-                      <div>
-                        <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">
-                          Precio
-                        </label>
+                      </td>
+                      <td className="px-3 py-3 text-right">
                         <input
                           type="number"
                           min={0}
                           value={it.precio_venta}
-                          onChange={(e) =>
-                            updateCart(it.producto_id, {
-                              precio_venta: Math.max(0, Number(e.target.value) || 0),
-                            })
-                          }
-                          className="w-full h-7 rounded-md border border-slate-200 bg-white px-2 text-xs tabular-nums"
+                          onChange={(e) => updateCart(it.producto_id, { precio_venta: Math.max(0, Number(e.target.value) || 0), precio_manual: true })}
+                          className="h-8 w-28 rounded-md border border-slate-200 bg-white px-2 text-right text-sm tabular-nums"
                         />
-                      </div>
-                      <div className="text-right">
-                        <p className="text-[10px] uppercase tracking-wider text-slate-500 font-semibold">
-                          Subtotal
-                        </p>
-                        <p className="text-sm font-bold text-[#3F8E91] tabular-nums">
-                          {fmtGs(it.cantidad * it.precio_venta)}
-                        </p>
-                      </div>
-                    </div>
-                    {cantBase !== 1 && (
-                      <p className="mt-1.5 text-[10.5px] text-slate-500 tabular-nums">
-                        = {it.cantidad * cantBase} {it.unidad_medida}
-                      </p>
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
-          )}
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm font-bold tabular-nums text-[#3F8E91]">{fmtGs(it.cantidad * it.precio_venta)}</span>
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        <button onClick={() => removeFromCart(it.producto_id)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
 
-          <div className="border-t border-slate-200 px-4 py-4 space-y-3 bg-slate-50/30">
-            <div>
-              <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1 flex items-center gap-1">
-                <User className="h-3 w-3" />
-                Cliente (opcional)
-              </label>
-              <ClienteBuscador
-                clientes={clientes}
-                value={clienteId}
-                onChange={setClienteId}
-              />
-            </div>
+      {/* Cliente + total + guardar */}
+      {cart.length > 0 && (
+        <div className="grid items-start gap-4 lg:grid-cols-[1fr_380px]">
+          <div className="rounded-2xl border-2 border-[#4FAEB2]/20 bg-white p-5 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)]">
+            <label className="mb-1.5 flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-500">
+              <User className="h-3.5 w-3.5 text-[#4FAEB2]" />
+              Cliente (opcional)
+            </label>
+            <ClienteBuscador clientes={clientes} value={clienteId} onChange={setClienteId} />
+            {!clienteId && (
+              <button type="button" onClick={() => setShowCrearCliente(true)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#3F8E91] hover:underline">
+                <Plus className="h-3.5 w-3.5" /> Crear cliente nuevo
+              </button>
+            )}
+          </div>
 
-            <div className="flex items-center justify-between border-t border-slate-200 pt-3">
+          <div className="rounded-2xl border-2 border-[#4FAEB2]/20 bg-white p-5 shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)]">
+            <div className="flex items-center justify-between">
               <span className="text-sm font-semibold text-slate-700">Total</span>
-              <span className="text-lg font-bold tabular-nums text-slate-900">
-                {fmtGs(totalCart)}
-              </span>
+              <span className="text-2xl font-bold tabular-nums text-slate-900">{fmtGs(totalCart)}</span>
             </div>
-
-            {errMsg && (
-              <p className="text-xs text-red-700 bg-red-50 border border-red-200 rounded-md px-2.5 py-2">
-                {errMsg}
-              </p>
-            )}
-            {okMsg && (
-              <p className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-md px-2.5 py-2">
-                {okMsg}
-              </p>
-            )}
-
+            {errMsg && <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-2.5 py-2 text-xs text-red-700">{errMsg}</p>}
+            {okMsg && <p className="mt-3 rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-2 text-xs text-emerald-800">{okMsg}</p>}
             <button
               type="button"
               onClick={guardar}
               disabled={guardando || cart.length === 0}
-              className="w-full inline-flex items-center justify-center gap-2 rounded-xl bg-[#4FAEB2] hover:bg-[#3F8E91] disabled:opacity-50 text-white text-sm font-bold py-3 transition-colors shadow-md shadow-[#4FAEB2]/30"
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#4FAEB2] py-3 text-sm font-bold text-white shadow-md shadow-[#4FAEB2]/30 transition-colors hover:bg-[#3F8E91] disabled:opacity-50"
             >
-              {guardando ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4" />
-              )}
+              {guardando ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
               Guardar cambios
               <kbd className="ml-1 rounded bg-white/20 px-1.5 py-0.5 text-[10px] font-semibold">Ctrl↵</kbd>
             </button>
-
-            <div className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
+            <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-slate-400">
               <span><kbd className="rounded border border-slate-300 bg-slate-50 px-1">↑</kbd><kbd className="rounded border border-slate-300 bg-slate-50 px-1">↓</kbd> elegir · <kbd className="rounded border border-slate-300 bg-slate-50 px-1">↵</kbd> agregar</span>
               <span>fila: <kbd className="rounded border border-slate-300 bg-slate-50 px-1">+</kbd><kbd className="rounded border border-slate-300 bg-slate-50 px-1">−</kbd> · <kbd className="rounded border border-slate-300 bg-slate-50 px-1">Supr</kbd> quita</span>
               <span><kbd className="rounded border border-slate-300 bg-slate-50 px-1">Ctrl</kbd>+<kbd className="rounded border border-slate-300 bg-slate-50 px-1">K</kbd> buscar</span>
             </div>
           </div>
-        </aside>
-      </div>
+        </div>
+      )}
+
+      {showCrearCliente && (
+        <CrearClienteModal
+          onClose={() => setShowCrearCliente(false)}
+          onCreated={async (c) => {
+            setShowCrearCliente(false);
+            try { setClientes(await getClientes()); } catch { /* igual seleccionamos por id */ }
+            setClienteId(c.id);
+          }}
+        />
+      )}
     </div>
   );
 }

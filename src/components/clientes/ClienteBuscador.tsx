@@ -9,7 +9,7 @@
  * Pensado para catálogos de clientes chicos/medianos (filtra en el cliente).
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronsUpDown, X, Check, User, Plus } from "lucide-react";
+import { ChevronsUpDown, X, Check, User } from "lucide-react";
 
 export interface ClienteOption {
   id: string;
@@ -26,8 +26,6 @@ interface Props {
   placeholder?: string;
   /** Texto de la opción vacía. "" la oculta (cliente obligatorio). */
   sinClienteLabel?: string | null;
-  /** Si se pasa, muestra un pie "+ Crear cliente nuevo" en el desplegable. */
-  onCrearNuevo?: () => void;
   className?: string;
 }
 
@@ -51,7 +49,6 @@ export default function ClienteBuscador({
   onChange,
   placeholder = "Buscar por nombre, RUC o documento…",
   sinClienteLabel = "— Sin cliente —",
-  onCrearNuevo,
   className = "",
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -166,10 +163,8 @@ export default function ClienteBuscador({
               </button>
             </li>
           )}
-          {resultados.length === 0 && !onCrearNuevo ? (
+          {resultados.length === 0 ? (
             <li className="px-3 py-3 text-center text-xs text-slate-400">Sin clientes que coincidan.</li>
-          ) : resultados.length === 0 ? (
-            <li className="px-3 py-2 text-center text-xs text-slate-400">Sin clientes que coincidan.</li>
           ) : (
             resultados.map((c, i) => {
               const idx = i + (conSinCliente ? 1 : 0);
@@ -194,18 +189,6 @@ export default function ClienteBuscador({
                 </li>
               );
             })
-          )}
-          {onCrearNuevo && (
-            <li className="mt-1 border-t border-slate-100 pt-1">
-              <button
-                type="button"
-                onMouseDown={(e) => { e.preventDefault(); }}
-                onClick={() => { setOpen(false); setQuery(""); setHl(-1); onCrearNuevo(); }}
-                className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-semibold text-[#3F8E91] hover:bg-[#4FAEB2]/10"
-              >
-                <Plus className="h-4 w-4" /> Crear cliente nuevo
-              </button>
-            </li>
           )}
         </ul>
       )}

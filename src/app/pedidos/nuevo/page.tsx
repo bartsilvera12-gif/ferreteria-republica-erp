@@ -775,8 +775,16 @@ export default function NuevoPedidoPage() {
               clientes={clientes}
               value={clienteId}
               onChange={setClienteId}
-              onCrearNuevo={() => setShowCrearCliente(true)}
             />
+            {!clienteId && (
+              <button
+                type="button"
+                onClick={() => setShowCrearCliente(true)}
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#3F8E91] hover:underline"
+              >
+                <Plus className="h-3.5 w-3.5" /> Crear cliente nuevo
+              </button>
+            )}
 
             {/* Liquidación de IVA (IVA incluido en el precio) */}
             <div className="mt-4 border-t border-slate-200 pt-3">
