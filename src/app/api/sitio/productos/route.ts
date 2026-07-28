@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import { resolverImagenesPublicas } from "@/lib/inventario/imagen-storage";
+import { applyTokenSearch } from "@/lib/productos/token-search";
 
 export const dynamic = "force-dynamic";
 
@@ -76,7 +77,10 @@ export async function GET(request: NextRequest) {
     query = query.eq("categoria_principal_id", categoria);
   }
   if (search) {
-    query = query.ilike("nombre", `%${search}%`);
+    // Búsqueda inteligente por tokens (cada palabra en cualquier orden, sin
+    // acentos), igual que el buscador de productos de Caja del ERP: "clavo 2
+    // acero" encuentra "CLAVO 2X11 C/C ACERO", y también matchea por SKU.
+    query = applyTokenSearch(query, search, ["nombre", "sku", "descripcion"]);
   }
   if (destacado) {
     query = query.eq("destacado", true);
