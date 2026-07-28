@@ -28,6 +28,13 @@ import {
   Package,
   ImageIcon,
 } from "lucide-react";
+import {
+  parseCantidad,
+  pasoCantidad,
+  minimoCantidad,
+  permiteDecimales,
+  clampCantidad,
+} from "@/lib/productos/unidades";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
@@ -256,10 +263,12 @@ export default function NuevoPedidoPage() {
   }
 
   function changeCantidad(id: string, delta: number) {
+    // `delta` viene en pasos: el tamaño real depende de la unidad (0,1 en KG/G/
+    // metro/litro… y 1 en unidades discretas).
     setCart((prev) =>
       prev.map((x) =>
         x.producto_id === id
-          ? { ...x, cantidad: Math.max(1, x.cantidad + delta) }
+          ? { ...x, cantidad: clampCantidad(x.cantidad + delta * pasoCantidad(x.unidad_medida), x.unidad_medida) }
           : x
       )
     );
@@ -684,15 +693,29 @@ export default function NuevoPedidoPage() {
                           </button>
                           <input
                             type="number"
-                            min={1}
+                            inputMode={permiteDecimales(it.unidad_medida) ? "decimal" : "numeric"}
+                            min={minimoCantidad(it.unidad_medida)}
+                            step={pasoCantidad(it.unidad_medida)}
                             value={it.cantidad}
-                            onChange={(e) => updateCart(it.producto_id, { cantidad: Math.max(1, parseInt(e.target.value) || 1) })}
-                            className="h-8 w-12 text-center text-sm tabular-nums outline-none"
+                            onChange={(e) => {
+                              const n = parseCantidad(e.target.value, it.unidad_medida);
+                              if (n !== null) updateCart(it.producto_id, { cantidad: n });
+                            }}
+                            onBlur={(e) => {
+                              const n = parseCantidad(e.target.value, it.unidad_medida);
+                              updateCart(it.producto_id, { cantidad: clampCantidad(n ?? 0, it.unidad_medida) });
+                            }}
+                            className={`h-8 text-center text-sm tabular-nums outline-none ${
+                              permiteDecimales(it.unidad_medida) ? "w-16" : "w-12"
+                            }`}
                           />
                           <button onClick={() => changeCantidad(it.producto_id, 1)} className="h-8 w-8 rounded-r-md text-slate-500 hover:bg-slate-100">
                             <Plus className="mx-auto h-3.5 w-3.5" />
                           </button>
                         </div>
+                        {permiteDecimales(it.unidad_medida) && (
+                          <p className="mt-0.5 text-center text-[10px] font-semibold uppercase text-[#3F8E91]">{it.unidad_medida}</p>
+                        )}
                       </td>
                       {/* Precio unitario */}
                       <td className="px-3 py-3 text-right">

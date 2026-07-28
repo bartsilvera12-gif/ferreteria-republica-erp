@@ -25,6 +25,13 @@ import {
 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getClientes } from "@/lib/clientes/storage";
+import {
+  parseCantidad,
+  pasoCantidad,
+  minimoCantidad,
+  permiteDecimales,
+  clampCantidad,
+} from "@/lib/productos/unidades";
 import type { Cliente } from "@/lib/clientes/types";
 import ClienteBuscador from "@/components/clientes/ClienteBuscador";
 
@@ -314,9 +321,12 @@ export default function EditarPedidoPage({
     setCart((prev) => prev.filter((x) => x.producto_id !== id));
   }
   function changeCantidad(id: string, delta: number) {
+    // `delta` en pasos: 0,1 en unidades por peso/medida, 1 en discretas.
     setCart((prev) =>
       prev.map((x) =>
-        x.producto_id === id ? { ...x, cantidad: Math.max(1, x.cantidad + delta) } : x
+        x.producto_id === id
+          ? { ...x, cantidad: clampCantidad(x.cantidad + delta * pasoCantidad(x.unidad_medida), x.unidad_medida) }
+          : x
       )
     );
   }
@@ -699,14 +709,21 @@ export default function EditarPedidoPage({
                           </button>
                           <input
                             type="number"
-                            min={1}
+                            inputMode={permiteDecimales(it.unidad_medida) ? "decimal" : "numeric"}
+                            min={minimoCantidad(it.unidad_medida)}
+                            step={pasoCantidad(it.unidad_medida)}
                             value={it.cantidad}
-                            onChange={(e) =>
-                              updateCart(it.producto_id, {
-                                cantidad: Math.max(1, parseInt(e.target.value) || 1),
-                              })
-                            }
-                            className="w-10 h-7 text-center text-xs tabular-nums outline-none"
+                            onChange={(e) => {
+                              const n = parseCantidad(e.target.value, it.unidad_medida);
+                              if (n !== null) updateCart(it.producto_id, { cantidad: n });
+                            }}
+                            onBlur={(e) => {
+                              const n = parseCantidad(e.target.value, it.unidad_medida);
+                              updateCart(it.producto_id, { cantidad: clampCantidad(n ?? 0, it.unidad_medida) });
+                            }}
+                            className={`h-7 text-center text-xs tabular-nums outline-none ${
+                              permiteDecimales(it.unidad_medida) ? "w-14" : "w-10"
+                            }`}
                           />
                           <button
                             onClick={() => changeCantidad(it.producto_id, 1)}
@@ -715,6 +732,9 @@ export default function EditarPedidoPage({
                             <Plus className="h-3 w-3 mx-auto" />
                           </button>
                         </div>
+                        {permiteDecimales(it.unidad_medida) && (
+                          <p className="mt-0.5 text-center text-[10px] font-semibold uppercase text-[#3F8E91]">{it.unidad_medida}</p>
+                        )}
                       </div>
                       <div>
                         <label className="block text-[10px] uppercase tracking-wider text-slate-500 font-semibold mb-1">

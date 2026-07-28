@@ -630,6 +630,10 @@ export default function NuevaVentaPage() {
   // cobrar: si parte se pagó con saldo, el cajero recibe menos efectivo.
   const montoRecibidoNum = parseFloat(montoRecibido) || 0;
   const vuelto           = montoRecibidoNum - restaCobrar;
+  // Efectivo insuficiente: se cargó un monto recibido que no cubre lo que resta
+  // cobrar. Bloquea la confirmación (el campo vacío = pago exacto, no bloquea).
+  const efectivoInsuficiente =
+    metodoPago === "efectivo" && montoRecibidoNum > 0 && montoRecibidoNum < restaCobrar - 0.5;
 
   // ── Productos filtrados para el combobox ──────────────────────────────────
   // Solo vendibles (Reventa + Menú). Excluye materia prima / insumos.
@@ -756,6 +760,15 @@ export default function NuevaVentaPage() {
     }
     if (!cajaActivaFinal) {
       setErrorVenta("Hay varias cajas abiertas: seleccioná la caja activa antes de confirmar.");
+      return;
+    }
+    // Efectivo: si el cajero cargó un monto recibido y NO alcanza el total a
+    // cobrar, no dejar pasar la venta (debe coincidir o superar). Si deja el
+    // campo vacío se asume pago exacto y no se bloquea.
+    if (metodoPago === "efectivo" && montoRecibidoNum > 0 && montoRecibidoNum < restaCobrar - 0.5) {
+      setErrorVenta(
+        `El efectivo recibido (${formatGs(montoRecibidoNum)}) no cubre el total a cobrar (${formatGs(restaCobrar)}). Falta ${formatGs(restaCobrar - montoRecibidoNum)}.`
+      );
       return;
     }
     // Transferencia / tarjeta: exigir una entidad REAL seleccionada de la lista
@@ -1473,8 +1486,9 @@ export default function NuevaVentaPage() {
             </button>
             <button
               type="submit"
-              disabled={!ventaValida || guardando}
+              disabled={!ventaValida || guardando || efectivoInsuficiente}
               aria-busy={guardando}
+              title={efectivoInsuficiente ? "El efectivo recibido no cubre el total a cobrar." : undefined}
               className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-6 py-3 rounded-lg text-sm font-medium transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed active:scale-95 min-h-[48px] w-full sm:w-auto"
             >
               {guardando ? "Guardando…" : "Confirmar venta"}
