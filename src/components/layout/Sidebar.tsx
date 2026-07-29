@@ -33,6 +33,7 @@ import {
   Utensils,
   BarChart3,
   Wallet,
+  Banknote,
 } from "lucide-react";
 import type { Session } from "@supabase/supabase-js";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -129,8 +130,9 @@ const MENU_STRUCTURE: MenuItem[] = [
   ]},
   // Clientes: reactivado para que el modulo Consulta pueda asociar pedidos.
   { key: "clientes", slug: "clientes", label: "Clientes", href: "/clientes", icon: Users },
-  // Pagos ocultado a pedido de Ferretería República (no se usa el módulo).
-  // { key: "pagos", slug: "pagos", label: "Pagos", href: "/pagos", icon: Banknote },
+  // Cobros: cuentas por cobrar de ventas a crédito + registro de cobros (/pagos).
+  // Slug 'ventas' para heredar el acceso de Caja (cajero/admin cobran a crédito).
+  { key: "cobros", slug: "ventas", label: "Cobros", href: "/pagos", icon: Banknote },
   {
     key: "compras",
     slug: "compras",
@@ -215,7 +217,7 @@ const MENU_STRUCTURE: MenuItem[] = [
 const MENU_FAMILIES: { id: string; titulo: string; keys: string[] }[] = [
   { id: "inicio", titulo: "Inicio", keys: ["dashboard"] },
   { id: "comercial", titulo: "Comercial", keys: ["clientes", "crm", "gestion-clientes", "ventas", "pedidos", "presupuestos", "comisiones", "planes", "ofertas_home"] },
-  { id: "finanzas", titulo: "Finanzas", keys: ["gastos", "otros_ingresos", "entidades_bancarias", "notas_credito", "reportes"] },
+  { id: "finanzas", titulo: "Finanzas", keys: ["cobros", "gastos", "otros_ingresos", "entidades_bancarias", "notas_credito", "reportes"] },
   { id: "operaciones", titulo: "Operaciones", keys: ["inventario", "compras", "recetas", "proyectos"] },
   { id: "omnicanal", titulo: "Omnicanal", keys: ["conversaciones", "conversaciones-finalizadas", "historial-omnicanal", "monitoreo", "campanas"] },
   { id: "marketing", titulo: "Marketing y Automatización", keys: ["marketing", "marketing_ops", "sorteos"] },
