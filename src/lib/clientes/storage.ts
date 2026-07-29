@@ -195,6 +195,52 @@ export async function getClientes(opts?: { incluirEliminados?: boolean; incluirP
   }
 }
 
+export interface ClientesPagina {
+  clientes: Cliente[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Listado paginado + filtros/búsqueda server-side (para la pantalla de Clientes). */
+export async function getClientesPaginado(opts: {
+  page: number;
+  pageSize: number;
+  q?: string;
+  estado?: string;
+  origen?: string;
+  tipo?: string;
+  tipoServicio?: string;
+  incluirPlanActivo?: boolean;
+}): Promise<ClientesPagina> {
+  if (typeof window === "undefined") return { clientes: [], total: 0, page: 1, pageSize: opts.pageSize };
+  try {
+    const p = new URLSearchParams();
+    p.set("page", String(opts.page));
+    p.set("page_size", String(opts.pageSize));
+    if (opts.incluirPlanActivo) p.set("plan_activo", "1");
+    if (opts.q?.trim()) p.set("q", opts.q.trim());
+    if (opts.estado) p.set("estado", opts.estado);
+    if (opts.origen) p.set("origen", opts.origen);
+    if (opts.tipo) p.set("tipo", opts.tipo);
+    if (opts.tipoServicio) p.set("tipo_servicio", opts.tipoServicio);
+    const res = await fetchWithSupabaseSession(`/api/clientes?${p.toString()}`, { cache: "no-store" });
+    if (!res.ok) return { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
+    const json = (await res.json()) as { success: boolean; data?: { clientes?: unknown; total?: number } };
+    const d = json.data;
+    if (!json.success || !d || !Array.isArray(d.clientes)) return { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
+    const clientes = (d.clientes as (SupabaseRow & { plan_activo?: string })[]).map((row) => {
+      const c = rowToCliente(row);
+      if (row.plan_activo) c.plan_activo = row.plan_activo;
+      return c;
+    });
+    return { clientes, total: Number(d.total) || clientes.length, page: opts.page, pageSize: opts.pageSize };
+  } catch (e) {
+    console.error("[clientes] getClientesPaginado:", e);
+    return { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
+  }
+}
+
 /** Obtiene un cliente por ID vía API tenant. Por defecto excluye eliminados. */
 export async function getCliente(id: string, opts?: { incluirEliminados?: boolean }): Promise<Cliente | null> {
   if (typeof window === "undefined") {

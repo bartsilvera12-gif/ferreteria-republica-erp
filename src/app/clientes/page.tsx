@@ -6,8 +6,7 @@ import { useSearchParams } from "next/navigation";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
-import { getClientes, clienteNombre } from "@/lib/clientes/storage";
-import { productoMatchesQuery } from "@/lib/productos/token-search";
+import { getClientesPaginado, clienteNombre } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
@@ -281,6 +280,10 @@ export default function ClientesPage() {
   const [clientes,    setClientes]    = useState<Cliente[]>([]);
   const [cargando,    setCargando]    = useState(true);
   const [busqueda,    setBusqueda]    = useState("");
+  const [busquedaDebounced, setBusquedaDebounced] = useState("");
+  const [page,        setPage]        = useState(1);
+  const [pageSize,    setPageSize]    = useState(25);
+  const [total,       setTotal]       = useState(0);
   const [bajaOk,      setBajaOk]      = useState(false);
   const [filtroEstado, setFiltroEstado] = useState<"" | "activo" | "inactivo">("");
   const [filtroOrigen, setFiltroOrigen] = useState<"" | "CRM" | "VENTA" | "MANUAL">("");
@@ -302,12 +305,33 @@ export default function ClientesPage() {
     [clienteColumns, visibleColumnSet]
   );
 
+  // Debounce de la búsqueda (pega al server) para no disparar una consulta por tecla.
   useEffect(() => {
-    getClientes({ incluirPlanActivo: true }).then((data) => {
-      setClientes(data);
+    const t = setTimeout(() => setBusquedaDebounced(busqueda), 300);
+    return () => clearTimeout(t);
+  }, [busqueda]);
+
+  // Al cambiar búsqueda o filtros, volver a la página 1.
+  useEffect(() => {
+    setPage(1);
+  }, [busquedaDebounced, filtroEstado, filtroOrigen, filtroTipo, filtroTipoServicio, pageSize]);
+
+  // Carga paginada server-side (búsqueda + filtros + page/pageSize).
+  useEffect(() => {
+    let cancel = false;
+    setCargando(true);
+    getClientesPaginado({
+      page, pageSize, incluirPlanActivo: true,
+      q: busquedaDebounced,
+      estado: filtroEstado, origen: filtroOrigen, tipo: filtroTipo, tipoServicio: filtroTipoServicio,
+    }).then((res) => {
+      if (cancel) return;
+      setClientes(res.clientes);
+      setTotal(res.total);
       setCargando(false);
     });
-  }, []);
+    return () => { cancel = true; };
+  }, [page, pageSize, busquedaDebounced, filtroEstado, filtroOrigen, filtroTipo, filtroTipoServicio]);
 
   useEffect(() => {
     void fetchTiposFormCliente().then(setFilasTipoCatalogo);
@@ -353,19 +377,14 @@ export default function ClientesPage() {
     }
   }, [searchParams]);
 
-  const filtrados = clientes.filter((c) => {
-    if (busqueda.trim() && !productoMatchesQuery(
-      busqueda,
-      clienteNombre(c), c.codigo_cliente, c.email, c.telefono, c.ruc, c.ciudad
-    )) return false;
-    if (filtroEstado       && c.estado              !== filtroEstado) return false;
-    if (filtroOrigen       && c.origen              !== filtroOrigen) return false;
-    if (filtroTipo         && c.tipo_cliente        !== filtroTipo) return false;
-    if (filtroTipoServicio && c.tipo_servicio_cliente !== filtroTipoServicio) return false;
-    return true;
-  });
+  // El filtrado y la búsqueda se hacen en el servidor (paginado): la página
+  // muestra tal cual lo que llega.
+  const filtrados = clientes;
 
   const hayFiltros = busqueda || filtroEstado || filtroOrigen || filtroTipo || filtroTipoServicio;
+  const totalPaginas = Math.max(1, Math.ceil(total / pageSize));
+  const desde = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const hasta = Math.min(page * pageSize, total);
 
   function toggleColumn(key: ClienteColumnKey) {
     const col = clienteColumns.find((c) => c.key === key);
@@ -492,15 +511,25 @@ export default function ClientesPage() {
       {/* Contador */}
       <div className="flex items-center justify-between gap-3 flex-wrap">
         <p className="text-sm text-gray-500">
-          <span className="font-semibold text-gray-800">{filtrados.length}</span> de{" "}
-          <span className="font-semibold text-gray-800">{clientes.length}</span> clientes
+          {total > 0 ? (
+            <>Mostrando <span className="font-semibold text-gray-800">{desde}–{hasta}</span> de{" "}
+            <span className="font-semibold text-gray-800">{total.toLocaleString("es-PY")}</span> clientes</>
+          ) : (
+            <><span className="font-semibold text-gray-800">0</span> clientes</>
+          )}
         </p>
         <div className="flex items-center gap-3">
-          <div className="hidden sm:flex gap-3 text-xs text-gray-400">
-            <span>{clientes.filter((c) => c.estado === "activo").length} activos</span>
-            <span>·</span>
-            <span>{clientes.filter((c) => c.tipo_cliente === "empresa").length} empresas</span>
-          </div>
+          {/* Selector de cuántos mostrar por página */}
+          <label className="hidden sm:flex items-center gap-1.5 text-xs text-gray-500">
+            Mostrar
+            <select
+              value={pageSize}
+              onChange={(e) => setPageSize(Number(e.target.value))}
+              className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-xs text-slate-700 outline-none focus:border-[#4FAEB2]"
+            >
+              {[25, 50, 100, 200, 500].map((n) => <option key={n} value={n}>{n}</option>)}
+            </select>
+          </label>
           <div className="relative">
             <button
               type="button"
@@ -565,9 +594,9 @@ export default function ClientesPage() {
           <div className="py-16 text-center text-gray-400">
             <p className="text-4xl mb-3">👥</p>
             <p className="font-medium text-gray-600">
-              {clientes.length === 0 ? "No hay clientes registrados" : "Sin resultados para los filtros aplicados"}
+              {total === 0 && !hayFiltros ? "No hay clientes registrados" : "Sin resultados para los filtros aplicados"}
             </p>
-            {clientes.length === 0 && (
+            {total === 0 && !hayFiltros && (
               <Link href="/clientes/nuevo" className="mt-4 inline-block text-sm text-gray-500 underline hover:text-gray-800">
                 Crear primer cliente
               </Link>
@@ -602,6 +631,42 @@ export default function ClientesPage() {
               </tbody>
             </table>
           </EdgeScrollArea>
+        )}
+
+        {/* Paginación */}
+        {total > pageSize && (
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-4 py-3">
+            <p className="text-xs text-gray-500">
+              Página <span className="font-semibold text-gray-800">{page}</span> de{" "}
+              <span className="font-semibold text-gray-800">{totalPaginas}</span>
+            </p>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => setPage(1)}
+                disabled={page <= 1 || cargando}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >« Primera</button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={page <= 1 || cargando}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >‹ Anterior</button>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPaginas, p + 1))}
+                disabled={page >= totalPaginas || cargando}
+                className="rounded-lg border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >Siguiente ›</button>
+              <button
+                type="button"
+                onClick={() => setPage(totalPaginas)}
+                disabled={page >= totalPaginas || cargando}
+                className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >Última »</button>
+            </div>
+          </div>
         )}
       </div>
 

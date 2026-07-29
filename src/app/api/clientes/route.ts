@@ -7,6 +7,7 @@ import { createServiceRoleClient } from "@/lib/supabase/service-admin";
 import { getClientesSupabaseFromAuthWithRol } from "@/lib/clientes/clientes-service-client";
 import { fetchPerfilTributarioActivosMap } from "@/lib/clientes/tributario-server";
 import { ensureSemillasCatalogoTipos, tipoServicioSlugValido } from "@/lib/clientes/tipo-servicio-catalogo";
+import { applyTokenSearch } from "@/lib/productos/token-search";
 
 /** Une `plan_activo` (nombre) a cada fila de cliente según suscripción activa más reciente. */
 function attachPlanesActivos(
@@ -120,16 +121,41 @@ export async function GET(request: NextRequest) {
     const incluirEliminados = sp.get("incluir_eliminados") === "1";
     const planActivo = sp.get("plan_activo") === "1";
 
+    // Paginación server-side (opt-in con `page`). Sin `page` → comportamiento
+    // legacy (array, tope PostgREST 1000) para no romper otros consumidores.
+    const pageRaw = sp.get("page");
+    const paginado = pageRaw != null;
+    const page = Math.max(1, parseInt(pageRaw ?? "1", 10) || 1);
+    const pageSize = Math.min(500, Math.max(1, parseInt(sp.get("page_size") ?? "25", 10) || 25));
+    const buscar = (sp.get("q") ?? "").trim();
+    const fEstado = (sp.get("estado") ?? "").trim();
+    const fOrigen = (sp.get("origen") ?? "").trim();
+    const fTipo = (sp.get("tipo") ?? "").trim();
+    const fTipoServicio = (sp.get("tipo_servicio") ?? "").trim();
+
     let q = supabase
       .from("clientes")
-      .select("*")
+      .select("*", paginado ? { count: "exact" } : undefined)
       .eq("empresa_id", auth.empresa_id)
       .order("created_at", { ascending: false });
     if (!incluirEliminados) {
       q = q.is("deleted_at", null);
     }
+    if (paginado) {
+      if (fEstado) q = q.eq("estado", fEstado);
+      if (fOrigen) q = q.eq("origen", fOrigen);
+      if (fTipo) q = q.eq("tipo_cliente", fTipo);
+      if (fTipoServicio) q = q.eq("tipo_servicio_cliente", fTipoServicio);
+      if (buscar) {
+        q = applyTokenSearch(q, buscar, [
+          "nombre", "empresa", "nombre_contacto", "ruc", "documento", "email", "ciudad", "telefono",
+        ]);
+      }
+      const from = (page - 1) * pageSize;
+      q = q.range(from, from + pageSize - 1);
+    }
 
-    const { data, error } = await q;
+    const { data, error, count } = await q;
 
     if (error) {
       return NextResponse.json(errorResponse(error.message), { status: 400 });
@@ -173,6 +199,9 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    if (paginado) {
+      return NextResponse.json(successResponse({ clientes: rows, total: count ?? rows.length, page, page_size: pageSize }));
+    }
     return NextResponse.json(successResponse(rows));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "Error";
