@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { RotateCcw, Printer, FileText, Truck } from "lucide-react";
+import { RotateCcw, Printer, FileText, Truck, ChevronDown, Wallet, ClipboardList } from "lucide-react";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
@@ -105,6 +105,10 @@ export default function VentasPage() {
   const [devolverVentaId, setDevolverVentaId] = useState<string | null>(null);
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
   const [detalle,    setDetalle]    = useState<Venta | null>(null);
+  // Para no distraer al cajero: caja e historial de ventas arrancan colapsados;
+  // solo "Pedidos por cobrar" queda siempre visible.
+  const [showCajas,   setShowCajas]   = useState(false);
+  const [showOrdenes, setShowOrdenes] = useState(false);
 
   // Feature flag server-side: sin él, la UI de devoluciones no se muestra.
   useEffect(() => {
@@ -180,7 +184,23 @@ export default function VentasPage() {
         </div>
       </div>
 
-      <CajaControlPanel />
+      {/* Información de caja — colapsada por defecto para no distraer al cajero. */}
+      <div>
+        <button
+          type="button"
+          onClick={() => setShowCajas((v) => !v)}
+          className="flex w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3 text-left shadow-sm ring-1 ring-[#4FAEB2]/15 transition-colors hover:bg-slate-50"
+          aria-expanded={showCajas}
+        >
+          <span className="flex items-center gap-2 text-sm font-semibold text-slate-800">
+            <Wallet className="h-4 w-4 text-[#4FAEB2]" />
+            Información de caja
+            <span className="text-xs font-normal text-slate-400">{showCajas ? "(tocá para ocultar)" : "(tocá para ver)"}</span>
+          </span>
+          <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showCajas ? "rotate-180" : ""}`} />
+        </button>
+        {showCajas && <div className="mt-3"><CajaControlPanel /></div>}
+      </div>
 
       <PedidosConsultaPendientes />
       <PedidosPendientesCaja />
@@ -189,8 +209,18 @@ export default function VentasPage() {
       {/* ── Tabla de ventas ───────────────────────────────────────────────────── */}
       <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm ring-1 ring-[#4FAEB2]/15 sm:p-5 lg:p-6">
 
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-xl font-semibold">Órdenes de venta</h2>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={() => setShowOrdenes((v) => !v)}
+            className="flex items-center gap-2 text-xl font-semibold text-slate-900"
+            aria-expanded={showOrdenes}
+          >
+            <ClipboardList className="h-5 w-5 text-[#4FAEB2]" />
+            Órdenes de venta
+            <ChevronDown className={`h-4 w-4 text-slate-400 transition-transform ${showOrdenes ? "rotate-180" : ""}`} />
+            <span className="text-xs font-normal text-slate-400">{showOrdenes ? "(ocultar)" : "(ver historial)"}</span>
+          </button>
           <Link
             href="/ventas/nueva"
             className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors shadow-sm"
@@ -199,6 +229,7 @@ export default function VentasPage() {
           </Link>
         </div>
 
+        {showOrdenes && (<>
         {/* Filtros */}
         <div className="flex flex-wrap items-center gap-3 mb-5 pb-5 border-b border-gray-100">
           <input
@@ -379,6 +410,7 @@ export default function VentasPage() {
             </tbody>
           </table>
         </EdgeScrollArea>
+        </>)}
 
       </div>
 
