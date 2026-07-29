@@ -33,6 +33,8 @@ export interface Producto {
   controla_stock?: boolean;
   /** Si true, aparece en la sección "Productos destacados" del sitio público. */
   destacado?: boolean;
+  /** Si false, el producto NO aparece en el catálogo del sitio web público. */
+  visible_web?: boolean;
   /** Si true, aparece en el banner "Ofertas de la semana" del home público (máx 3). */
   oferta_semana_destacada?: boolean;
   /** Descuento promocional: 'percentage' | 'fixed' | null. */

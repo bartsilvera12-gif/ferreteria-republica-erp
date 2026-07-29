@@ -90,6 +90,8 @@ export default function EditarProductoPage() {
   const [controlaStock, setControlaStock] = useState(true);
   // Producto destacado: aparece en seccion "Productos destacados" del sitio publico.
   const [destacado, setDestacado] = useState(false);
+  // Visible en la web: si está apagado, NO aparece en el catálogo público.
+  const [visibleWeb, setVisibleWeb] = useState(true);
   // Descuento promocional (oferta).
   const [discountType, setDiscountType] = useState<"" | "percentage" | "fixed">("");
   const [discountValue, setDiscountValue] = useState("");
@@ -235,6 +237,7 @@ export default function EditarProductoPage() {
       setEsInsumo(esIns);
       setControlaStock(ctrlStock);
       setDestacado(p.destacado === true);
+      setVisibleWeb(p.visible_web !== false);
       // Discount: cargar campos. datetime-local quiere formato "YYYY-MM-DDTHH:MM".
       const dt = p.discount_type;
       setDiscountType(dt === "percentage" || dt === "fixed" ? dt : "");
@@ -389,6 +392,7 @@ export default function EditarProductoPage() {
         es_insumo: esInsumo,
         controla_stock: controlaStock,
         destacado: destacado,
+        visible_web: visibleWeb,
         discount_type: discountType || null,
         discount_value: discountType ? Math.max(0, parseFloat(discountValue) || 0) : 0,
         discount_starts_at: discountType && discountStartsAt ? new Date(discountStartsAt).toISOString() : null,
@@ -778,19 +782,38 @@ export default function EditarProductoPage() {
               </label>
             </div>
 
-            {/* Producto destacado — aparece en home del sitio publico */}
+            {/* Visible en la web — controla si aparece en el catálogo público */}
             <div className="mt-5 pt-4 border-t border-gray-100">
               <label className="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
                 <input
                   type="checkbox"
+                  checked={visibleWeb}
+                  onChange={(e) => setVisibleWeb(e.target.checked)}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
+                />
+                <span>
+                  <span className="font-medium">Visible en la web</span>
+                  <span className="block text-xs text-gray-500 mt-0.5">
+                    Si se desactiva, el producto NO aparece en el catálogo del sitio público (no ocupa espacio en la web). No afecta ventas ni stock internos.
+                  </span>
+                </span>
+              </label>
+            </div>
+
+            {/* Producto destacado — aparece en home del sitio publico */}
+            <div className="mt-4">
+              <label className="inline-flex items-start gap-2 text-sm text-gray-700 cursor-pointer">
+                <input
+                  type="checkbox"
                   checked={destacado}
+                  disabled={!visibleWeb}
                   onChange={(e) => setDestacado(e.target.checked)}
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500 disabled:opacity-40"
                 />
                 <span>
                   <span className="font-medium">Producto destacado en el sitio</span>
                   <span className="block text-xs text-gray-500 mt-0.5">
-                    Si está activo, aparece en la sección &quot;Productos destacados&quot; de la home pública (máximo 8).
+                    Si está activo, aparece en la sección &quot;Productos destacados&quot; de la home pública (máximo 8). Requiere estar visible en la web.
                   </span>
                 </span>
               </label>

@@ -70,6 +70,7 @@ export async function GET(request: NextRequest) {
     )
     .eq("empresa_id", SITIO_EMPRESA_ID)
     .eq("es_vendible", true)
+    .eq("visible_web", true)
     .order("nombre", { ascending: true })
     .range(offset, offset + limit - 1);
 

@@ -12,7 +12,7 @@ const PRODUCTO_COLS =
   "unidad_medida, metodo_valuacion, activo, created_at, updated_at, " +
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
-  "es_vendible, es_insumo, controla_stock, destacado, oferta_semana_destacada, discount_type, discount_value, discount_starts_at, discount_ends_at, valorizado, unidad_compra, unidad_receta, " +
+  "es_vendible, es_insumo, controla_stock, destacado, visible_web, oferta_semana_destacada, discount_type, discount_value, discount_starts_at, discount_ends_at, valorizado, unidad_compra, unidad_receta, " +
   "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta";
 
 function toNumber(v: unknown): unknown {
@@ -150,6 +150,7 @@ export async function PATCH(
     if (typeof body.es_insumo === "boolean") patch.es_insumo = body.es_insumo;
     if (typeof body.controla_stock === "boolean") patch.controla_stock = body.controla_stock;
     if (typeof body.destacado === "boolean") patch.destacado = body.destacado;
+    if (typeof body.visible_web === "boolean") patch.visible_web = body.visible_web;
     if (typeof body.oferta_semana_destacada === "boolean") patch.oferta_semana_destacada = body.oferta_semana_destacada;
     if (body.discount_type !== undefined) {
       patch.discount_type =

@@ -37,6 +37,7 @@ interface ProductoRow {
   es_insumo?: boolean | null;
   controla_stock?: boolean | null;
   destacado?: boolean | null;
+  visible_web?: boolean | null;
   oferta_semana_destacada?: boolean | null;
   discount_type?: string | null;
   discount_value?: number | string | null;
@@ -96,6 +97,7 @@ function rowToProducto(row: ProductoRow): Producto {
     es_insumo: row.es_insumo ?? false,
     controla_stock: row.controla_stock ?? true,
     destacado: row.destacado ?? false,
+    visible_web: row.visible_web ?? true,
     oferta_semana_destacada: row.oferta_semana_destacada ?? false,
     discount_type:
       row.discount_type === "percentage" || row.discount_type === "fixed"
@@ -274,6 +276,7 @@ export async function saveProducto(
     es_insumo: typeof datos.es_insumo === "boolean" ? datos.es_insumo : false,
     controla_stock: typeof datos.controla_stock === "boolean" ? datos.controla_stock : true,
     destacado: typeof datos.destacado === "boolean" ? datos.destacado : false,
+    visible_web: typeof datos.visible_web === "boolean" ? datos.visible_web : true,
     discount_type:
       datos.discount_type === "percentage" || datos.discount_type === "fixed"
         ? datos.discount_type
@@ -359,6 +362,7 @@ export async function updateProducto(
   if (typeof datos.es_insumo === "boolean") body.es_insumo = datos.es_insumo;
   if (typeof datos.controla_stock === "boolean") body.controla_stock = datos.controla_stock;
   if (typeof datos.destacado === "boolean") body.destacado = datos.destacado;
+  if (typeof datos.visible_web === "boolean") body.visible_web = datos.visible_web;
   if (typeof datos.oferta_semana_destacada === "boolean") body.oferta_semana_destacada = datos.oferta_semana_destacada;
   if (datos.discount_type !== undefined) {
     body.discount_type =

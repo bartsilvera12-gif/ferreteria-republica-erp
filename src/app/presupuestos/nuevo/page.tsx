@@ -460,7 +460,7 @@ export default function NuevoPresupuestoPage() {
                         <input value={it.producto_nombre} onChange={(e) => updItem(i, { producto_nombre: e.target.value })} className={inputClass} placeholder="Descripción" />
                       </td>
                       <td className="py-2 px-2">
-                        <input type="number" min="0" step="0.01" value={it.cantidad} onChange={(e) => updItem(i, { cantidad: Number(e.target.value) })} className={inputClass} />
+                        <input type="number" min="1" step="1" inputMode="numeric" value={it.cantidad} onChange={(e) => updItem(i, { cantidad: Math.max(0, Math.floor(Number(e.target.value)) || 0) })} className={inputClass} />
                       </td>
                       <td className="py-2 px-2">
                         <input type="number" min="0" step="1" value={it.precio_unitario} onChange={(e) => updItem(i, { precio_unitario: Number(e.target.value) })} className={inputClass} />

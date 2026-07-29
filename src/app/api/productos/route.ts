@@ -15,7 +15,7 @@ const PRODUCTO_COLS =
   "unidad_medida, metodo_valuacion, activo, created_at, updated_at, " +
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
-  "es_vendible, es_insumo, controla_stock, destacado, oferta_semana_destacada, valorizado, unidad_compra, unidad_receta, " +
+  "es_vendible, es_insumo, controla_stock, destacado, visible_web, oferta_semana_destacada, valorizado, unidad_compra, unidad_receta, " +
   "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
   "discount_type, discount_value, discount_starts_at, discount_ends_at";
 
@@ -174,6 +174,7 @@ export async function POST(request: NextRequest) {
     const esInsumo = typeof body.es_insumo === "boolean" ? body.es_insumo : undefined;
     const controlaStock = typeof body.controla_stock === "boolean" ? body.controla_stock : undefined;
     const destacado = typeof body.destacado === "boolean" ? body.destacado : undefined;
+    const visibleWeb = typeof body.visible_web === "boolean" ? body.visible_web : undefined;
     const discountType =
       body.discount_type === "percentage" || body.discount_type === "fixed"
         ? body.discount_type
@@ -251,6 +252,7 @@ export async function POST(request: NextRequest) {
     if (esInsumo !== undefined) insertPayload.es_insumo = esInsumo;
     if (controlaStock !== undefined) insertPayload.controla_stock = controlaStock;
     if (destacado !== undefined) insertPayload.destacado = destacado;
+    if (visibleWeb !== undefined) insertPayload.visible_web = visibleWeb;
     if (discountType !== undefined) insertPayload.discount_type = discountType;
     if (discountValue !== undefined) insertPayload.discount_value = discountValue;
     if (discountStartsAt !== undefined) insertPayload.discount_starts_at = discountStartsAt;
