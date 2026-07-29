@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -31,6 +31,15 @@ export default function ReportesPage() {
             icon={ShoppingCart}
             description="Ventas del mes, desglose por tipo de precio (minorista/mayorista/al costo) y por producto."
             href="/reportes/ventas"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Facturas emitidas"
+            subtitle="Comprobantes fiscales del autoimpresor"
+            icon={FileText}
+            description="Todas las facturas emitidas por rango de fechas y cliente, con su desglose de IVA, totales y exportación a PDF."
+            href="/reportes/facturas"
           />
         </li>
         <li>
