@@ -101,7 +101,8 @@ function wrap(t: string, f: PDFFont, size: number, max: number): string[] {
 
 function logoBytes(): Uint8Array | null {
   try {
-    const p = path.join(process.cwd(), "public", "brand", "ferreteriarepublica-doc-logo.png");
+    // Variante de marca con fondo azul (FERRETERÍA naranja, REPÚBLICA blanco).
+    const p = path.join(process.cwd(), "public", "brand", "ferreteriarepublica-presupuesto-logo.png");
     if (fs.existsSync(p)) return new Uint8Array(fs.readFileSync(p));
   } catch { /* sin logo */ }
   return null;
