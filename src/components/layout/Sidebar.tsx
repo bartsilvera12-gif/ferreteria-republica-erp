@@ -25,9 +25,6 @@ import {
   Ticket,
   SendHorizontal,
   MessageCircle,
-  History,
-  ListChecks,
-  Activity,
   ScrollText,
   Percent,
   ChefHat,
@@ -94,18 +91,20 @@ const MENU_STRUCTURE: MenuItem[] = [
     key: "conversaciones", slug: "conversaciones", label: "Conversaciones",
     href: "/dashboard/conversaciones", icon: MessageCircle,
   },
-  {
-    key: "historial-omnicanal", slug: "historial-omnicanal", label: "Historial omnicanal",
-    href: "/dashboard/historial-omnicanal", icon: History,
-  },
-  {
-    key: "conversaciones-finalizadas", slug: "conversaciones-finalizadas", label: "Finalizadas",
-    href: "/dashboard/conversaciones-finalizadas", icon: ListChecks,
-  },
-  {
-    key: "monitoreo", slug: "monitoreo", label: "Monitoreo",
-    href: "/dashboard/monitoreo", icon: Activity,
-  },
+  // Submodulos omnicanal ocultos del menu a pedido: solo se expone Conversaciones.
+  // Las rutas siguen accesibles por URL y el acceso lo sigue dando empresa_modulos.
+  // {
+  //   key: "historial-omnicanal", slug: "historial-omnicanal", label: "Historial omnicanal",
+  //   href: "/dashboard/historial-omnicanal", icon: History,
+  // },
+  // {
+  //   key: "conversaciones-finalizadas", slug: "conversaciones-finalizadas", label: "Finalizadas",
+  //   href: "/dashboard/conversaciones-finalizadas", icon: ListChecks,
+  // },
+  // {
+  //   key: "monitoreo", slug: "monitoreo", label: "Monitoreo",
+  //   href: "/dashboard/monitoreo", icon: Activity,
+  // },
   { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart },
   // Pedidos: vendedor arma pedidos en el salon; este listado es gestion
   // (ver/editar/cancelar). El cobro se hace desde la Caja (/ventas), que
