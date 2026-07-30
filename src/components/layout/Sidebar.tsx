@@ -26,6 +26,7 @@ import {
   SendHorizontal,
   MessageCircle,
   History,
+  ListChecks,
   Activity,
   ScrollText,
   Percent,
@@ -87,24 +88,24 @@ function adminEmpresasMatchesQuery(queryRaw: string): boolean {
 
 const MENU_STRUCTURE: MenuItem[] = [
   { key: "dashboard", slug: "dashboard", label: "Dashboard", href: "/", icon: LayoutDashboard },
-  // Modulo omnicanal/WhatsApp ocultado por ahora (codigo conservado por si se reactiva):
-  // - Conversaciones, Historial omnicanal, Finalizadas, Monitoreo
-  // {
-  //   key: "conversaciones", slug: "conversaciones", label: "Conversaciones",
-  //   href: "/dashboard/conversaciones", icon: MessageCircle,
-  // },
-  // {
-  //   key: "historial-omnicanal", slug: "historial-omnicanal", label: "Historial omnicanal",
-  //   href: "/dashboard/historial-omnicanal", icon: History,
-  // },
-  // {
-  //   key: "conversaciones-finalizadas", slug: "conversaciones-finalizadas", label: "Finalizadas",
-  //   href: "/dashboard/conversaciones-finalizadas", icon: ListChecks,
-  // },
-  // {
-  //   key: "monitoreo", slug: "monitoreo", label: "Monitoreo",
-  //   href: "/dashboard/monitoreo", icon: Activity,
-  // },
+  // Modulo omnicanal/WhatsApp: reactivado al conectar WhatsApp via YCloud.
+  // La visibilidad real la sigue decidiendo empresa_modulos (canAccessSidebarSlug).
+  {
+    key: "conversaciones", slug: "conversaciones", label: "Conversaciones",
+    href: "/dashboard/conversaciones", icon: MessageCircle,
+  },
+  {
+    key: "historial-omnicanal", slug: "historial-omnicanal", label: "Historial omnicanal",
+    href: "/dashboard/historial-omnicanal", icon: History,
+  },
+  {
+    key: "conversaciones-finalizadas", slug: "conversaciones-finalizadas", label: "Finalizadas",
+    href: "/dashboard/conversaciones-finalizadas", icon: ListChecks,
+  },
+  {
+    key: "monitoreo", slug: "monitoreo", label: "Monitoreo",
+    href: "/dashboard/monitoreo", icon: Activity,
+  },
   { key: "ventas", slug: "ventas", label: "Caja", href: "/ventas", icon: ShoppingCart },
   // Pedidos: vendedor arma pedidos en el salon; este listado es gestion
   // (ver/editar/cancelar). El cobro se hace desde la Caja (/ventas), que
