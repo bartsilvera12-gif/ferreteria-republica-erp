@@ -35,6 +35,15 @@ export default function ReportesPage() {
         </li>
         <li>
           <ReportCard
+            title="Reporte de ventas"
+            subtitle="Ventas con filtros y export PDF"
+            icon={ShoppingCart}
+            description="Ventas por rango de fechas con filtros por cliente, cajero, tipo (contado/crédito), facturación y cobro. Detalle o resumido, exportable a PDF."
+            href="/reportes/ventas-detalle"
+          />
+        </li>
+        <li>
+          <ReportCard
             title="Facturas emitidas"
             subtitle="Comprobantes fiscales del autoimpresor"
             icon={FileText}
