@@ -23,6 +23,37 @@ function num(v: unknown): number {
   return Number.isFinite(n) ? n : 0;
 }
 
+/**
+ * Detalle de cobro por venta (mapa venta_id → líneas). Se consulta en LOTES:
+ * `.in("venta_id", [...])` con cientos de ids arma una URL enorme que el
+ * gateway de Supabase/PostgREST rechaza (URI too long → 500). Con lotes de 100
+ * la URL queda chica y además tolera 0 ventas (sin consulta).
+ */
+async function fetchDetallePorVenta(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  ventaIds: string[]
+): Promise<Map<string, Array<{ metodo_pago: string; monto: number }>>> {
+  const map = new Map<string, Array<{ metodo_pago: string; monto: number }>>();
+  const CHUNK = 100;
+  for (let i = 0; i < ventaIds.length; i += CHUNK) {
+    const chunk = ventaIds.slice(i, i + CHUNK);
+    if (chunk.length === 0) continue;
+    const q = await sb
+      .from("ventas_pagos_detalle")
+      .select("venta_id, metodo_pago, monto")
+      .eq("empresa_id", empresaId)
+      .in("venta_id", chunk);
+    if (q.error) throw new Error(q.error.message);
+    for (const d of (q.data ?? []) as Array<{ venta_id: string; metodo_pago: string; monto: number | string }>) {
+      const arr = map.get(d.venta_id) ?? [];
+      arr.push({ metodo_pago: d.metodo_pago, monto: num(d.monto) });
+      map.set(d.venta_id, arr);
+    }
+  }
+  return map;
+}
+
 const CAJA_COLS =
   "id, numero_caja, estado, abierta_por, cerrada_por, fecha_apertura, fecha_cierre, " +
   "monto_apertura, monto_cierre_contado, monto_esperado_efectivo, diferencia, " +
@@ -204,23 +235,8 @@ export async function getReporteCajas(
   // una venta puede pagarse combinando saldo a favor + efectivo, y en ese caso
   // `ventas.metodo_pago` sola contaría TODO el total como efectivo e inflaría
   // el arqueo. El saldo a favor no es plata que entra al cajón.
-  // Guard: `.in("venta_id", [])` (turnos sin ventas) rompe PostgREST. Solo se
-  // consulta el detalle si hay ventas.
-  const ventaIds = ventas.map((v) => v.id);
-  const detallePorVenta = new Map<string, Array<{ metodo_pago: string; monto: number }>>();
-  if (ventaIds.length > 0) {
-    const pdQ = await sb
-      .from("ventas_pagos_detalle")
-      .select("venta_id, metodo_pago, monto")
-      .eq("empresa_id", empresaId)
-      .in("venta_id", ventaIds);
-    if (pdQ.error) throw new Error(pdQ.error.message);
-    for (const d of (pdQ.data ?? []) as Array<{ venta_id: string; metodo_pago: string; monto: number | string }>) {
-      const arr = detallePorVenta.get(d.venta_id) ?? [];
-      arr.push({ metodo_pago: d.metodo_pago, monto: num(d.monto) });
-      detallePorVenta.set(d.venta_id, arr);
-    }
-  }
+  // Detalle de cobro por venta, en lotes (evita URL demasiado larga y tolera 0).
+  const detallePorVenta = await fetchDetallePorVenta(sb, empresaId, ventas.map((v) => v.id));
 
   // 3) Movimientos activos de esas cajas (en lote).
   const mQ = await sb
@@ -455,22 +471,8 @@ export async function getDetalleCaja(
   // Detalle de cobro por venta: soporta pagos combinados (p. ej. saldo a favor
   // + efectivo). Sin esto, una venta pagada en parte con crédito inflaría el
   // efectivo esperado del arqueo.
-  // Guard: `.in("venta_id", [])` (turno sin ventas) rompe PostgREST.
-  const detPorVenta = new Map<string, Array<{ metodo_pago: string; monto: number }>>();
-  const ventaIdsDet = ventasRaw.map((v) => v.id);
-  if (ventaIdsDet.length > 0) {
-    const pdQ2 = await sb
-      .from("ventas_pagos_detalle")
-      .select("venta_id, metodo_pago, monto")
-      .eq("empresa_id", empresaId)
-      .in("venta_id", ventaIdsDet);
-    if (pdQ2.error) throw new Error(pdQ2.error.message);
-    for (const d of (pdQ2.data ?? []) as Array<{ venta_id: string; metodo_pago: string; monto: number | string }>) {
-      const arr = detPorVenta.get(d.venta_id) ?? [];
-      arr.push({ metodo_pago: d.metodo_pago, monto: num(d.monto) });
-      detPorVenta.set(d.venta_id, arr);
-    }
-  }
+  // Detalle de cobro por venta, en lotes (evita URL demasiado larga y tolera 0).
+  const detPorVenta = await fetchDetallePorVenta(sb, empresaId, ventasRaw.map((v) => v.id));
   for (const v of ventas) {
     if (v.estado === "anulada") continue;
     cantidadVentas++;
