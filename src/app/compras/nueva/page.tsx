@@ -577,6 +577,8 @@ export default function NuevaCompraPage() {
                       <label className={labelSmClass}>Unidad de medida</label>
                       <select name="unidad_medida" value={formProducto.unidad_medida} onChange={handleProductoInputChange} className={inputSmClass}>
                         <option value="Unidad">Unidad</option>
+                        <option value="Metro">Metro</option>
+                        <option value="M2">M2</option>
                         <option value="Kg">Kg</option>
                         <option value="G">G</option>
                         <option value="Litro">Litro</option>
