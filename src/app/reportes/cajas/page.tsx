@@ -7,6 +7,7 @@ import PageHeader from "@/components/ui/PageHeader";
 import StatCard from "@/components/ui/StatCard";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import RangoFechasSelector from "@/components/reportes/RangoFechasSelector";
+import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { getCajasReporte } from "@/lib/reportes/storage";
 import { mesActualAsuncion } from "@/lib/fechas/asuncion-bounds";
 import type { CajasReporte } from "@/lib/caja/types";
@@ -105,7 +106,7 @@ export default function CajasReportePage() {
             {data.cajas.length === 0 ? (
               <p className="py-6 text-center text-sm text-slate-400">No hay turnos de caja en el período seleccionado.</p>
             ) : (
-              <div className="overflow-x-auto rounded-xl border border-slate-200">
+              <EdgeScrollArea drag className="rounded-xl border border-slate-200">
                 <table className="w-full min-w-[1100px] text-sm">
                   <thead className="border-b-2 border-[#4FAEB2]/40 bg-[#E5F4F4]">
                     <tr>
@@ -160,7 +161,7 @@ export default function CajasReportePage() {
                     })}
                   </tbody>
                 </table>
-              </div>
+              </EdgeScrollArea>
             )}
           </div>
         </>

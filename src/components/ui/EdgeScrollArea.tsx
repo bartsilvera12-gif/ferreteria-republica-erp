@@ -16,6 +16,8 @@ export type EdgeScrollAreaProps = HTMLAttributes<HTMLDivElement> & {
   maxSpeed?: number;
   /** Si true, dibuja gradientes laterales como hint visual. */
   showHints?: boolean;
+  /** Si true, permite arrastrar con el cursor (click + mover) para hacer scroll horizontal. */
+  drag?: boolean;
 };
 
 /**
@@ -34,11 +36,14 @@ export default function EdgeScrollArea({
   edgeZone = 70,
   maxSpeed = 22,
   showHints = false,
+  drag = false,
   ...rest
 }: EdgeScrollAreaProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const speedRef = useRef(0);
   const rafRef = useRef<number | null>(null);
+  // Arrastre con el cursor (click + mover) para scroll horizontal.
+  const dragRef = useRef<{ down: boolean; startX: number; startScroll: number; moved: boolean }>({ down: false, startX: 0, startScroll: 0, moved: false });
 
   const stopLoop = useCallback(() => {
     if (rafRef.current !== null) {
@@ -91,8 +96,42 @@ export default function EdgeScrollArea({
     [edgeZone, maxSpeed]
   );
 
+  // ── Arrastre con el cursor ────────────────────────────────────────────────
+  const onDragDown = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!drag) return;
+    const el = containerRef.current;
+    if (!el) return;
+    dragRef.current = { down: true, startX: e.clientX, startScroll: el.scrollLeft, moved: false };
+  }, [drag]);
+
+  const onDragMove = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    handleMouseMove(e);
+    if (!drag) return;
+    const st = dragRef.current;
+    const el = containerRef.current;
+    if (!st.down || !el) return;
+    const dx = e.clientX - st.startX;
+    if (Math.abs(dx) > 4) st.moved = true;
+    if (st.moved) {
+      el.scrollLeft = st.startScroll - dx;
+      e.preventDefault();
+    }
+  }, [drag, handleMouseMove]);
+
+  const endDrag = useCallback(() => { dragRef.current.down = false; }, []);
+
+  // Si hubo arrastre, se cancela el click siguiente (para no abrir la fila).
+  const onClickCapture = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (drag && dragRef.current.moved) {
+      e.preventDefault();
+      e.stopPropagation();
+      dragRef.current.moved = false;
+    }
+  }, [drag]);
+
   const handleMouseLeave = useCallback(() => {
     stopLoop();
+    dragRef.current.down = false;
   }, [stopLoop]);
 
   useEffect(() => () => stopLoop(), [stopLoop]);
@@ -101,9 +140,12 @@ export default function EdgeScrollArea({
     <div className={`relative ${className}`} {...rest}>
       <div
         ref={containerRef}
-        className="overflow-x-auto overscroll-x-contain pb-2"
-        onMouseMove={handleMouseMove}
+        className={`overflow-x-auto overscroll-x-contain pb-2 ${drag ? "cursor-grab active:cursor-grabbing select-none" : ""}`}
+        onMouseMove={onDragMove}
         onMouseLeave={handleMouseLeave}
+        onMouseDown={onDragDown}
+        onMouseUp={endDrag}
+        onClickCapture={onClickCapture}
       >
         {children}
       </div>

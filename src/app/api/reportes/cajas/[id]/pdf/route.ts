@@ -103,7 +103,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   @media print { body { background:#fff; padding:0; } .doc { box-shadow:none; max-width:none; } .actions { display:none; } @page { size:A4; margin:12mm; } }
 </style></head>
 <body><div class="doc">
-  ${membreteA4(url.origin)}
+  ${membreteA4()}
   <div class="titulo">ARQUEO DE CAJA</div>
   <div class="sub">Caja ${esc(c.numero_caja)} · ${c.estado === "cerrada" ? "Cerrada" : c.estado === "en_cierre" ? "En cierre" : "Abierta"}</div>
   <div class="meta">

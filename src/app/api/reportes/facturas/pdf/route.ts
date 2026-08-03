@@ -87,7 +87,7 @@ export async function GET(request: NextRequest) {
   @media print { body { background:#fff; padding:0; } .doc { box-shadow:none; max-width:none; } .actions { display:none; } @page { size: A4 landscape; margin:12mm; } }
 </style></head>
 <body><div class="doc">
-  ${membreteA4(url.origin)}
+  ${membreteA4()}
   <div class="titulo">FACTURAS EMITIDAS</div>
   <div class="rango">Del ${esc(fechaDia(desde))} al ${esc(fechaDia(hasta))} · ${r.totales.cantidad} factura${r.totales.cantidad === 1 ? "" : "s"}</div>
   <table>

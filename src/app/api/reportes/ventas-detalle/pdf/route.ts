@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
   @media print { body { background:#fff; padding:0; } .doc { box-shadow:none; max-width:none; } .actions { display:none; } @page { size: A4 landscape; margin:12mm; } }
 </style></head>
 <body><div class="doc">
-  ${membreteA4(url.origin)}
+  ${membreteA4()}
   <div class="titulo">REPORTE DE VENTAS</div>
   <div class="rango">Del ${esc(fd(f.desde))} al ${esc(fd(f.hasta))} · ${r.totales.cantidad} venta${r.totales.cantidad === 1 ? "" : "s"}</div>
   <div class="filtros">
