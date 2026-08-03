@@ -1,7 +1,8 @@
 import { NextRequest } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
-import { getReporteCajas } from "@/lib/caja/server";
+import { getReporteCajasPg } from "@/lib/caja/reporte-pg";
 import { resolverRangoCajas } from "@/lib/caja/reporte-rango";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { sheetFromRows, buildXlsxBufferSheets, xlsxResponseHeaders } from "@/lib/excel/export";
 
 const ESTADO_LBL: Record<string, string> = { abierta: "Abierta", cerrada: "Cerrada" };
@@ -15,7 +16,8 @@ export async function GET(request: NextRequest) {
       new URL(request.url).searchParams.get("desde"),
       new URL(request.url).searchParams.get("hasta")
     );
-    const r = await getReporteCajas(ctx.supabase, ctx.auth.empresa_id, rango);
+    const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
+    const r = await getReporteCajasPg(schema, ctx.auth.empresa_id, rango);
     const t = r.totales;
 
     const resumen = [

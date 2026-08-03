@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
-import { getDetalleCaja } from "@/lib/caja/server";
+import { getDetalleCajaPg } from "@/lib/caja/reporte-pg";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { membreteA4 } from "@/lib/documentos/membrete";
 
 function gs(v: number): string { return Math.round(v || 0).toLocaleString("es-PY"); }
@@ -26,7 +27,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   try {
     const { id } = await params;
     const url = new URL(request.url);
-    const data = await getDetalleCaja(ctx.supabase, ctx.auth.empresa_id, id);
+    const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
+    const data = await getDetalleCajaPg(schema, ctx.auth.empresa_id, id);
     if (!data) return new NextResponse("Turno no encontrado", { status: 404 });
     const c = data.caja;
 
