@@ -745,9 +745,22 @@ function ModalCerrar({
   const [obs, setObs] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  // Conciliación digital (tickets POS): el cajero carga el total real de
+  // tarjeta / transferencia y el sistema compara con lo esperado por método.
+  const [digTarjeta, setDigTarjeta] = useState("");
+  const [digTransfer, setDigTransfer] = useState("");
+  const espTarjeta = Math.round(resumen.total_tarjeta);
+  const espTransfer = Math.round(resumen.total_transferencia);
+  const hayDigital = espTarjeta > 0 || espTransfer > 0;
+  const conTarjeta = digTarjeta.trim() === "" ? null : Math.round(Number(digTarjeta) || 0);
+  const conTransfer = digTransfer.trim() === "" ? null : Math.round(Number(digTransfer) || 0);
+  const difTarjeta = conTarjeta == null ? null : conTarjeta - espTarjeta;
+  const difTransfer = conTransfer == null ? null : conTransfer - espTransfer;
   const esperado = Math.round(resumen.efectivo_esperado);
   const contado = modo === "arqueo" ? totalArqueo(cant) : Number(monto) || 0;
   const diferencia = contado - esperado;
+
+  function signo(n: number) { return `${n >= 0 ? "+" : "−"}${fmtGs(Math.abs(n))}`; }
 
   async function submit() {
     let arqueo: ArqueoItem[] | null = null;
@@ -757,10 +770,20 @@ function ModalCerrar({
       setErr("Ingresá un monto válido.");
       return;
     }
+    // Adjuntar la conciliación digital a la observación (se guarda en el cierre
+    // y aparece en el reporte de arqueo, sin depender de columnas nuevas).
+    let obsFinal = obs.trim();
+    if (hayDigital && (conTarjeta != null || conTransfer != null)) {
+      const partes: string[] = [];
+      if (conTarjeta != null) partes.push(`Tarjeta POS: esperado ${fmtGs(espTarjeta)} · contado ${fmtGs(conTarjeta)} · dif ${signo(difTarjeta!)}`);
+      if (conTransfer != null) partes.push(`Transferencia: esperado ${fmtGs(espTransfer)} · contado ${fmtGs(conTransfer)} · dif ${signo(difTransfer!)}`);
+      const bloque = `[Conciliación digital] ${partes.join(" | ")}`;
+      obsFinal = obsFinal ? `${bloque}\n${obsFinal}` : bloque;
+    }
     setBusy(true);
     setErr(null);
     try {
-      await onConfirm(contado, obs.trim() || null, arqueo);
+      await onConfirm(contado, obsFinal || null, arqueo);
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
       setBusy(false);
@@ -852,6 +875,20 @@ function ModalCerrar({
           </span>
         </div>
 
+        {/* Conciliación de cobros digitales (tickets POS / transferencias) */}
+        {hayDigital && (
+          <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2.5">
+            <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Conciliación digital (tickets POS)</p>
+            {espTarjeta > 0 && (
+              <ConcDigitalRow label="Tarjeta" esperado={espTarjeta} value={digTarjeta} onChange={setDigTarjeta} dif={difTarjeta} disabled={busy} />
+            )}
+            {espTransfer > 0 && (
+              <ConcDigitalRow label="Transferencia" esperado={espTransfer} value={digTransfer} onChange={setDigTransfer} dif={difTransfer} disabled={busy} />
+            )}
+            <p className="text-[10px] leading-tight text-slate-400">Cargá el total según el cierre del POS / comprobantes. Es opcional y se guarda en la observación del cierre.</p>
+          </div>
+        )}
+
         <div>
           <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
             Observación (opcional)
@@ -893,6 +930,51 @@ function ModalCerrar({
         </button>
       </div>
     </ModalBase>
+  );
+}
+
+/** Fila de conciliación de un método digital: esperado vs contado + diferencia. */
+function ConcDigitalRow({
+  label,
+  esperado,
+  value,
+  onChange,
+  dif,
+  disabled,
+}: {
+  label: string;
+  esperado: number;
+  value: string;
+  onChange: (v: string) => void;
+  dif: number | null;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="flex items-center gap-3">
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold text-slate-700">{label}</p>
+        <p className="text-[11px] text-slate-400">Esperado {fmtGs(esperado)}</p>
+      </div>
+      <div className="w-40">
+        <MontoInput
+          value={value}
+          onChange={(n) => onChange(String(n))}
+          decimals={false}
+          placeholder="Contado (POS)"
+          disabled={disabled}
+          className="w-full rounded-lg border-2 border-slate-200 px-2.5 py-1.5 text-sm font-semibold tabular-nums focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none"
+        />
+      </div>
+      <div className="w-24 text-right">
+        {dif == null ? (
+          <span className="text-[11px] text-slate-300">—</span>
+        ) : (
+          <span className={`text-xs font-bold tabular-nums ${dif === 0 ? "text-emerald-700" : dif > 0 ? "text-sky-700" : "text-red-700"}`}>
+            {dif >= 0 ? "+" : "−"}{fmtGs(Math.abs(dif))}
+          </span>
+        )}
+      </div>
+    </div>
   );
 }
 

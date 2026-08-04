@@ -241,7 +241,7 @@ export default function CajaDetalledPage() {
             )}
 
             {c.observacion_cierre && (
-              <p className="mt-4 rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+              <p className="mt-4 whitespace-pre-line rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
                 <span className="font-semibold text-slate-700">Observación de cierre:</span> {c.observacion_cierre}
               </p>
             )}
