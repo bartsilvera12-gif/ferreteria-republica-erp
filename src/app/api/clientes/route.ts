@@ -262,6 +262,28 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("nombre_contacto es obligatorio"), { status: 400 });
     }
 
+    // Anti-clon: si el RUC ya existe (cliente no eliminado), no crear otro.
+    // Evita la acumulación de clientes duplicados al facturar/armar pedidos.
+    const rucNorm = typeof ruc === "string" ? ruc.trim() : "";
+    if (rucNorm) {
+      const dupq = await supabase
+        .from("clientes")
+        .select("id, empresa, nombre_contacto, nombre, ruc")
+        .eq("empresa_id", auth.empresa_id)
+        .eq("ruc", rucNorm)
+        .is("deleted_at", null)
+        .limit(1)
+        .maybeSingle();
+      if (dupq.data) {
+        const ex = dupq.data as Record<string, unknown>;
+        const nombreEx = String(ex.empresa || ex.nombre_contacto || ex.nombre || "").trim();
+        return NextResponse.json(
+          { ...errorResponse(`Ya existe un cliente con el RUC ${rucNorm}${nombreEx ? ` (${nombreEx})` : ""}. Buscalo en la lista en vez de crear uno nuevo.`), cliente_id: String(ex.id), ruc: rucNorm },
+          { status: 409 }
+        );
+      }
+    }
+
     const tipoServicio = tipo_servicio_cliente?.trim();
     if (tipoServicio) {
       await ensureSemillasCatalogoTipos(supabase, auth.empresa_id);
