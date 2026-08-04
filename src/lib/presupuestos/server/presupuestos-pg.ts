@@ -175,8 +175,9 @@ export async function crearPresupuesto(
 export async function convertirEnPedido(
   sb: AppSupabaseClient,
   empresaId: string,
-  presupuestoId: string
-): Promise<{ pedido_id: string }> {
+  presupuestoId: string,
+  armadoPor?: { id: string | null; email: string | null }
+): Promise<{ pedido_id: string; tipo: "pedido_caja" | "proyecto"; numero?: string }> {
   // Cargar presupuesto + ítems.
   const pq = await sb
     .from("presupuestos")
@@ -203,7 +204,7 @@ export async function convertirEnPedido(
   if (itq.error) throw new Error(itq.error.message);
   const items = (itq.data ?? []) as Record<string, unknown>[];
 
-  // Resolver tipo 'pedido' + estado inicial 'nuevo'.
+  // Resolver tipo 'pedido' del pipeline de proyectos (si la empresa lo usa).
   const tipoQ = await sb
     .from("proyecto_tipos")
     .select("id")
@@ -213,7 +214,12 @@ export async function convertirEnPedido(
     .limit(1)
     .maybeSingle();
   if (tipoQ.error) throw new Error(tipoQ.error.message);
-  if (!tipoQ.data) throw new Error("Tipo de proyecto 'pedido' no configurado para esta empresa.");
+
+  // Sin pipeline de proyectos (ej. Ferretería): crear un pedido de caja
+  // (queda 'pendiente' para el cajero, igual que los que arma el vendedor).
+  if (!tipoQ.data) {
+    return convertirEnPedidoCaja(sb, empresaId, presupuestoId, p, items, armadoPor);
+  }
   const tipoId = (tipoQ.data as { id: string }).id;
 
   const estadoQ = await sb
@@ -291,5 +297,95 @@ export async function convertirEnPedido(
     throw new Error(upd.error.message);
   }
 
-  return { pedido_id: pedidoId };
+  return { pedido_id: pedidoId, tipo: "proyecto" };
+}
+
+/**
+ * Convierte el presupuesto en un PEDIDO DE CAJA (pedidos_caja) — el flujo real
+ * de esta ferretería: el pedido queda 'pendiente' para que el cajero lo facture
+ * en /ventas/nueva. No descuenta stock. Idempotente vía convertido_pedido_id.
+ */
+async function convertirEnPedidoCaja(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  presupuestoId: string,
+  p: Record<string, unknown>,
+  items: Record<string, unknown>[],
+  armadoPor?: { id: string | null; email: string | null }
+): Promise<{ pedido_id: string; tipo: "pedido_caja"; numero: string }> {
+  const pedidoItems = items
+    .filter((it) => it.producto_id && Number(it.cantidad) > 0)
+    .map((it) => {
+      const ivaRaw = String(it.iva_tipo ?? "10%").toUpperCase();
+      const tipo_iva = ivaRaw === "EXENTA" || ivaRaw === "5%" || ivaRaw === "10%" ? ivaRaw : "10%";
+      return {
+        producto_id: String(it.producto_id),
+        producto_nombre: String(it.producto_nombre ?? ""),
+        sku: (it.sku as string | null) ?? null,
+        unidad_medida: (it.unidad_medida as string | null) ?? null,
+        cantidad: Number(it.cantidad),
+        precio_venta: Math.max(0, Number(it.precio_unitario) || 0),
+        tipo_precio: "minorista" as const,
+        tipo_iva,
+        presentacion_id: null,
+        presentacion_nombre: null,
+        presentacion_cantidad_base: null,
+      };
+    });
+  if (pedidoItems.length === 0) {
+    throw new Error("El presupuesto no tiene productos válidos para convertir.");
+  }
+
+  const totalEstimado = pedidoItems.reduce((s, it) => s + it.cantidad * it.precio_venta, 0);
+  const clienteNombre = (String(p.cliente_nombre ?? "").trim()) || null;
+
+  // Numeración PED-###### (misma serie que arma el vendedor).
+  const numq = await sb
+    .from("pedidos_caja")
+    .select("numero")
+    .eq("empresa_id", empresaId)
+    .like("numero", "PED-%")
+    .order("numero", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  let next = 1;
+  const last = (numq.data as { numero?: string } | null)?.numero;
+  if (last) { const m = last.match(/^PED-(\d+)$/); if (m) next = parseInt(m[1], 10) + 1; }
+  const numero = `PED-${String(next).padStart(6, "0")}`;
+
+  const titulo = `${numero} · desde ${String(p.numero_control)}${clienteNombre ? ` · ${clienteNombre}` : ""}`.slice(0, 200);
+  const fechaIso = new Date().toISOString();
+
+  const ins = await sb
+    .from("pedidos_caja")
+    .insert({
+      empresa_id: empresaId,
+      numero,
+      titulo,
+      cliente_id: (p.cliente_id as string | null) ?? null,
+      cliente_nombre: clienteNombre,
+      cliente_telefono: (String(p.cliente_telefono ?? "").trim()) || null,
+      observacion: `Generado desde presupuesto ${String(p.numero_control)}`,
+      items: pedidoItems,
+      total_estimado: totalEstimado,
+      estado: "pendiente",
+      armado_por_id: armadoPor?.id ?? null,
+      armado_por_email: armadoPor?.email ?? null,
+    })
+    .select("id")
+    .single();
+  if (ins.error) throw new Error(ins.error.message);
+  const pedidoId = String((ins.data as { id: string }).id);
+
+  const upd = await sb
+    .from("presupuestos")
+    .update({ estado: "convertido", convertido_pedido_id: pedidoId, updated_at: fechaIso })
+    .eq("empresa_id", empresaId)
+    .eq("id", presupuestoId);
+  if (upd.error) {
+    try { await sb.from("pedidos_caja").delete().eq("id", pedidoId).eq("empresa_id", empresaId); } catch {}
+    throw new Error(upd.error.message);
+  }
+
+  return { pedido_id: pedidoId, tipo: "pedido_caja", numero };
 }

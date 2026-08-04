@@ -14,8 +14,11 @@ export async function POST(request: NextRequest, ctxParams: { params: Promise<{ 
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
 
-    const { pedido_id } = await convertirEnPedido(ctx.supabase, ctx.auth.empresa_id, id);
-    return NextResponse.json(successResponse({ pedido_id }));
+    const res = await convertirEnPedido(ctx.supabase, ctx.auth.empresa_id, id, {
+      id: ctx.auth.usuarioCatalogId ?? null,
+      email: ctx.auth.user?.email ?? null,
+    });
+    return NextResponse.json(successResponse(res));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "No se pudo convertir el presupuesto.";
     const status = /ya fue convertido/i.test(msg)
