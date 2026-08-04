@@ -6,6 +6,8 @@ import Link from "next/link";
 import { FileText, ArrowLeft, Plus, Trash2, Loader2, Search, ImageIcon } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { calcMontoIvaIncluido, type IvaTipoPresupuesto, type CondicionPresupuesto } from "@/lib/presupuestos/types";
+import ClienteBuscadorServer from "@/components/clientes/ClienteBuscadorServer";
+import { clienteNombre as clienteNombreLib } from "@/lib/clientes/storage";
 
 /** Miniatura de producto con fallback a un placeholder si no hay imagen o falla. */
 function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
@@ -31,13 +33,6 @@ type ComboHit = {
   stock_actual: number;
   controla_stock: boolean;
   imagen_url: string | null;
-};
-type ClienteLite = {
-  id: string;
-  nombre: string;
-  ruc: string | null;
-  telefono: string | null;
-  direccion: string | null;
 };
 type Item = {
   producto_id: string | null;
@@ -69,7 +64,6 @@ const inputClass = "w-full rounded-md border border-gray-300 px-3 py-2 text-sm";
 
 export default function NuevoPresupuestoPage() {
   const router = useRouter();
-  const [clientes, setClientes] = useState<ClienteLite[]>([]);
 
   // Autocomplete de productos (mismo comportamiento que el buscador de Caja):
   // búsqueda server-side por tokens sobre TODO el catálogo, agrega al instante.
@@ -102,36 +96,6 @@ export default function NuevoPresupuestoPage() {
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    fetchWithSupabaseSession("/api/clientes", { cache: "no-store" })
-      .then((r) => r.json())
-      .then((j) => {
-        if (j?.success && Array.isArray(j.data)) {
-          const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-          setClientes(
-            (j.data as Record<string, unknown>[]).map((r) => ({
-              id: String(r.id),
-              nombre: s(r.empresa) || s(r.nombre_contacto) || s(r.nombre) || "Cliente",
-              ruc: s(r.ruc) || null,
-              telefono: s(r.telefono) || null,
-              direccion: s(r.direccion) || null,
-            }))
-          );
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  function seleccionarCliente(id: string) {
-    setClienteId(id);
-    const c = clientes.find((x) => x.id === id);
-    if (c) {
-      setClienteNombre(c.nombre);
-      setClienteRuc(c.ruc ?? "");
-      setClienteTel(c.telefono ?? "");
-      setClienteDir(c.direccion ?? "");
-    }
-  }
 
   // Autocomplete: búsqueda server-side por tokens (todo el catálogo), con debounce.
   useEffect(() => {
@@ -336,14 +300,21 @@ export default function NuevoPresupuestoPage() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">Cliente</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className={labelClass}>Cliente existente (opcional)</label>
-            <select value={clienteId} onChange={(e) => seleccionarCliente(e.target.value)} className={`${inputClass} bg-white`}>
-              <option value="">— Cargar manualmente —</option>
-              {clientes.map((c) => (
-                <option key={c.id} value={c.id}>{c.nombre}{c.ruc ? ` (${c.ruc})` : ""}</option>
-              ))}
-            </select>
+          <div className="sm:col-span-2">
+            <label className={labelClass}>Cliente existente (buscá por nombre o RUC)</label>
+            <ClienteBuscadorServer
+              selectedId={clienteId}
+              selectedLabel={clienteNombre}
+              onSelect={(c) => {
+                if (!c) { setClienteId(""); return; }
+                setClienteId(c.id);
+                setClienteNombre(clienteNombreLib(c));
+                setClienteRuc(c.ruc ?? "");
+                setClienteTel(c.telefono ?? "");
+                setClienteDir(c.direccion ?? "");
+              }}
+            />
+            <p className="mt-1 text-xs text-gray-400">O completá los datos abajo para un cliente ocasional.</p>
           </div>
           <div>
             <label className={labelClass}>Nombre / Razón social *</label>
