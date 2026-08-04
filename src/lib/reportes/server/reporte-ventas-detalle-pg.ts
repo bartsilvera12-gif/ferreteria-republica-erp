@@ -44,6 +44,7 @@ export interface VentasDetalleFiltros {
   horaHasta?: string | null;
   clienteId: string | null;
   cajero: string | null;
+  vendedor: string | null;
   codigo: string | null;
   tipo: "" | "CONTADO" | "CREDITO";
   facturada: "" | "si" | "no";
@@ -88,6 +89,10 @@ export async function getReporteVentasDetalle(
   if (f.tipo) { args.push(f.tipo); cond.push(`v.tipo_venta = $${args.length}`); }
   if (f.codigo) { args.push(`%${f.codigo}%`); cond.push(`v.numero_control ILIKE $${args.length}`); }
   if (f.cajero) { args.push(`%${f.cajero}%`); cond.push(`v.usuario_nombre ILIKE $${args.length}`); }
+  if (f.vendedor) {
+    args.push(`%${f.vendedor}%`);
+    cond.push(`(uv.nombre ILIKE $${args.length} OR pc.armado_por_email ILIKE $${args.length})`);
+  }
   if (f.facturada === "si") cond.push(`fa.id IS NOT NULL`);
   if (f.facturada === "no") cond.push(`fa.id IS NULL`);
   if (f.cobro === "cobrado") cond.push(`(v.tipo_venta <> 'CREDITO' OR cxc.estado = 'pagado')`);

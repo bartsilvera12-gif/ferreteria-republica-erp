@@ -42,6 +42,7 @@ export default function ReporteVentasDetallePage() {
   const [clienteId, setClienteId] = useState("");
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [cajero, setCajero] = useState("");
+  const [vendedor, setVendedor] = useState("");
   const [codigo, setCodigo] = useState("");
   const [tipo, setTipo] = useState("");
   const [facturada, setFacturada] = useState("");
@@ -63,6 +64,7 @@ export default function ReporteVentasDetallePage() {
     if (horaHasta.trim()) p.set("hora_hasta", horaHasta.trim());
     if (clienteId) p.set("cliente_id", clienteId);
     if (cajero.trim()) p.set("cajero", cajero.trim());
+    if (vendedor.trim()) p.set("vendedor", vendedor.trim());
     if (codigo.trim()) p.set("codigo", codigo.trim());
     if (tipo) p.set("tipo", tipo);
     if (facturada) p.set("facturada", facturada);
@@ -70,7 +72,7 @@ export default function ReporteVentasDetallePage() {
     if (soloAnuladas) p.set("solo_anuladas", "1");
     for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v);
     return p;
-  }, [desde, hasta, horaDesde, horaHasta, clienteId, cajero, codigo, tipo, facturada, cobro, soloAnuladas]);
+  }, [desde, hasta, horaDesde, horaHasta, clienteId, cajero, vendedor, codigo, tipo, facturada, cobro, soloAnuladas]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -123,6 +125,8 @@ export default function ReporteVentasDetallePage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cajero</span>
             <input type="text" value={cajero} onChange={(e) => setCajero(e.target.value)} placeholder="Nombre del cajero" className={inputCls} /></label>
+          <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Vendedor</span>
+            <input type="text" value={vendedor} onChange={(e) => setVendedor(e.target.value)} placeholder="Nombre del vendedor" className={inputCls} /></label>
           <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Código de venta</span>
             <input type="text" value={codigo} onChange={(e) => setCodigo(e.target.value)} placeholder="VTA-000123" className={inputCls} /></label>
           <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Tipo</span>

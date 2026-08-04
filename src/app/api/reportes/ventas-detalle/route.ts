@@ -23,6 +23,7 @@ export function parseFiltrosVentas(sp: URLSearchParams) {
     horaHasta: RE_HORA.test(hHasta) ? hHasta : null,
     clienteId: sp.get("cliente_id")?.trim() || null,
     cajero: sp.get("cajero")?.trim() || null,
+    vendedor: sp.get("vendedor")?.trim() || null,
     codigo: sp.get("codigo")?.trim() || null,
     tipo: (tipoRaw === "CONTADO" || tipoRaw === "CREDITO" ? tipoRaw : "") as "" | "CONTADO" | "CREDITO",
     facturada: (facRaw === "si" || facRaw === "no" ? facRaw : "") as "" | "si" | "no",

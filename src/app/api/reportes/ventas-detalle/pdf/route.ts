@@ -116,6 +116,7 @@ export async function GET(request: NextRequest) {
     ${f.facturada ? `Facturada: ${f.facturada === "si" ? "Sí" : "No"} · ` : ""}
     ${f.cobro ? `Cobro: ${f.cobro === "cobrado" ? "Cobradas" : "Pendientes"} · ` : ""}
     ${f.cajero ? `Cajero: ${esc(f.cajero)} · ` : ""}
+    ${f.vendedor ? `Vendedor: ${esc(f.vendedor)} · ` : ""}
     ${f.codigo ? `Código: ${esc(f.codigo)} · ` : ""}
     ${f.horaDesde || f.horaHasta ? `Horario: ${esc(f.horaDesde || "00:00")}–${esc(f.horaHasta || "23:59")} · ` : ""}
     ${f.soloAnuladas ? "Solo anuladas · " : ""}
