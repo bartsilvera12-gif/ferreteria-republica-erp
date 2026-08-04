@@ -883,9 +883,8 @@ export default function NuevoProductoPage() {
                 </div>
               </div>
 
-              {/* Ubicación principal — oculta en instancia En lo de Mari (no aplica para gastronomía).
-                  Lógica/state preservados; submit envía ubicacionId que queda en null por defecto. */}
-              <div className="hidden md:col-span-4 min-w-0">
+              {/* Ubicación principal / depósito del producto. */}
+              <div className="md:col-span-4 min-w-0">
                 <label className={labelClass}>Ubicación principal</label>
                 <SelectFromList
                   value={ubicacionId}

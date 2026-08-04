@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { AlertTriangle, Loader2, Download } from "lucide-react";
 import { getOrdenCompra, cancelarOrdenCompra } from "@/lib/ordenes-compra/storage";
 import type { OrdenCompra, EstadoOrdenCompra } from "@/lib/ordenes-compra/types";
 
@@ -101,6 +101,14 @@ export default function OrdenCompraDetallePage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <a
+            href={`/api/ordenes-compra/${encodeURIComponent(cab.numero_oc)}/pdf?auto=1`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-lg border border-[#4FAEB2]/30 bg-white px-4 py-2 text-sm font-bold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10"
+          >
+            <Download className="h-4 w-4" /> PDF
+          </a>
           {cab.estado === "pendiente" && (
             <button onClick={() => { setMotivoCancel(""); setCancelOpen(true); }} disabled={procesando}
               className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
