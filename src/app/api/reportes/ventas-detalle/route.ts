@@ -14,8 +14,13 @@ export function parseFiltrosVentas(sp: URLSearchParams) {
   const tipoRaw = (sp.get("tipo") ?? "").toUpperCase();
   const facRaw = (sp.get("facturada") ?? "").toLowerCase();
   const cobRaw = (sp.get("cobro") ?? "").toLowerCase();
+  const RE_HORA = /^\d{1,2}:\d{2}$/;
+  const hDesde = (sp.get("hora_desde") ?? "").trim();
+  const hHasta = (sp.get("hora_hasta") ?? "").trim();
   return {
     desde, hasta,
+    horaDesde: RE_HORA.test(hDesde) ? hDesde : null,
+    horaHasta: RE_HORA.test(hHasta) ? hHasta : null,
     clienteId: sp.get("cliente_id")?.trim() || null,
     cajero: sp.get("cajero")?.trim() || null,
     codigo: sp.get("codigo")?.trim() || null,

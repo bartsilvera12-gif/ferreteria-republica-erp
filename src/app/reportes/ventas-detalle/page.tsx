@@ -5,19 +5,20 @@
  * de Venta" del sistema previo): rango de fechas, cliente, cajero, código, tipo
  * (contado/crédito), facturada/no, cobradas/pendientes, solo anuladas, y export PDF.
  */
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
 import ClienteBuscador from "@/components/clientes/ClienteBuscador";
 import { getClientes } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
-import { ShoppingCart, Download, Search, Loader2 } from "lucide-react";
+import { ShoppingCart, Download, Search, Loader2, ChevronRight } from "lucide-react";
 
 interface VentaRow {
   id: string; numero_control: string; fecha: string; tipo_venta: string; estado: string;
-  metodo_pago: string | null; cliente_nombre: string | null; cajero: string | null;
+  metodo_pago: string | null; cliente_nombre: string | null; cajero: string | null; vendedor: string | null;
   subtotal: number; monto_iva: number; total: number; facturada: boolean;
   numero_factura: string | null; saldo_credito: number | null; estado_cobro: string | null;
 }
+interface ItemRow { producto_nombre: string; cantidad: number; precio_venta: number; total_linea: number; }
 interface Rep {
   ventas: VentaRow[];
   totales: { cantidad: number; subtotal: number; monto_iva: number; total: number; total_contado: number; total_credito: number; facturadas: number; saldo_pendiente: number };
@@ -36,6 +37,8 @@ export default function ReporteVentasDetallePage() {
   const hoy = hoyAsuncion();
   const [desde, setDesde] = useState(`${hoy.slice(0, 7)}-01`);
   const [hasta, setHasta] = useState(hoy);
+  const [horaDesde, setHoraDesde] = useState("");
+  const [horaHasta, setHoraHasta] = useState("");
   const [clienteId, setClienteId] = useState("");
   const [clientes, setClientes] = useState<Cliente[]>([]);
   const [cajero, setCajero] = useState("");
@@ -45,13 +48,19 @@ export default function ReporteVentasDetallePage() {
   const [cobro, setCobro] = useState("");
   const [soloAnuladas, setSoloAnuladas] = useState(false);
   const [resumido, setResumido] = useState(false);
+  const [pdfProductos, setPdfProductos] = useState(false);
   const [data, setData] = useState<Rep | null>(null);
   const [cargando, setCargando] = useState(true);
+  const [expandida, setExpandida] = useState<string | null>(null);
+  const [itemsCache, setItemsCache] = useState<Record<string, ItemRow[]>>({});
+  const [itemsCargando, setItemsCargando] = useState<string | null>(null);
 
   useEffect(() => { getClientes().then(setClientes).catch(() => setClientes([])); }, []);
 
   const params = useCallback((extra?: Record<string, string>) => {
     const p = new URLSearchParams({ desde, hasta });
+    if (horaDesde.trim()) p.set("hora_desde", horaDesde.trim());
+    if (horaHasta.trim()) p.set("hora_hasta", horaHasta.trim());
     if (clienteId) p.set("cliente_id", clienteId);
     if (cajero.trim()) p.set("cajero", cajero.trim());
     if (codigo.trim()) p.set("codigo", codigo.trim());
@@ -61,10 +70,11 @@ export default function ReporteVentasDetallePage() {
     if (soloAnuladas) p.set("solo_anuladas", "1");
     for (const [k, v] of Object.entries(extra ?? {})) p.set(k, v);
     return p;
-  }, [desde, hasta, clienteId, cajero, codigo, tipo, facturada, cobro, soloAnuladas]);
+  }, [desde, hasta, horaDesde, horaHasta, clienteId, cajero, codigo, tipo, facturada, cobro, soloAnuladas]);
 
   const cargar = useCallback(async () => {
     setCargando(true);
+    setExpandida(null);
     try {
       const r = await fetch(`/api/reportes/ventas-detalle?${params().toString()}`, { credentials: "include", cache: "no-store" });
       const j = await r.json();
@@ -73,10 +83,23 @@ export default function ReporteVentasDetallePage() {
     finally { setCargando(false); }
   }, [params]);
 
+  const toggleFila = useCallback(async (ventaId: string) => {
+    if (expandida === ventaId) { setExpandida(null); return; }
+    setExpandida(ventaId);
+    if (itemsCache[ventaId]) return;
+    setItemsCargando(ventaId);
+    try {
+      const r = await fetch(`/api/reportes/ventas-detalle/items?venta_id=${ventaId}`, { credentials: "include", cache: "no-store" });
+      const j = await r.json();
+      setItemsCache((c) => ({ ...c, [ventaId]: j?.success ? (j.data.items as ItemRow[]) : [] }));
+    } catch { setItemsCache((c) => ({ ...c, [ventaId]: [] })); }
+    finally { setItemsCargando(null); }
+  }, [expandida, itemsCache]);
+
   useEffect(() => { cargar(); /* carga inicial */ // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const pdfHref = useMemo(() => `/api/reportes/ventas-detalle/pdf?${params({ auto: "1", resumido: resumido ? "1" : "0" }).toString()}`, [params, resumido]);
+  const pdfHref = useMemo(() => `/api/reportes/ventas-detalle/pdf?${params({ auto: "1", resumido: resumido ? "1" : "0", productos: pdfProductos && !resumido ? "1" : "0" }).toString()}`, [params, resumido, pdfProductos]);
   const tot = data?.totales;
 
   return (
@@ -90,6 +113,10 @@ export default function ReporteVentasDetallePage() {
             <input type="date" value={desde} max={hasta} onChange={(e) => setDesde(e.target.value)} className={inputCls} /></label>
           <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Hasta</span>
             <input type="date" value={hasta} min={desde} onChange={(e) => setHasta(e.target.value)} className={inputCls} /></label>
+          <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Hora desde</span>
+            <input type="time" value={horaDesde} onChange={(e) => setHoraDesde(e.target.value)} className={inputCls} /></label>
+          <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Hora hasta</span>
+            <input type="time" value={horaHasta} onChange={(e) => setHoraHasta(e.target.value)} className={inputCls} /></label>
           <div className="text-sm sm:col-span-2"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cliente</span>
             <ClienteBuscador clientes={clientes} value={clienteId} onChange={setClienteId} sinClienteLabel="— Todos —" placeholder="Todos — nombre o RUC…" /></div>
         </div>
@@ -117,6 +144,10 @@ export default function ReporteVentasDetallePage() {
           <label className="flex items-center gap-2 text-sm text-slate-600 sm:mt-6">
             <input type="checkbox" checked={resumido} onChange={(e) => setResumido(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]" />
             PDF resumido (solo totales)
+          </label>
+          <label className={`flex items-center gap-2 text-sm sm:mt-6 ${resumido ? "text-slate-300" : "text-slate-600"}`}>
+            <input type="checkbox" checked={pdfProductos} disabled={resumido} onChange={(e) => setPdfProductos(e.target.checked)} className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2] disabled:opacity-40" />
+            PDF con productos por venta
           </label>
         </div>
         <div className="flex flex-wrap items-center justify-end gap-2">
@@ -160,12 +191,14 @@ export default function ReporteVentasDetallePage() {
           <p className="px-5 py-12 text-center text-sm text-slate-400">Sin ventas para los filtros seleccionados.</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[920px] text-left text-sm">
+            <table className="w-full min-w-[1040px] text-left text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
-                  <th className="px-5 py-3 font-semibold">N° Venta</th>
-                  <th className="px-3 py-3 font-semibold">Fecha</th>
+                  <th className="w-8 px-2 py-3"></th>
+                  <th className="px-3 py-3 font-semibold">N° Venta</th>
+                  <th className="px-3 py-3 font-semibold">Fecha y hora</th>
                   <th className="px-3 py-3 font-semibold">Cliente</th>
+                  <th className="px-3 py-3 font-semibold">Vendedor</th>
                   <th className="px-3 py-3 font-semibold">Cajero</th>
                   <th className="px-3 py-3 font-semibold">Tipo</th>
                   <th className="px-3 py-3 text-center font-semibold">Facturada</th>
@@ -176,21 +209,59 @@ export default function ReporteVentasDetallePage() {
               <tbody className="divide-y divide-slate-100">
                 {data.ventas.map((v) => {
                   const anulada = v.estado === "anulada";
+                  const abierta = expandida === v.id;
+                  const items = itemsCache[v.id];
                   return (
-                    <tr key={v.id} className={`transition-colors hover:bg-[#4FAEB2]/[0.03] ${anulada ? "text-red-600 line-through" : ""}`}>
-                      <td className="px-5 py-2.5 font-mono font-semibold">{v.numero_control}</td>
-                      <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fh(v.fecha)}</td>
-                      <td className="px-3 py-2.5 text-slate-700">{v.cliente_nombre || <span className="text-slate-400">Consumidor Final</span>}</td>
-                      <td className="px-3 py-2.5 text-slate-600">{v.cajero || "—"}</td>
-                      <td className="px-3 py-2.5 capitalize text-slate-600">{v.tipo_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
-                      <td className="px-3 py-2.5 text-center">
-                        {v.facturada ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">Sí</span> : <span className="text-slate-400">No</span>}
-                      </td>
-                      <td className="px-3 py-2.5 text-center text-xs">
-                        {anulada ? "Anulada" : v.tipo_venta === "CREDITO" ? (v.estado_cobro === "pagado" ? <span className="text-emerald-700">Cobrada</span> : <span className="text-amber-600">Pendiente</span>) : <span className="text-emerald-700">Cobrada</span>}
-                      </td>
-                      <td className="px-4 py-2.5 text-right font-bold tabular-nums text-[#3F8E91]">{gs(v.total)}</td>
-                    </tr>
+                    <Fragment key={v.id}>
+                      <tr onClick={() => toggleFila(v.id)} className={`cursor-pointer transition-colors hover:bg-[#4FAEB2]/[0.05] ${abierta ? "bg-[#4FAEB2]/[0.06]" : ""} ${anulada ? "text-red-600 line-through" : ""}`}>
+                        <td className="px-2 py-2.5 text-slate-400"><ChevronRight className={`h-4 w-4 transition-transform ${abierta ? "rotate-90 text-[#4FAEB2]" : ""}`} /></td>
+                        <td className="px-3 py-2.5 font-mono font-semibold">{v.numero_control}</td>
+                        <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fh(v.fecha)}</td>
+                        <td className="px-3 py-2.5 text-slate-700">{v.cliente_nombre || <span className="text-slate-400">Consumidor Final</span>}</td>
+                        <td className="px-3 py-2.5 capitalize text-slate-600">{v.vendedor || <span className="text-slate-400">—</span>}</td>
+                        <td className="px-3 py-2.5 text-slate-600">{v.cajero || "—"}</td>
+                        <td className="px-3 py-2.5 capitalize text-slate-600">{v.tipo_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
+                        <td className="px-3 py-2.5 text-center">
+                          {v.facturada ? <span className="rounded bg-emerald-50 px-1.5 py-0.5 text-[11px] font-semibold text-emerald-700">Sí</span> : <span className="text-slate-400">No</span>}
+                        </td>
+                        <td className="px-3 py-2.5 text-center text-xs">
+                          {anulada ? "Anulada" : v.tipo_venta === "CREDITO" ? (v.estado_cobro === "pagado" ? <span className="text-emerald-700">Cobrada</span> : <span className="text-amber-600">Pendiente</span>) : <span className="text-emerald-700">Cobrada</span>}
+                        </td>
+                        <td className="px-4 py-2.5 text-right font-bold tabular-nums text-[#3F8E91]">{gs(v.total)}</td>
+                      </tr>
+                      {abierta && (
+                        <tr className="bg-slate-50/60">
+                          <td colSpan={10} className="px-5 py-3">
+                            {itemsCargando === v.id ? (
+                              <p className="flex items-center gap-2 text-xs text-slate-400"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Cargando productos…</p>
+                            ) : !items || items.length === 0 ? (
+                              <p className="text-xs text-slate-400">Sin productos registrados en esta venta.</p>
+                            ) : (
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="text-[10px] uppercase tracking-wide text-slate-400">
+                                    <th className="py-1 pr-3 text-left font-semibold">Producto</th>
+                                    <th className="py-1 px-3 text-right font-semibold">Cantidad</th>
+                                    <th className="py-1 px-3 text-right font-semibold">Precio unit.</th>
+                                    <th className="py-1 pl-3 text-right font-semibold">Total</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {items.map((it, i) => (
+                                    <tr key={i} className="border-t border-slate-200/70">
+                                      <td className="py-1 pr-3 text-slate-700">{it.producto_nombre}</td>
+                                      <td className="py-1 px-3 text-right tabular-nums text-slate-600">{it.cantidad.toLocaleString("es-PY")}</td>
+                                      <td className="py-1 px-3 text-right tabular-nums text-slate-600">{gs(it.precio_venta)}</td>
+                                      <td className="py-1 pl-3 text-right font-semibold tabular-nums text-slate-800">{gs(it.total_linea)}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            )}
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
                   );
                 })}
               </tbody>

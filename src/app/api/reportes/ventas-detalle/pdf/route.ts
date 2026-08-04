@@ -1,9 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
-import { getReporteVentasDetalle, type VentaReporteRow } from "@/lib/reportes/server/reporte-ventas-detalle-pg";
+import { getReporteVentasDetalle, getItemsDeVentas, type VentaReporteRow, type VentaItemRow } from "@/lib/reportes/server/reporte-ventas-detalle-pg";
 import { membreteA4 } from "@/lib/documentos/membrete";
 import { parseFiltrosVentas } from "../route";
+
+/** Máximo de ventas para incluir el detalle de productos en el PDF (evita PDFs enormes). */
+const MAX_VENTAS_PRODUCTOS = 400;
 
 function gs(v: number): string { return Math.round(v || 0).toLocaleString("es-PY"); }
 function esc(v: unknown): string {
@@ -28,28 +31,45 @@ export async function GET(request: NextRequest) {
     const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
     const f = parseFiltrosVentas(url.searchParams);
     const resumido = url.searchParams.get("resumido") === "1";
+    const conProductos = !resumido && url.searchParams.get("productos") === "1";
     const r = await getReporteVentasDetalle(schema, ctx.auth.empresa_id, f);
 
+    // Detalle de productos por venta (solo si se pidió y no supera el tope).
+    let itemsPorVenta = new Map<string, VentaItemRow[]>();
+    const productosTruncado = conProductos && r.ventas.length > MAX_VENTAS_PRODUCTOS;
+    if (conProductos && !productosTruncado) {
+      itemsPorVenta = await getItemsDeVentas(schema, ctx.auth.empresa_id, r.ventas.map((v) => v.id));
+    }
+
+    const COLS = 9;
     const filas = r.ventas.map((v: VentaReporteRow) => {
       const anulada = v.estado === "anulada";
-      return `<tr class="${anulada ? "anul" : ""}">
+      const fila = `<tr class="${anulada ? "anul" : ""}">
         <td class="mono">${esc(v.numero_control)}</td>
         <td>${esc(fh(v.fecha))}</td>
         <td>${esc(v.cliente_nombre || "Consumidor Final")}</td>
+        <td>${esc(v.vendedor || "—")}</td>
         <td>${esc(v.cajero || "—")}</td>
         <td class="cap">${v.tipo_venta === "CREDITO" ? "Crédito" : "Contado"}</td>
         <td class="ctr">${v.facturada ? `Sí <span class="mono2">${esc(v.numero_factura ?? "")}</span>` : "No"}</td>
         <td class="ctr">${anulada ? "Anulada" : v.tipo_venta === "CREDITO" ? (v.estado_cobro === "pagado" ? "Cobrada" : "Pendiente") : "Cobrada"}</td>
         <td class="num">${gs(v.total)}</td>
       </tr>`;
+      if (!conProductos || productosTruncado) return fila;
+      const its = itemsPorVenta.get(v.id) ?? [];
+      if (its.length === 0) return fila;
+      const lis = its.map((it) =>
+        `<div class="pl"><span class="pn">${esc(it.producto_nombre)}</span><span class="pc">×${it.cantidad.toLocaleString("es-PY")}</span><span class="pt">Gs. ${gs(it.total_linea)}</span></div>`
+      ).join("");
+      return `${fila}<tr class="prods"><td colspan="${COLS}"><div class="plist">${lis}</div></td></tr>`;
     }).join("");
 
     const tabla = resumido ? "" : `<table>
       <thead><tr>
-        <th>N° Venta</th><th>Fecha</th><th>Cliente</th><th>Cajero</th><th>Tipo</th><th class="ctr">Facturada</th><th class="ctr">Cobro</th><th class="num">Total</th>
+        <th>N° Venta</th><th>Fecha</th><th>Cliente</th><th>Vendedor</th><th>Cajero</th><th>Tipo</th><th class="ctr">Facturada</th><th class="ctr">Cobro</th><th class="num">Total</th>
       </tr></thead>
-      <tbody>${filas || `<tr><td colspan="8" class="vacio">Sin ventas para los filtros seleccionados.</td></tr>`}</tbody>
-    </table>`;
+      <tbody>${filas || `<tr><td colspan="${COLS}" class="vacio">Sin ventas para los filtros seleccionados.</td></tr>`}</tbody>
+    </table>${productosTruncado ? `<div class="nota">El detalle de productos se omitió porque el reporte supera ${MAX_VENTAS_PRODUCTOS} ventas. Acotá el rango de fechas u horario para incluirlos.</div>` : ""}`;
 
     const html = `<!doctype html>
 <html lang="es"><head><meta charset="utf-8" />
@@ -74,6 +94,13 @@ export async function GET(request: NextRequest) {
   .mono2 { font-family:ui-monospace,monospace; color:#888; font-size:9.5px; }
   td.cap { text-transform:capitalize; }
   tr.anul td { color:#b91c1c; text-decoration:line-through; }
+  tr.prods td { background:#fafcfc; padding:4px 7px 8px 22px; }
+  .plist { display:flex; flex-wrap:wrap; gap:4px 14px; }
+  .pl { font-size:10px; color:#444; white-space:nowrap; }
+  .pl .pn { color:#222; }
+  .pl .pc { color:#3F8E91; font-weight:700; margin:0 4px; }
+  .pl .pt { color:#666; font-variant-numeric:tabular-nums; }
+  .nota { margin-top:8px; font-size:10px; color:#a15c00; background:#fff7ed; border:1px solid #fed7aa; border-radius:6px; padding:6px 10px; }
   .vacio { text-align:center; color:#888; padding:22px; }
   .foot { margin-top:16px; font-size:10.5px; color:#666; border-top:1px dashed #bbb; padding-top:8px; }
   .actions { max-width:1050px; margin:14px auto 0; text-align:center; }
@@ -90,8 +117,9 @@ export async function GET(request: NextRequest) {
     ${f.cobro ? `Cobro: ${f.cobro === "cobrado" ? "Cobradas" : "Pendientes"} · ` : ""}
     ${f.cajero ? `Cajero: ${esc(f.cajero)} · ` : ""}
     ${f.codigo ? `Código: ${esc(f.codigo)} · ` : ""}
+    ${f.horaDesde || f.horaHasta ? `Horario: ${esc(f.horaDesde || "00:00")}–${esc(f.horaHasta || "23:59")} · ` : ""}
     ${f.soloAnuladas ? "Solo anuladas · " : ""}
-    ${resumido ? "Resumido" : "Detallado"}
+    ${resumido ? "Resumido" : conProductos ? "Detallado con productos" : "Detallado"}
   </div>
   <div class="cards">
     <div class="card"><div class="lbl">Total vendido</div><div class="val">Gs. ${gs(r.totales.total)}</div></div>
