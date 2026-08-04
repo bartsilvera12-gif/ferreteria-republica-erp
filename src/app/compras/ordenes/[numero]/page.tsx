@@ -110,6 +110,12 @@ export default function OrdenCompraDetallePage() {
             <Download className="h-4 w-4" /> PDF
           </a>
           {cab.estado === "pendiente" && (
+            <Link href={`/compras/ordenes/${encodeURIComponent(cab.numero_oc)}/editar`}
+              className="rounded-lg border border-[#4FAEB2]/30 bg-white px-4 py-2 text-sm font-bold text-[#3F8E91] hover:bg-[#4FAEB2]/10">
+              Editar
+            </Link>
+          )}
+          {cab.estado === "pendiente" && (
             <button onClick={() => { setMotivoCancel(""); setCancelOpen(true); }} disabled={procesando}
               className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm font-semibold text-red-700 hover:bg-red-100 disabled:opacity-50">
               Cancelar OC

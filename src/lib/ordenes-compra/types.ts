@@ -43,6 +43,8 @@ export interface OrdenCompra {
 
   estado: EstadoOrdenCompra;
   observacion?: string | null;
+  nro_timbrado?: string | null;
+  numero_factura?: string | null;
 
   // Trazabilidad
   compra_numero_control?: string | null; // COMP-XXXXXX cuando se recibió

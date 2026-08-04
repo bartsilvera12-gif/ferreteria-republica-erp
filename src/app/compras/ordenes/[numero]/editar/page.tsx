@@ -1,0 +1,559 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState, use } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { Search, Trash2, Loader2, Plus, ImageIcon, AlertTriangle } from "lucide-react";
+import ProveedorPicker from "@/components/proveedores/ProveedorPicker";
+import { getOrdenCompra, updateOrdenCompra, type OrdenItemPayload } from "@/lib/ordenes-compra/storage";
+import { uploadComprobante } from "@/lib/compras/storage";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
+import { parseCantidad, pasoCantidad, minimoCantidad, clampCantidad, permiteDecimales } from "@/lib/productos/unidades";
+
+/** Miniatura con fallback si no hay imagen o falla. */
+function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
+  const [err, setErr] = useState(false);
+  if (!url || err) {
+    return (
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-slate-100 bg-slate-50 text-slate-300">
+        <ImageIcon className="h-4 w-4" />
+      </div>
+    );
+  }
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={url} alt={alt} loading="lazy" onError={() => setErr(true)} className="h-10 w-10 shrink-0 rounded-md border border-slate-100 object-cover" />;
+}
+
+type ComboHit = {
+  id: string;
+  nombre: string;
+  sku: string;
+  precio_venta: number;
+  stock_actual: number;
+  controla_stock: boolean;
+  unidad_medida: string;
+  imagen_url: string | null;
+};
+
+function fmtGs(v: number) {
+  return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
+}
+/** IVA INCLUIDO (modelo PY): el costo ya contiene el IVA; se desglosa desde adentro. */
+function desglosarIva(bruto: number, iva: TipoIva): { subtotal: number; monto_iva: number } {
+  if (iva === "exenta") return { subtotal: bruto, monto_iva: 0 };
+  const factor = iva === "5" ? 1.05 : 1.1;
+  const subtotal = bruto / factor;
+  return { subtotal, monto_iva: bruto - subtotal };
+}
+
+type Linea = {
+  producto_id: string;
+  producto_nombre: string;
+  sku: string;
+  unidad_medida: string;
+  cantidad: number;
+  costo_input: number; // en la moneda de la cabecera
+  iva_tipo: TipoIva;
+  precio_venta: number;
+};
+
+const inputClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 bg-white";
+
+export default function EditarOrdenCompraPage({ params }: { params: Promise<{ numero: string }> }) {
+  const router = useRouter();
+  const { numero } = use(params);
+  const numeroOc = decodeURIComponent(numero);
+
+  const [cargando, setCargando] = useState(true);
+  const [cargaError, setCargaError] = useState<string | null>(null);
+  const [cab, setCab] = useState({
+    proveedor_id: "",
+    proveedor_nombre: "",
+    nro_timbrado: "",
+    numero_factura: "",
+    moneda: "PYG" as Moneda,
+    tipo_cambio: "",
+    tipo_pago: "contado" as TipoPago,
+    plazo_dias: "",
+    observacion: "",
+  });
+  const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
+  const [comprobanteError, setComprobanteError] = useState<string | null>(null);
+  const [lineas, setLineas] = useState<Linea[]>([]);
+  const [q, setQ] = useState("");
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [hits, setHits] = useState<ComboHit[]>([]);
+  const [buscando, setBuscando] = useState(false);
+  const [highlight, setHighlight] = useState(-1);
+  const [enviando, setEnviando] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const searchBoxRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Precargar la OC.
+  useEffect(() => {
+    let cancel = false;
+    (async () => {
+      try {
+        const filas = await getOrdenCompra(numeroOc);
+        if (cancel) return;
+        if (filas.length === 0) { setCargaError("Orden de compra no encontrada."); setCargando(false); return; }
+        const c = filas[0];
+        const editable = filas.every((f) => f.estado === "pendiente" && (f.cantidad_recibida ?? 0) <= 0);
+        if (!editable) {
+          setCargaError("Esta orden ya tiene recepciones o no está pendiente: no se puede editar.");
+          setCargando(false);
+          return;
+        }
+        setCab({
+          proveedor_id: c.proveedor_id,
+          proveedor_nombre: c.proveedor_nombre,
+          nro_timbrado: c.nro_timbrado ?? "",
+          numero_factura: c.numero_factura ?? "",
+          moneda: (c.moneda === "USD" ? "USD" : "PYG") as Moneda,
+          tipo_cambio: c.moneda === "USD" ? String(c.tipo_cambio || "") : "",
+          tipo_pago: (c.tipo_pago === "credito" ? "credito" : "contado") as TipoPago,
+          plazo_dias: c.plazo_dias != null ? String(c.plazo_dias) : "",
+          observacion: c.observacion ?? "",
+        });
+        setLineas(filas.map((f) => ({
+          producto_id: f.producto_id,
+          producto_nombre: f.producto_nombre,
+          sku: "",
+          unidad_medida: f.unidad_medida || "UNIDAD",
+          cantidad: Number(f.cantidad) || 0,
+          costo_input: Number(f.costo_unitario_original) || 0,
+          iva_tipo: (f.iva_tipo as TipoIva) ?? "10",
+          precio_venta: Number(f.precio_venta) || 0,
+        })));
+        setCargando(false);
+      } catch {
+        if (!cancel) { setCargaError("No se pudo cargar la orden de compra."); setCargando(false); }
+      }
+    })();
+    return () => { cancel = true; };
+  }, [numeroOc]);
+
+  useEffect(() => {
+    function onDown(e: MouseEvent) {
+      if (searchBoxRef.current && !searchBoxRef.current.contains(e.target as Node)) setSearchOpen(false);
+    }
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  function handleComprobanteChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setComprobanteError(null);
+    const f = e.target.files?.[0] ?? null;
+    if (f && !["image/jpeg", "image/png", "image/webp", "application/pdf"].includes(f.type)) {
+      setComprobanteError("Formato no permitido. Usá JPG, PNG, WebP o PDF.");
+      setComprobanteFile(null);
+      return;
+    }
+    if (f && f.size > 10 * 1024 * 1024) {
+      setComprobanteError("Archivo demasiado grande (máx. 10 MB).");
+      setComprobanteFile(null);
+      return;
+    }
+    setComprobanteFile(f);
+  }
+
+  useEffect(() => {
+    if (timer.current) clearTimeout(timer.current);
+    const term = q.trim();
+    if (term.length < 2) { setHits([]); setBuscando(false); return; }
+    setBuscando(true);
+    timer.current = setTimeout(async () => {
+      try {
+        const r = await fetchWithSupabaseSession(`/api/productos/search?q=${encodeURIComponent(term)}&limit=20`, { cache: "no-store" });
+        const j = await r.json();
+        setHits(((j?.data?.items ?? []) as Record<string, unknown>[]).map((p): ComboHit => ({
+          id: String(p.id), nombre: String(p.nombre ?? ""), sku: String(p.sku ?? ""),
+          precio_venta: Number(p.precio_venta) || 0, stock_actual: Number(p.stock_actual) || 0,
+          controla_stock: p.controla_stock !== false,
+          unidad_medida: String(p.unidad_medida ?? "UNIDAD"),
+          imagen_url: (p.imagen_url as string | null) ?? null,
+        })));
+      } catch { setHits([]); }
+      finally { setBuscando(false); }
+    }, 220);
+    return () => { if (timer.current) clearTimeout(timer.current); };
+  }, [q]);
+
+  useEffect(() => { setHighlight(-1); }, [hits]);
+
+  const tc = cab.moneda === "USD" ? Number(cab.tipo_cambio) || 0 : 1;
+
+  const excluidos = useMemo(() => new Set(lineas.map((l) => l.producto_id)), [lineas]);
+  const resultados = useMemo(() => hits.filter((p) => !excluidos.has(p.id)), [hits, excluidos]);
+
+  function addProducto(p: ComboHit) {
+    setLineas((prev) => {
+      if (prev.some((l) => l.producto_id === p.id)) return prev;
+      return [
+        ...prev,
+        {
+          producto_id: p.id,
+          producto_nombre: p.nombre,
+          sku: p.sku,
+          unidad_medida: p.unidad_medida || "UNIDAD",
+          cantidad: 1,
+          costo_input: 0,
+          iva_tipo: "10",
+          precio_venta: p.precio_venta,
+        },
+      ];
+    });
+    setQ("");
+    setHits([]);
+    setSearchOpen(false);
+    setHighlight(-1);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }
+
+  function onKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === "ArrowDown") { e.preventDefault(); setSearchOpen(true); setHighlight((h) => Math.min(h + 1, resultados.length - 1)); }
+    else if (e.key === "ArrowUp") { e.preventDefault(); setHighlight((h) => Math.max(h - 1, 0)); }
+    else if (e.key === "Enter") { e.preventDefault(); const sel = resultados[highlight] ?? resultados[0]; if (sel) addProducto(sel); }
+    else if (e.key === "Escape") { setSearchOpen(false); setHighlight(-1); }
+  }
+  function updateLinea(id: string, patch: Partial<Linea>) {
+    setLineas((prev) => prev.map((l) => (l.producto_id === id ? { ...l, ...patch } : l)));
+  }
+  function removeLinea(id: string) {
+    setLineas((prev) => prev.filter((l) => l.producto_id !== id));
+  }
+
+  const totalOc = useMemo(
+    () => lineas.reduce((s, l) => s + l.costo_input * tc * l.cantidad, 0),
+    [lineas, tc]
+  );
+
+  async function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setErr(null);
+    if (!cab.proveedor_id) return setErr("Seleccioná un proveedor.");
+    if (cab.moneda === "USD" && tc <= 0) return setErr("Cargá el tipo de cambio (USD → Gs.).");
+    if (lineas.length === 0) return setErr("Agregá al menos un producto.");
+    const mala = lineas.find((l) => l.cantidad <= 0 || l.costo_input <= 0);
+    if (mala) return setErr(`Revisá "${mala.producto_nombre}": cantidad y costo deben ser mayores a 0.`);
+
+    const items: OrdenItemPayload[] = lineas.map((l) => {
+      const costoPyg = l.costo_input * tc;
+      const totalLinea = costoPyg * l.cantidad;
+      const { subtotal, monto_iva } = desglosarIva(totalLinea, l.iva_tipo);
+      return {
+        producto_id: l.producto_id,
+        producto_nombre: l.producto_nombre,
+        cantidad: l.cantidad,
+        costo_unitario: Math.round(costoPyg),
+        costo_unitario_original: l.costo_input,
+        iva_tipo: l.iva_tipo,
+        subtotal: Math.round(subtotal),
+        monto_iva: Math.round(monto_iva),
+        total: Math.round(totalLinea),
+        precio_venta: Math.round(l.precio_venta),
+        margen_venta: null,
+      };
+    });
+
+    setEnviando(true);
+    try {
+      // Comprobante opcional: solo si se sube uno nuevo; si no, el server conserva el existente.
+      let comprobante: { comprobante_storage_path: string; comprobante_nombre: string; comprobante_mime_type: string } | null = null;
+      if (comprobanteFile) {
+        const up = await uploadComprobante(comprobanteFile);
+        if (!up.ok) { setErr(`Comprobante: ${up.error}`); return; }
+        comprobante = up.data;
+      }
+
+      const res = await updateOrdenCompra(
+        numeroOc,
+        {
+          proveedor_id: cab.proveedor_id,
+          proveedor_nombre: cab.proveedor_nombre,
+          moneda: cab.moneda,
+          tipo_cambio: tc,
+          tipo_pago: cab.tipo_pago,
+          plazo_dias: cab.tipo_pago === "credito" && cab.plazo_dias ? parseInt(cab.plazo_dias) : undefined,
+          observacion: cab.observacion.trim() || null,
+          nro_timbrado: cab.nro_timbrado.trim() || null,
+          numero_factura: cab.numero_factura.trim() || null,
+          comprobante_storage_path: comprobante?.comprobante_storage_path ?? null,
+          comprobante_nombre: comprobante?.comprobante_nombre ?? null,
+          comprobante_mime_type: comprobante?.comprobante_mime_type ?? null,
+        },
+        items
+      );
+      if (!res.success) { setErr(res.error); return; }
+      router.push(`/compras/ordenes/${encodeURIComponent(res.numero_oc)}`);
+    } finally {
+      setEnviando(false);
+    }
+  }
+
+  if (cargando) {
+    return (
+      <div className="flex items-center gap-2 p-6 text-sm text-slate-500">
+        <Loader2 className="h-4 w-4 animate-spin" /> Cargando orden…
+      </div>
+    );
+  }
+  if (cargaError) {
+    return (
+      <div className="space-y-4">
+        <Link href={`/compras/ordenes/${encodeURIComponent(numeroOc)}`} className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-[#3F8E91]">
+          ← Volver a la orden
+        </Link>
+        <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>{cargaError}</span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <Link href={`/compras/ordenes/${encodeURIComponent(numeroOc)}`} className="inline-flex items-center gap-1 text-sm font-medium text-slate-500 hover:text-[#3F8E91]">
+        ← Volver a la orden
+      </Link>
+      <div>
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900">Editar orden <span className="font-mono">{numeroOc}</span></h1>
+        <p className="mt-1 text-sm text-slate-500">Modificá productos, cantidades, costos o condiciones. Solo se puede editar mientras la orden esté pendiente (sin recepciones).</p>
+      </div>
+
+      <form onSubmit={onSubmit} className="space-y-6">
+        {/* Cabecera */}
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm space-y-5">
+          <div>
+            <label className="mb-1 block text-xs font-semibold text-slate-600">Proveedor <span className="text-red-500">*</span></label>
+            <ProveedorPicker
+              value={cab.proveedor_id}
+              onChange={(id, nombre) => setCab((p) => ({ ...p, proveedor_id: id, proveedor_nombre: nombre }))}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">N° de timbrado <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input value={cab.nro_timbrado} onChange={(e) => setCab((p) => ({ ...p, nro_timbrado: e.target.value }))} placeholder="Ej: 001-001-0000001" className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">N° de factura <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input value={cab.numero_factura} onChange={(e) => setCab((p) => ({ ...p, numero_factura: e.target.value }))} placeholder="Ej: 001-001-0000123" className={inputClass} />
+            </div>
+            <div className="sm:col-span-2">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Reemplazar comprobante / presupuesto <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input
+                type="file"
+                accept="image/jpeg,image/png,image/webp,application/pdf"
+                onChange={handleComprobanteChange}
+                className="block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-[#4FAEB2] file:px-4 file:py-2 file:text-xs file:font-semibold file:text-white hover:file:bg-[#3F8E91]"
+              />
+              {comprobanteFile && !comprobanteError && (
+                <p className="mt-1.5 text-xs text-green-600">✓ {comprobanteFile.name} reemplazará al comprobante actual al guardar.</p>
+              )}
+              {comprobanteError && <p className="mt-1.5 text-xs text-red-600">{comprobanteError}</p>}
+              <p className="mt-1 text-xs text-slate-400">Si lo dejás vacío, se conserva el comprobante actual. JPG, PNG, WebP o PDF — máx. 10 MB.</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Moneda</label>
+              <select value={cab.moneda} onChange={(e) => setCab((p) => ({ ...p, moneda: e.target.value as Moneda }))} className={inputClass}>
+                <option value="PYG">Guaraníes (PYG)</option>
+                <option value="USD">Dólares (USD)</option>
+              </select>
+            </div>
+            {cab.moneda === "USD" && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Tipo de cambio</label>
+                <input type="number" min={0} value={cab.tipo_cambio} onChange={(e) => setCab((p) => ({ ...p, tipo_cambio: e.target.value }))} placeholder="Ej: 7300" className={inputClass} />
+              </div>
+            )}
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Tipo de pago</label>
+              <select value={cab.tipo_pago} onChange={(e) => setCab((p) => ({ ...p, tipo_pago: e.target.value as TipoPago }))} className={inputClass}>
+                <option value="contado">Contado</option>
+                <option value="credito">Crédito</option>
+              </select>
+            </div>
+            {cab.tipo_pago === "credito" && (
+              <div>
+                <label className="mb-1 block text-xs font-semibold text-slate-600">Plazo (días)</label>
+                <input type="number" min={1} value={cab.plazo_dias} onChange={(e) => setCab((p) => ({ ...p, plazo_dias: e.target.value }))} className={inputClass} />
+              </div>
+            )}
+            <div className="sm:col-span-2 lg:col-span-4">
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Observación <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input value={cab.observacion} onChange={(e) => setCab((p) => ({ ...p, observacion: e.target.value }))} className={inputClass} placeholder="Notas de la orden…" />
+            </div>
+          </div>
+        </div>
+
+        {/* Buscador de productos */}
+        <div ref={searchBoxRef} className="relative">
+          <Search className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-[#4FAEB2]" />
+          <input
+            ref={inputRef}
+            value={q}
+            onChange={(e) => { setQ(e.target.value); setSearchOpen(true); setHighlight(-1); }}
+            onFocus={() => setSearchOpen(true)}
+            onKeyDown={onKeyDown}
+            placeholder="Buscar producto por nombre, SKU o palabras clave…"
+            className="h-14 w-full rounded-2xl border-2 border-[#4FAEB2]/25 bg-white pl-12 pr-4 text-base outline-none focus:border-[#4FAEB2] focus:ring-4 focus:ring-[#4FAEB2]/15"
+            autoComplete="off"
+          />
+          {searchOpen && q.trim().length >= 2 && (
+            <div className="absolute left-0 right-0 top-full z-30 mt-2 max-h-[50vh] overflow-y-auto rounded-2xl border-2 border-[#4FAEB2]/20 bg-white shadow-[0_16px_40px_-12px_rgba(15,23,42,0.28)]">
+              {buscando && resultados.length === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-slate-400">Buscando…</div>
+              ) : resultados.length === 0 ? (
+                <div className="px-4 py-6 text-center text-sm text-slate-400">Sin resultados para &quot;{q}&quot;</div>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {resultados.map((p, i) => {
+                    const sinStock = p.stock_actual <= 0;
+                    return (
+                      <li key={p.id}>
+                        <button type="button"
+                          onMouseEnter={() => setHighlight(i)}
+                          onClick={() => addProducto(p)}
+                          className={`flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors ${i === highlight ? "bg-[#4FAEB2]/[0.08]" : "hover:bg-slate-50"}`}>
+                          <ProductoThumb url={p.imagen_url} alt={p.nombre} />
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-semibold text-slate-800">{p.nombre}</p>
+                            <div className="mt-0.5 flex items-center gap-2 text-xs text-slate-500">
+                              <span className="font-mono">{p.sku || "—"}</span>
+                              <span className="text-slate-300">·</span>
+                              <span className={`font-semibold ${sinStock ? "text-red-600" : p.stock_actual < 5 ? "text-amber-600" : "text-emerald-700"}`}>
+                                {sinStock ? "Sin stock" : `${p.stock_actual} en stock`}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="shrink-0 text-sm font-bold tabular-nums text-slate-800">{fmtGs(p.precio_venta)}</span>
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-lg bg-[#4FAEB2]/10 px-2.5 py-1 text-xs font-bold text-[#3F8E91]">
+                            <Plus className="h-3.5 w-3.5" strokeWidth={2.5} /> Agregar
+                          </span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                  {resultados.length >= 20 && (
+                    <li className="px-4 py-2 text-center text-[11px] text-slate-400">Mostrando los primeros 20. Refiná la búsqueda para acotar.</li>
+                  )}
+                </ul>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Ítems */}
+        <div className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+          {lineas.length === 0 ? (
+            <p className="py-12 text-center text-sm text-slate-400">Buscá productos arriba y agregalos a la orden.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[820px] text-sm">
+                <thead className="border-b border-slate-200 bg-slate-50">
+                  <tr>
+                    <th className="px-4 py-3 text-left text-[11px] font-bold uppercase tracking-wide text-slate-500">Producto</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">Cant.</th>
+                    <th className="px-3 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Costo unit. ({cab.moneda})</th>
+                    <th className="px-3 py-3 text-center text-[11px] font-bold uppercase tracking-wide text-slate-500">IVA</th>
+                    <th className="px-4 py-3 text-right text-[11px] font-bold uppercase tracking-wide text-slate-500">Total (Gs.)</th>
+                    <th className="w-10 px-2 py-3" />
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100">
+                  {lineas.map((l) => (
+                    <tr key={l.producto_id} className="hover:bg-[#4FAEB2]/5">
+                      <td className="px-4 py-3">
+                        <p className="font-semibold text-slate-900">{l.producto_nombre}</p>
+                        {l.sku && <p className="font-mono text-[11px] text-slate-500">{l.sku}</p>}
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="mx-auto flex w-fit items-center gap-1.5">
+                          <input
+                            type="number"
+                            min={minimoCantidad(l.unidad_medida)}
+                            step={pasoCantidad(l.unidad_medida)}
+                            inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
+                            value={l.cantidad}
+                            onChange={(e) => {
+                              const n = parseCantidad(e.target.value, l.unidad_medida);
+                              if (n !== null) updateLinea(l.producto_id, { cantidad: n });
+                            }}
+                            onBlur={(e) => {
+                              const n = parseCantidad(e.target.value, l.unidad_medida);
+                              updateLinea(l.producto_id, { cantidad: clampCantidad(n ?? 0, l.unidad_medida) });
+                            }}
+                            className={`h-8 rounded-md border border-slate-200 px-2 text-center text-sm tabular-nums ${
+                              permiteDecimales(l.unidad_medida) ? "w-24" : "w-16"
+                            }`}
+                          />
+                          <span className="text-[10px] uppercase text-slate-400">{l.unidad_medida}</span>
+                        </div>
+                      </td>
+                      <td className="px-3 py-3 text-right">
+                        <input type="number" min={0} value={l.costo_input}
+                          onChange={(e) => updateLinea(l.producto_id, { costo_input: Math.max(0, Number(e.target.value) || 0) })}
+                          className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums" />
+                      </td>
+                      <td className="px-3 py-3">
+                        <div className="mx-auto inline-flex overflow-hidden rounded-lg border border-slate-200">
+                          {(["exenta", "5", "10"] as const).map((iva) => {
+                            const sel = l.iva_tipo === iva;
+                            return (
+                              <button key={iva} type="button" onClick={() => updateLinea(l.producto_id, { iva_tipo: iva })}
+                                className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#4FAEB2] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+                                {iva === "exenta" ? "Ex" : `${iva}%`}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm font-bold tabular-nums text-slate-900">
+                        {fmtGs(l.costo_input * tc * l.cantidad)}
+                      </td>
+                      <td className="px-2 py-3 text-center">
+                        <button type="button" onClick={() => removeLinea(l.producto_id)} className="rounded p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600" aria-label="Quitar">
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {err && <p className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{err}</p>}
+
+        {/* Total + submit */}
+        <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">Total estimado</p>
+            <p className="text-2xl font-bold tabular-nums text-slate-900">{fmtGs(totalOc)}</p>
+          </div>
+          <div className="flex items-center gap-2">
+            <Link href={`/compras/ordenes/${encodeURIComponent(numeroOc)}`}
+              className="rounded-xl border border-slate-200 px-5 py-3 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+              Cancelar
+            </Link>
+            <button type="submit" disabled={enviando}
+              className="inline-flex items-center gap-2 rounded-xl bg-[#4FAEB2] px-6 py-3 text-sm font-bold text-white shadow-md shadow-[#4FAEB2]/30 hover:bg-[#3F8E91] disabled:opacity-50">
+              {enviando && <Loader2 className="h-4 w-4 animate-spin" />}
+              Guardar cambios
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  );
+}

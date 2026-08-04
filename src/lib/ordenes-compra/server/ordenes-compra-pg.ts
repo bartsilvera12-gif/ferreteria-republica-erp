@@ -230,6 +230,109 @@ export async function insertOrdenCompra(
 }
 
 /**
+ * Edita una OC (cabecera + líneas) reemplazando todas sus filas. Solo se permite
+ * mientras la orden esté 'pendiente' y NADA recibido (cantidad_recibida = 0 en
+ * todas las líneas); si ya hubo recepción, se bloquea para no romper la
+ * trazabilidad. Preserva numero_oc, fecha y creador; el comprobante existente se
+ * mantiene salvo que se envíe uno nuevo (comprobante_storage_path no nulo).
+ */
+export async function actualizarOrdenCompra(
+  schemaRaw: string,
+  empresaId: string,
+  numeroOc: string,
+  header: OrdenCompraHeaderInput,
+  items: OrdenCompraItemInput[]
+): Promise<OrdenCompraResult> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  if (!Array.isArray(items) || items.length === 0) {
+    throw new Error("La orden de compra no tiene productos.");
+  }
+  const t = quoteSchemaTable(schema, "ordenes_compra");
+  const client = await pool().connect();
+  const inserted: OrdenCompraRow[] = [];
+  try {
+    await client.query("BEGIN");
+    // Bloquear las filas de la OC y validar que se puede editar.
+    const existing = await client.query<{
+      estado: string; cantidad_recibida: string | number; fecha: string;
+      created_by: string | null; usuario_nombre: string | null;
+      comprobante_url: string | null; comprobante_storage_path: string | null;
+      comprobante_nombre: string | null; comprobante_mime_type: string | null;
+    }>(
+      `SELECT estado, cantidad_recibida, fecha, created_by, usuario_nombre,
+              comprobante_url, comprobante_storage_path, comprobante_nombre, comprobante_mime_type
+         FROM ${t}
+        WHERE empresa_id = $1::uuid AND numero_oc = $2
+        FOR UPDATE`,
+      [empresaId, numeroOc]
+    );
+    if (existing.rows.length === 0) {
+      throw new Error("Orden de compra no encontrada.");
+    }
+    const bloqueada = existing.rows.find(
+      (r) => r.estado !== "pendiente" || Number(r.cantidad_recibida) > 0
+    );
+    if (bloqueada) {
+      throw new Error("No se puede editar: la orden ya tiene recepciones o no está pendiente.");
+    }
+    // Preservar datos originales de la primera fila.
+    const orig = existing.rows[0];
+    const fechaOrig = orig.fecha;
+    const createdByOrig = orig.created_by;
+    const usuarioNombreOrig = orig.usuario_nombre;
+    // Comprobante: usar el nuevo si vino; si no, conservar el existente.
+    const compPath = header.comprobante_storage_path ?? orig.comprobante_storage_path;
+    const compUrl = header.comprobante_storage_path ? header.comprobante_url : orig.comprobante_url;
+    const compNombre = header.comprobante_storage_path ? header.comprobante_nombre : orig.comprobante_nombre;
+    const compMime = header.comprobante_storage_path ? header.comprobante_mime_type : orig.comprobante_mime_type;
+
+    await client.query(`DELETE FROM ${t} WHERE empresa_id = $1::uuid AND numero_oc = $2`, [empresaId, numeroOc]);
+
+    for (const it of items) {
+      const { rows } = await client.query<OrdenCompraRow>(
+        `INSERT INTO ${t} (
+           empresa_id, numero_oc, proveedor_id, proveedor_nombre, producto_id, producto_nombre,
+           cantidad, moneda, tipo_cambio, costo_unitario_original, costo_unitario,
+           iva_tipo, subtotal, monto_iva, total, precio_venta, margen_venta,
+           tipo_pago, plazo_dias, estado, observacion,
+           nro_timbrado, numero_factura,
+           comprobante_url, comprobante_storage_path, comprobante_nombre, comprobante_mime_type,
+           fecha, created_by, usuario_nombre
+         ) VALUES (
+           $1::uuid, $2, $3::uuid, $4, $5::uuid, $6,
+           $7::numeric, $8, $9::numeric, $10::numeric, $11::numeric,
+           $12, $13::numeric, $14::numeric, $15::numeric, $16::numeric, $17::numeric,
+           $18, $19::integer, 'pendiente', $20,
+           $21, $22,
+           $23, $24, $25, $26,
+           $27::timestamptz, $28::uuid, $29
+         )
+         RETURNING ${COLS}`,
+        [
+          empresaId, numeroOc, header.proveedor_id, header.proveedor_nombre,
+          it.producto_id, it.producto_nombre,
+          it.cantidad, header.moneda, header.tipo_cambio,
+          it.costo_unitario_original, it.costo_unitario,
+          it.iva_tipo, it.subtotal, it.monto_iva, it.total, it.precio_venta, it.margen_venta,
+          header.tipo_pago, header.plazo_dias, header.observacion,
+          header.nro_timbrado, header.numero_factura,
+          compUrl, compPath, compNombre, compMime,
+          fechaOrig, createdByOrig, usuarioNombreOrig,
+        ]
+      );
+      inserted.push(rows[0]);
+    }
+    await client.query("COMMIT");
+    return { numero_oc: numeroOc, ordenes: inserted };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * Cancela una OC (todas sus líneas). Solo mientras esté 'pendiente' (nada
  * recibido todavía) — si ya tiene alguna recepción parcial, no se puede
  * cancelar por acá para no perder la trazabilidad de lo ya comprado/recibido.

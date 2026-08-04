@@ -10,6 +10,7 @@ interface OrdenApiRow {
   subtotal: string | number; monto_iva: string | number; total: string | number;
   precio_venta: string | number; margen_venta: string | number | null;
   tipo_pago: string; plazo_dias: number | null; estado: string; observacion: string | null;
+  nro_timbrado?: string | null; numero_factura?: string | null;
   compra_numero_control: string | null; recibida_at: string | null;
   cancelada_at: string | null; cancelada_motivo: string | null; fecha: string;
 }
@@ -42,6 +43,8 @@ function mapRow(r: OrdenApiRow): OrdenCompra {
     plazo_dias: r.plazo_dias ?? undefined,
     estado: r.estado as OrdenCompra["estado"],
     observacion: r.observacion ?? null,
+    nro_timbrado: r.nro_timbrado ?? null,
+    numero_factura: r.numero_factura ?? null,
     compra_numero_control: r.compra_numero_control ?? null,
     recibida_at: r.recibida_at ?? null,
     cancelada_at: r.cancelada_at ?? null,
@@ -124,6 +127,30 @@ export async function saveOrdenCompra(
     }
     const data = j.data as { numero_oc?: string; ordenes?: OrdenApiRow[] };
     return { success: true, numero_oc: data.numero_oc ?? "", ordenes: (data.ordenes ?? []).map(mapRow) };
+  } catch (e) {
+    return { success: false, error: e instanceof Error ? e.message : "Error de red" };
+  }
+}
+
+/** Edita una OC pendiente (reemplaza cabecera + líneas). */
+export async function updateOrdenCompra(
+  numeroOc: string,
+  header: OrdenHeaderPayload,
+  items: OrdenItemPayload[]
+): Promise<OkOrden | ErrOrden> {
+  try {
+    const r = await fetch(`/api/ordenes-compra/${encodeURIComponent(numeroOc)}`, {
+      method: "PUT",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ ...header, items }),
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.success) {
+      return { success: false, error: (j as { error?: string })?.error ?? `Error ${r.status}` };
+    }
+    const data = j.data as { numero_oc?: string; ordenes?: OrdenApiRow[] };
+    return { success: true, numero_oc: data.numero_oc ?? numeroOc, ordenes: (data.ordenes ?? []).map(mapRow) };
   } catch (e) {
     return { success: false, error: e instanceof Error ? e.message : "Error de red" };
   }
