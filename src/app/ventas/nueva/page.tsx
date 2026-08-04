@@ -170,7 +170,9 @@ export default function NuevaVentaPage() {
 
   // Cliente (opcional). Si se selecciona, se envía cliente_id al crear la venta.
   type ClienteLite = { id: string; label: string; ruc: string | null; usa_nota_remision: boolean };
-  const [clientes, setClientes] = useState<ClienteLite[]>([]);
+  const [clientes, setClientes] = useState<ClienteLite[]>([]); // resultados de la búsqueda server-side
+  const [clienteSel, setClienteSel] = useState<ClienteLite | null>(null);
+  const [clienteBuscando, setClienteBuscando] = useState(false);
   const [clienteId, setClienteId] = useState("");
   const [clienteQuery, setClienteQuery] = useState("");
   const [clienteOpen, setClienteOpen] = useState(false);
@@ -196,7 +198,7 @@ export default function NuevaVentaPage() {
   }, [clienteId]);
 
   function handleClienteCreado(c: ClienteCreado) {
-    setClientes((prev) => [c, ...prev.filter((x) => x.id !== c.id)]);
+    setClienteSel({ id: c.id, label: c.label, ruc: c.ruc ?? null, usa_nota_remision: c.usa_nota_remision });
     setClienteId(c.id);
     setClienteQuery("");
     setGeneraNotaRemision(c.usa_nota_remision);
@@ -476,25 +478,54 @@ export default function NuevaVentaPage() {
     return () => { cancelled = true; };
   }, []);
 
-  // Cargar clientes (buscador opcional de cliente en la venta).
+  // Buscador de cliente SERVER-SIDE (catálogo grande: 8.900+). Escribís y consulta
+  // /api/clientes paginado por nombre/RUC; no trae toda la base (topaba en 1000).
   useEffect(() => {
+    const q = clienteQuery.trim();
+    if (clienteSel || q.length < 2) { setClientes([]); setClienteBuscando(false); return; }
+    setClienteBuscando(true);
     let cancelled = false;
-    fetch("/api/clientes", { credentials: "include", cache: "no-store" })
+    const t = setTimeout(() => {
+      fetchWithSupabaseSession(`/api/clientes?page=1&page_size=20&q=${encodeURIComponent(q)}`, { cache: "no-store" })
+        .then((r) => r.json())
+        .then((j) => {
+          if (cancelled) return;
+          const rows = (j?.success && Array.isArray(j.data?.clientes) ? j.data.clientes : []) as Record<string, unknown>[];
+          const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+          setClientes(rows.map((r) => ({
+            id: String(r.id),
+            label: s(r.empresa) || s(r.nombre_contacto) || s(r.nombre) || "Cliente",
+            ruc: s(r.ruc) || null,
+            usa_nota_remision: r.usa_nota_remision === true,
+          })));
+        })
+        .catch(() => { if (!cancelled) setClientes([]); })
+        .finally(() => { if (!cancelled) setClienteBuscando(false); });
+    }, 280);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [clienteQuery, clienteSel]);
+
+  // Hidratar el cliente elegido cuando el id viene de afuera (precarga de un
+  // pedido/presupuesto a facturar): trae su ficha por id para mostrar el nombre.
+  useEffect(() => {
+    if (!clienteId || (clienteSel && clienteSel.id === clienteId)) return;
+    let cancelled = false;
+    fetchWithSupabaseSession(`/api/clientes/${clienteId}`, { cache: "no-store" })
       .then((r) => r.json())
       .then((j) => {
-        if (cancelled || !j?.success || !Array.isArray(j.data)) return;
+        if (cancelled || !j?.success || !j.data) return;
+        const r = j.data as Record<string, unknown>;
         const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
-        const lite: ClienteLite[] = (j.data as Record<string, unknown>[]).map((r) => ({
+        setClienteSel({
           id: String(r.id),
           label: s(r.empresa) || s(r.nombre_contacto) || s(r.nombre) || "Cliente",
           ruc: s(r.ruc) || null,
           usa_nota_remision: r.usa_nota_remision === true,
-        }));
-        setClientes(lite);
+        });
       })
-      .catch(() => { /* el buscador de cliente es opcional, no bloquea la venta */ });
+      .catch(() => { /* opcional */ });
     return () => { cancelled = true; };
-  }, []);
+  }, [clienteId, clienteSel]);
 
   // UX rápida: al entrar, enfocar el autocompletar para empezar a cargar de una
   // (sin abrir modales). El "Buscador avanzado" (picker) queda a un clic.
@@ -613,12 +644,8 @@ export default function NuevaVentaPage() {
   const creditoValido = tipoVenta === "CONTADO" || (plazoDiasNum >= 1 && !!clienteId);
   const ventaValida   = items.length > 0 && creditoValido;
 
-  // Cliente (opcional) — selección + filtrado del buscador.
-  const clienteSel = clientes.find((c) => c.id === clienteId) ?? null;
-  const clientesFiltrados = (clienteQuery.trim() === ""
-    ? clientes
-    : clientes.filter((c) => productoMatchesQuery(clienteQuery, c.label, c.ruc))
-  ).slice(0, 50);
+  // Cliente (opcional) — resultados de la búsqueda server-side (ya vienen filtrados).
+  const clientesFiltrados = clientes;
 
   // Cobro: entidad seleccionada + filtrado por código/nombre (tokens).
   const entidadSel = entidades.find((e) => e.id === pagoEntidadId) ?? null;
@@ -1086,7 +1113,7 @@ export default function NuevaVentaPage() {
                 <input
                   type="text"
                   value={clienteSel ? clienteSel.label : clienteQuery}
-                  onChange={(e) => { setClienteId(""); setClienteQuery(e.target.value); setClienteOpen(true); }}
+                  onChange={(e) => { setClienteSel(null); setClienteId(""); setClienteQuery(e.target.value); setClienteOpen(true); }}
                   onFocus={() => setClienteOpen(true)}
                   placeholder="Buscar por nombre o RUC…"
                   className={`${inputClass} ${clienteSel ? "font-medium" : ""}`}
@@ -1094,23 +1121,25 @@ export default function NuevaVentaPage() {
                 {clienteSel && (
                   <button
                     type="button"
-                    onClick={() => { setClienteId(""); setClienteQuery(""); setGeneraNotaRemision(false); }}
+                    onClick={() => { setClienteSel(null); setClienteId(""); setClienteQuery(""); setGeneraNotaRemision(false); }}
                     className="shrink-0 rounded-lg border border-slate-200 px-3 text-xs text-slate-500 hover:bg-slate-50"
                   >
                     Quitar
                   </button>
                 )}
               </div>
-              {clienteOpen && !clienteSel && (
+              {clienteOpen && !clienteSel && clienteQuery.trim().length >= 2 && (
                 <div className="absolute z-20 mt-1 w-full max-h-64 overflow-auto rounded-lg border border-slate-200 bg-white shadow-lg">
-                  {clientesFiltrados.length === 0 ? (
+                  {clienteBuscando ? (
+                    <p className="px-3 py-2 text-xs text-gray-400">Buscando…</p>
+                  ) : clientesFiltrados.length === 0 ? (
                     <p className="px-3 py-2 text-xs text-gray-400">Sin clientes que coincidan.</p>
                   ) : (
                     clientesFiltrados.map((c) => (
                       <button
                         key={c.id}
                         type="button"
-                        onClick={() => { setClienteId(c.id); setClienteQuery(""); setClienteOpen(false); setGeneraNotaRemision(c.usa_nota_remision); }}
+                        onClick={() => { setClienteSel(c); setClienteId(c.id); setClienteQuery(""); setClienteOpen(false); setGeneraNotaRemision(c.usa_nota_remision); }}
                         className="block w-full text-left px-3 py-2 text-sm hover:bg-slate-50"
                       >
                         <span className="font-medium text-gray-800">{c.label}</span>

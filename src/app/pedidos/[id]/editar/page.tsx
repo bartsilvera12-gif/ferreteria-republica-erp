@@ -25,7 +25,7 @@ import {
   ImageIcon,
 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { getClientes } from "@/lib/clientes/storage";
+import { clienteNombre } from "@/lib/clientes/storage";
 import {
   pasoCantidad,
   permiteDecimales,
@@ -33,7 +33,7 @@ import {
 } from "@/lib/productos/unidades";
 import CantidadInput from "@/components/ui/CantidadInput";
 import type { Cliente } from "@/lib/clientes/types";
-import ClienteBuscador from "@/components/clientes/ClienteBuscador";
+import ClienteBuscadorServer from "@/components/clientes/ClienteBuscadorServer";
 import CrearClienteModal from "@/components/clientes/CrearClienteModal";
 
 type PresentacionLite = {
@@ -146,8 +146,9 @@ export default function EditarPedidoPage({
 
   // ---- Carrito + cliente ----
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState<string>("");
+  const [clienteNombreSel, setClienteNombreSel] = useState<string>("");
+  const [clienteTelSel, setClienteTelSel] = useState<string | null>(null);
   const [showCrearCliente, setShowCrearCliente] = useState(false);
 
   // ---- Buscador inline ----
@@ -168,10 +169,7 @@ export default function EditarPedidoPage({
     let cancel = false;
     (async () => {
       try {
-        const [resPed, listClientes] = await Promise.all([
-          fetchWithSupabaseSession(`/api/pedidos-caja/${pedidoId}`, { cache: "no-store" }),
-          getClientes().catch(() => []),
-        ]);
+        const resPed = await fetchWithSupabaseSession(`/api/pedidos-caja/${pedidoId}`, { cache: "no-store" });
         const j = await resPed.json();
         if (cancel) return;
         if (!resPed.ok || !j?.success || !j.data?.pedido) {
@@ -179,12 +177,13 @@ export default function EditarPedidoPage({
           setLoadingPedido(false);
           return;
         }
-        setClientes(listClientes);
         const p = j.data.pedido as {
           numero: string | null;
           titulo: string;
           estado: string;
           cliente_id: string | null;
+          cliente_nombre: string | null;
+          cliente_telefono: string | null;
           items: Array<{
             producto_id: string;
             producto_nombre: string;
@@ -201,6 +200,8 @@ export default function EditarPedidoPage({
         setNumero(p.numero ?? p.titulo);
         setEstado(p.estado);
         setClienteId(p.cliente_id ?? "");
+        setClienteNombreSel(p.cliente_nombre ?? "");
+        setClienteTelSel(p.cliente_telefono ?? null);
 
         if (p.estado === "facturado" || p.estado === "cancelado") {
           setPedidoError(
@@ -435,14 +436,10 @@ export default function EditarPedidoPage({
     setErrMsg(null);
     setOkMsg(null);
     try {
-      const cliente = clientes.find((c) => c.id === clienteId);
-      const nombreCli = cliente
-        ? cliente.empresa || cliente.nombre_contacto || null
-        : null;
       const body = {
         cliente_id: clienteId || null,
-        cliente_nombre: nombreCli,
-        cliente_telefono: cliente?.telefono ?? null,
+        cliente_nombre: clienteNombreSel || null,
+        cliente_telefono: clienteTelSel,
         items: cart.map((it) => ({
           producto_id: it.producto_id,
           producto_nombre: it.producto_nombre,
@@ -769,7 +766,15 @@ export default function EditarPedidoPage({
               <User className="h-3.5 w-3.5 text-[#4FAEB2]" />
               Cliente (opcional)
             </label>
-            <ClienteBuscador clientes={clientes} value={clienteId} onChange={setClienteId} />
+            <ClienteBuscadorServer
+              selectedId={clienteId}
+              selectedLabel={clienteNombreSel}
+              onSelect={(c) => {
+                setClienteId(c?.id ?? "");
+                setClienteNombreSel(c ? clienteNombre(c) : "");
+                setClienteTelSel(c?.telefono ?? null);
+              }}
+            />
             {!clienteId && (
               <button type="button" onClick={() => setShowCrearCliente(true)} className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-[#3F8E91] hover:underline">
                 <Plus className="h-3.5 w-3.5" /> Crear cliente nuevo
@@ -806,10 +811,11 @@ export default function EditarPedidoPage({
       {showCrearCliente && (
         <CrearClienteModal
           onClose={() => setShowCrearCliente(false)}
-          onCreated={async (c) => {
+          onCreated={(c) => {
             setShowCrearCliente(false);
-            try { setClientes(await getClientes()); } catch { /* igual seleccionamos por id */ }
             setClienteId(c.id);
+            setClienteNombreSel(clienteNombre(c as unknown as Cliente));
+            setClienteTelSel((c as { telefono?: string | null }).telefono ?? null);
           }}
         />
       )}

@@ -35,9 +35,9 @@ import {
 } from "@/lib/productos/unidades";
 import CantidadInput from "@/components/ui/CantidadInput";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { getClientes } from "@/lib/clientes/storage";
+import { clienteNombre } from "@/lib/clientes/storage";
 import type { Cliente } from "@/lib/clientes/types";
-import ClienteBuscador from "@/components/clientes/ClienteBuscador";
+import ClienteBuscadorServer from "@/components/clientes/ClienteBuscadorServer";
 import CrearClienteModal from "@/components/clientes/CrearClienteModal";
 
 type PresentacionLite = {
@@ -144,8 +144,9 @@ export default function NuevoPedidoPage() {
   const [hits, setHits] = useState<ProductoHit[]>([]);
   const [buscando, setBuscando] = useState(false);
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [clientes, setClientes] = useState<Cliente[]>([]);
   const [clienteId, setClienteId] = useState<string>("");
+  const [clienteNombreSel, setClienteNombreSel] = useState<string>("");
+  const [clienteTelSel, setClienteTelSel] = useState<string | null>(null);
   const [showCrearCliente, setShowCrearCliente] = useState(false);
   const [enviando, setEnviando] = useState(false);
   const [okMsg, setOkMsg] = useState<string | null>(null);
@@ -202,7 +203,6 @@ export default function NuevoPedidoPage() {
   }, [q]);
 
   useEffect(() => {
-    getClientes().then(setClientes).catch(() => setClientes([]));
     inputRef.current?.focus();
   }, []);
 
@@ -377,14 +377,10 @@ export default function NuevoPedidoPage() {
     setErrMsg(null);
     setOkMsg(null);
     try {
-      const cliente = clientes.find((c) => c.id === clienteId);
-      const nombreCli = cliente
-        ? cliente.empresa || cliente.nombre_contacto || null
-        : null;
       const body = {
         cliente_id: clienteId || null,
-        cliente_nombre: nombreCli,
-        cliente_telefono: cliente?.telefono ?? null,
+        cliente_nombre: clienteNombreSel || null,
+        cliente_telefono: clienteTelSel,
         items: cart.map((it) => ({
           producto_id: it.producto_id,
           producto_nombre: it.producto_nombre,
@@ -411,7 +407,7 @@ export default function NuevoPedidoPage() {
       const numero = j.data?.pedido?.numero ?? "";
       setOkMsg(`Pedido ${numero} creado. Redirigiendo...`);
       setCart([]);
-      setClienteId("");
+      setClienteId(""); setClienteNombreSel(""); setClienteTelSel(null);
       setTimeout(() => router.push("/pedidos"), 900);
     } catch (e) {
       setErrMsg(
@@ -771,10 +767,14 @@ export default function NuevoPedidoPage() {
               <User className="h-3.5 w-3.5 text-[#4FAEB2]" />
               Cliente (opcional)
             </label>
-            <ClienteBuscador
-              clientes={clientes}
-              value={clienteId}
-              onChange={setClienteId}
+            <ClienteBuscadorServer
+              selectedId={clienteId}
+              selectedLabel={clienteNombreSel}
+              onSelect={(c) => {
+                setClienteId(c?.id ?? "");
+                setClienteNombreSel(c ? clienteNombre(c) : "");
+                setClienteTelSel(c?.telefono ?? null);
+              }}
             />
             {!clienteId && (
               <button
@@ -859,14 +859,12 @@ export default function NuevoPedidoPage() {
       {showCrearCliente && (
         <CrearClienteModal
           onClose={() => setShowCrearCliente(false)}
-          onCreated={async (c) => {
+          onCreated={(c) => {
             setShowCrearCliente(false);
-            // Refrescar la lista y seleccionar el recién creado.
-            try {
-              const data = await getClientes();
-              setClientes(data);
-            } catch { /* si falla, igual seleccionamos por id */ }
+            // Seleccionar el recién creado (el buscador es server-side).
             setClienteId(c.id);
+            setClienteNombreSel(clienteNombre(c as unknown as Cliente));
+            setClienteTelSel((c as { telefono?: string | null }).telefono ?? null);
           }}
         />
       )}
