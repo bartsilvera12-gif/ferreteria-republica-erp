@@ -21,6 +21,7 @@ interface VentaRow {
   fecha: string;
   usuario_nombre?: string | null;
   vendedor?: string | null;
+  numero_factura?: string | null;
 }
 
 interface VentaItemRow {
@@ -78,6 +79,7 @@ export async function GET(request: NextRequest) {
     const tI = quoteSchemaTable(schema, "ventas_items");
     const tPc = quoteSchemaTable(schema, "pedidos_caja");
     const tU = quoteSchemaTable(schema, "usuarios");
+    const tFa = quoteSchemaTable(schema, "factura_autoimpresor");
 
     const ventasQ = await pool.query(
       `SELECT v.id::text AS id, v.empresa_id::text AS empresa_id, v.numero_control, v.moneda,
@@ -89,7 +91,11 @@ export async function GET(request: NextRequest) {
                  LEFT JOIN ${tU} u2 ON u2.email = pc2.armado_por_email
                 WHERE pc2.venta_id = v.id AND pc2.empresa_id = v.empresa_id
                 ORDER BY pc2.created_at ASC
-                LIMIT 1) AS vendedor
+                LIMIT 1) AS vendedor,
+              (SELECT fa.numero_completo
+                 FROM ${tFa} fa
+                WHERE fa.venta_id = v.id AND fa.empresa_id = v.empresa_id
+                LIMIT 1) AS numero_factura
          FROM ${tV} v
         WHERE v.empresa_id = $1::uuid
         ORDER BY v.fecha DESC
@@ -145,6 +151,7 @@ export async function GET(request: NextRequest) {
         fecha: r.fecha,
         usuario_nombre: r.usuario_nombre ?? null,
         vendedor: r.vendedor ?? null,
+        numero_factura: r.numero_factura ?? null,
       };
     });
 

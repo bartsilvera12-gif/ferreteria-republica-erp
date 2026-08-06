@@ -83,4 +83,7 @@ export interface Venta {
 
   /** Vendedor: quien armó el pedido que originó la venta (no el cajero). */
   vendedor?: string | null;
+
+  /** Número de factura autoimpresor (001-002-0000123) si la venta se facturó. */
+  numero_factura?: string | null;
 }

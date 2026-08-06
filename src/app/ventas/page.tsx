@@ -143,6 +143,7 @@ export default function VentasPage() {
     if (busqueda.trim() !== "" && !productoMatchesQuery(
       busqueda,
       v.numero_control,
+      v.numero_factura ?? "",
       ...v.items.map((i) => i.producto_nombre),
       ...v.items.map((i) => i.sku),
     )) return false;
@@ -295,7 +296,7 @@ export default function VentasPage() {
           <table className="w-full min-w-[760px] lg:min-w-0 text-left text-sm">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="py-3 pr-4 font-medium">Número</th>
+                <th className="py-3 pr-4 font-medium">Factura</th>
                 <th className="py-3 pr-4 font-medium">Productos</th>
                 <th className="hidden py-3 pr-4 text-center font-medium lg:table-cell">Ítems</th>
                 <th className="py-3 pr-4 font-medium text-right hidden lg:table-cell">Cant. total</th>
@@ -322,8 +323,12 @@ export default function VentasPage() {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
                     <tr key={v.id} onClick={() => setDetalle(v)} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors cursor-pointer">
-                      <td className="py-4 pr-4 font-mono text-xs text-gray-500 align-middle">
-                        {v.numero_control}
+                      <td className="py-4 pr-4 font-mono text-xs align-middle">
+                        {v.numero_factura ? (
+                          <span className="text-gray-700">{v.numero_factura}</span>
+                        ) : (
+                          <span className="text-gray-400" title={v.numero_control}>{v.numero_control} <span className="text-[10px]">(s/factura)</span></span>
+                        )}
                       </td>
                       <td className="py-4 pr-4 align-middle">
                         <ResumenProductos v={v} />
