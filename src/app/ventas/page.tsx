@@ -360,6 +360,7 @@ export default function VentasPage() {
                         {v.metodo_pago === "tarjeta" ? "Tarjeta"
                           : v.metodo_pago === "transferencia" ? "Transfer."
                           : v.metodo_pago === "efectivo" ? "Efectivo"
+                          : v.metodo_pago === "mixto" ? "Mixto"
                           : "—"}
                       </td>
                       <td className="hidden py-4 pr-4 align-middle text-xs text-gray-600 lg:table-cell">
@@ -515,6 +516,7 @@ function VentaDetalleModal({ venta, onClose }: { venta: Venta; onClose: () => vo
     venta.metodo_pago === "tarjeta" ? "Tarjeta / débito"
     : venta.metodo_pago === "transferencia" ? "Transferencia"
     : venta.metodo_pago === "efectivo" ? "Efectivo"
+    : venta.metodo_pago === "mixto" ? "Mixto"
     : "—";
 
   return (
@@ -544,7 +546,7 @@ function VentaDetalleModal({ venta, onClose }: { venta: Venta; onClose: () => vo
         {/* Meta: fecha/hora, vendedor, tipo, pago */}
         <div className="grid grid-cols-2 gap-x-4 gap-y-3 px-5 py-4 sm:grid-cols-4">
           <Meta label="Fecha y hora" value={formatFecha(venta.fecha)} />
-          <Meta label="Vendedor" value={venta.usuario_nombre ?? "—"} />
+          <Meta label="Vendedor" value={venta.vendedor || "—"} />
           <Meta
             label="Tipo"
             value={venta.tipo_venta === "CONTADO" ? "Contado" : `Crédito ${venta.plazo_dias ?? ""}d`}
@@ -630,9 +632,9 @@ function VentaDetalleModal({ venta, onClose }: { venta: Venta; onClose: () => vo
 
 function Meta({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[10px] font-semibold uppercase tracking-wider text-slate-400">{label}</p>
-      <p className="mt-0.5 text-sm font-medium text-slate-800">{value}</p>
+      <p className="mt-0.5 break-words text-sm font-medium text-slate-800" title={value}>{value}</p>
     </div>
   );
 }
