@@ -93,7 +93,7 @@ export async function GET(request: NextRequest) {
          FROM ${tV} v
         WHERE v.empresa_id = $1::uuid
         ORDER BY v.fecha DESC
-        LIMIT 500`,
+        LIMIT 5000`,
       [empresaId]
     );
     const ventasRows = ventasQ.rows as VentaRow[];

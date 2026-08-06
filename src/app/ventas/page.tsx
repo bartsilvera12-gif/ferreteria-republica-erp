@@ -104,6 +104,8 @@ export default function VentasPage() {
   const [devolucionesOn, setDevolucionesOn] = useState(false);
   const [devolverVentaId, setDevolverVentaId] = useState<string | null>(null);
   const [filtroIva,  setFiltroIva]  = useState<TipoIvaVenta | "">("");
+  const [pagina,     setPagina]     = useState(1);
+  const POR_PAGINA = 25;
   const [detalle,    setDetalle]    = useState<Venta | null>(null);
   // Para no distraer al cajero: caja e historial de ventas arrancan colapsados;
   // solo "Pedidos por cobrar" queda siempre visible.
@@ -153,6 +155,15 @@ export default function VentasPage() {
   });
 
   const hayFiltros = busqueda || filtroTipo || filtroIva;
+
+  // Paginación (cliente): la búsqueda/filtros aplican sobre TODO y después se
+  // corta en páginas de POR_PAGINA. Al cambiar filtros, se vuelve a la página 1.
+  useEffect(() => { setPagina(1); }, [busqueda, filtroTipo, filtroIva]);
+  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
+  const paginaSegura = Math.min(pagina, totalPaginas);
+  const paginadas = filtradas.slice((paginaSegura - 1) * POR_PAGINA, paginaSegura * POR_PAGINA);
+  const desde = filtradas.length === 0 ? 0 : (paginaSegura - 1) * POR_PAGINA + 1;
+  const hasta = Math.min(paginaSegura * POR_PAGINA, filtradas.length);
 
   return (
     <div className="space-y-8">
@@ -277,6 +288,7 @@ export default function VentasPage() {
           </span>
         </div>
 
+
         {/* Tabla — min-w fuerza scroll horizontal en mobile; columnas secundarias
             (Items, Cant total, IVA, Pago) se ocultan progresivamente. */}
         <EdgeScrollArea>
@@ -306,7 +318,7 @@ export default function VentasPage() {
                   </td>
                 </tr>
               ) : (
-                filtradas.map((v) => {
+                paginadas.map((v) => {
                   const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
                     <tr key={v.id} onClick={() => setDetalle(v)} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors cursor-pointer">
@@ -410,6 +422,36 @@ export default function VentasPage() {
             </tbody>
           </table>
         </EdgeScrollArea>
+
+        {/* Paginación */}
+        {filtradas.length > POR_PAGINA && (
+          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+            <span className="text-xs text-gray-500">
+              Mostrando {desde}–{hasta} de {filtradas.length}
+            </span>
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                onClick={() => setPagina((p) => Math.max(1, p - 1))}
+                disabled={paginaSegura <= 1}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >
+                ← Anterior
+              </button>
+              <span className="px-2 text-xs font-medium text-slate-600">
+                Página {paginaSegura} de {totalPaginas}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+                disabled={paginaSegura >= totalPaginas}
+                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
+              >
+                Siguiente →
+              </button>
+            </div>
+          </div>
+        )}
         </>)}
 
       </div>
