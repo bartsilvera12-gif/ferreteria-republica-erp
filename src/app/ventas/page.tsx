@@ -346,7 +346,7 @@ export default function VentasPage() {
                           : "—"}
                       </td>
                       <td className="hidden py-4 pr-4 align-middle text-xs text-gray-600 lg:table-cell">
-                        {v.usuario_nombre ?? "—"}
+                        {v.vendedor || "—"}
                       </td>
                       <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums align-middle">
                         {formatFecha(v.fecha)}

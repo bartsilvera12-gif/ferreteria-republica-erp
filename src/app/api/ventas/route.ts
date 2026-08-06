@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import type { Venta, LineaVenta, TipoIvaVenta, TipoPrecioVenta } from "@/lib/ventas/types";
@@ -17,6 +20,7 @@ interface VentaRow {
   plazo_dias: number | null;
   fecha: string;
   usuario_nombre?: string | null;
+  vendedor?: string | null;
 }
 
 interface VentaItemRow {
@@ -54,33 +58,57 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
   }));
 }
 
-/** GET /api/ventas — listado vía PostgREST (compatible Hostinger sin pool). */
+/**
+ * GET /api/ventas — listado vía PG pool. Trae las 500 ventas más recientes y
+ * SUS ítems con `venta_id = ANY(...)` (antes se traían todos los ventas_items y
+ * topaban en 1000 filas de PostgREST → las ventas recientes quedaban sin líneas).
+ * El "vendedor" se resuelve por el pedido que originó la venta (armado_por), no
+ * por el cajero que la registró.
+ */
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const empresaId = ctx.auth.empresa_id;
+    const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(empresaId));
+    const pool = getChatPostgresPool();
+    if (!pool) throw new Error("Pool no disponible.");
 
-    const ventasQ = await ctx.supabase
-      .from("ventas")
-      .select(
-        "id, empresa_id, numero_control, moneda, tipo_cambio, subtotal, monto_iva, total, tipo_venta, plazo_dias, metodo_pago, fecha, cliente_id, genera_nota_remision, nota_remision_numero, usuario_nombre"
+    const tV = quoteSchemaTable(schema, "ventas");
+    const tI = quoteSchemaTable(schema, "ventas_items");
+    const tPc = quoteSchemaTable(schema, "pedidos_caja");
+    const tU = quoteSchemaTable(schema, "usuarios");
+
+    const ventasQ = await pool.query(
+      `SELECT v.id::text AS id, v.empresa_id::text AS empresa_id, v.numero_control, v.moneda,
+              v.tipo_cambio, v.subtotal, v.monto_iva, v.total, v.tipo_venta, v.plazo_dias,
+              v.metodo_pago, v.fecha, v.cliente_id::text AS cliente_id,
+              v.genera_nota_remision, v.nota_remision_numero, v.usuario_nombre,
+              (SELECT COALESCE(NULLIF(TRIM(u2.nombre), ''), NULLIF(split_part(pc2.armado_por_email, '@', 1), ''))
+                 FROM ${tPc} pc2
+                 LEFT JOIN ${tU} u2 ON u2.email = pc2.armado_por_email
+                WHERE pc2.venta_id = v.id AND pc2.empresa_id = v.empresa_id
+                ORDER BY pc2.created_at ASC
+                LIMIT 1) AS vendedor
+         FROM ${tV} v
+        WHERE v.empresa_id = $1::uuid
+        ORDER BY v.fecha DESC
+        LIMIT 500`,
+      [empresaId]
+    );
+    const ventasRows = ventasQ.rows as VentaRow[];
+
+    const ventaIds = ventasRows.map((r) => r.id);
+    const itemsRows: VentaItemRow[] = ventaIds.length === 0 ? [] : (
+      await pool.query(
+        `SELECT venta_id::text AS venta_id, producto_id::text AS producto_id, producto_nombre, sku,
+                cantidad, precio_venta_original, precio_venta, tipo_iva, tipo_precio,
+                subtotal, monto_iva, total_linea
+           FROM ${tI}
+          WHERE empresa_id = $1::uuid AND venta_id = ANY($2::uuid[])`,
+        [empresaId, ventaIds]
       )
-      .eq("empresa_id", empresaId)
-      .order("fecha", { ascending: false })
-      .limit(500);
-    if (ventasQ.error) throw new Error(ventasQ.error.message);
-
-    const itemsQ = await ctx.supabase
-      .from("ventas_items")
-      .select(
-        "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, tipo_precio, subtotal, monto_iva, total_linea"
-      )
-      .eq("empresa_id", empresaId);
-    if (itemsQ.error) throw new Error(itemsQ.error.message);
-
-    const ventasRows = (ventasQ.data ?? []) as VentaRow[];
-    const itemsRows = (itemsQ.data ?? []) as VentaItemRow[];
+    ).rows as VentaItemRow[];
 
     const byVenta = new Map<string, VentaItemRow[]>();
     for (const row of itemsRows) {
@@ -116,6 +144,7 @@ export async function GET(request: NextRequest) {
         nota_remision_numero: (r as unknown as { nota_remision_numero?: string | null }).nota_remision_numero ?? null,
         fecha: r.fecha,
         usuario_nombre: r.usuario_nombre ?? null,
+        vendedor: r.vendedor ?? null,
       };
     });
 

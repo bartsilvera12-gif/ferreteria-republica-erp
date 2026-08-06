@@ -78,6 +78,9 @@ export interface Venta {
 
   fecha: string;             // ISO string, generado automáticamente
 
-  /** Nombre del usuario que registró la venta (auditoría). */
+  /** Nombre del usuario que registró la venta / cajero (auditoría). */
   usuario_nombre?: string | null;
+
+  /** Vendedor: quien armó el pedido que originó la venta (no el cajero). */
+  vendedor?: string | null;
 }
