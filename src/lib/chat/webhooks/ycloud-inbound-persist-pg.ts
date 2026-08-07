@@ -92,15 +92,28 @@ export async function persistYCloudInboundMessagePg(input: YCloudPersistPgInput)
       return { ok: true, skipped_duplicate: true };
     }
 
+    // $3 = nombre de perfil de WhatsApp (vacío en ecos/estados que no lo traen).
+    // - Contacto nuevo: name = nombre de perfil, o el teléfono si no vino.
+    // - Contacto existente: solo se "mejora" el nombre cuando llega un nombre real
+    //   Y el contacto todavía no tenía uno (name vacío o igual al teléfono). Así un
+    //   evento sin nombre (eco/estado) NUNCA pisa el nombre con el número, y no se
+    //   sobrescribe un nombre ya cargado (p. ej. renombrado a mano).
     const cIns = await client.query(
       `INSERT INTO ${ctT} (empresa_id, phone_number, name)
-       VALUES ($1::uuid, $2::text, $3::text)
+       VALUES ($1::uuid, $2::text, COALESCE(NULLIF(btrim($3::text), ''), $2::text))
        ON CONFLICT (empresa_id, phone_number)
        DO UPDATE SET
-         name = COALESCE(NULLIF(btrim(EXCLUDED.name), ''), chat_contacts.name),
+         name = CASE
+           WHEN NULLIF(btrim($3::text), '') IS NOT NULL
+            AND (chat_contacts.name IS NULL
+                 OR btrim(chat_contacts.name) = ''
+                 OR chat_contacts.name = chat_contacts.phone_number)
+           THEN btrim($3::text)
+           ELSE chat_contacts.name
+         END,
          updated_at = now()
        RETURNING id::text`,
-      [input.empresa_id, phone, input.contact_display_name.trim() || phone]
+      [input.empresa_id, phone, input.contact_display_name.trim()]
     );
     const contactId = (cIns.rows[0] as { id: string }).id;
 

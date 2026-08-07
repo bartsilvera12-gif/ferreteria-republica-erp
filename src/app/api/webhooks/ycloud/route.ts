@@ -160,7 +160,9 @@ export async function POST(request: NextRequest) {
       channel_id: resolved.channel_id,
       external_id: externalId,
       contact_phone_normalized: normalizeWaPhone(ids.from),
-      contact_display_name: displayName?.trim() || normalizeWaPhone(ids.from),
+      // Nombre de perfil de WhatsApp o vacío (el persist decide el fallback a teléfono
+      // solo para contactos nuevos; nunca pisa un nombre existente con el número).
+      contact_display_name: displayName?.trim() || "",
       message_type,
       content,
       raw_payload: env as unknown as Record<string, unknown>,
