@@ -5,7 +5,7 @@ import Sidebar from "./layout/Sidebar";
 import Header from "./layout/Header";
 import MobileBottomNav from "./layout/MobileBottomNav";
 
-const STANDALONE_ROUTES = ["/login"];
+const STANDALONE_ROUTES = ["/login", "/forgot-password", "/reset-password"];
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();

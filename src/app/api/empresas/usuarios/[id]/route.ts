@@ -11,6 +11,7 @@ import {
 } from "@/lib/dashboard/resolve-effective-dashboard-views";
 import { syncUsuarioDashboardViews } from "@/lib/dashboard/sync-usuario-dashboard-views";
 import { createServiceRoleClientForEmpresa } from "@/lib/supabase/empresa-data-schema";
+import { normalizeUsername, isValidUsername, USERNAME_FORMAT_MSG } from "@/lib/auth/username";
 import {
   isUsuariosOmnicanalTenantUnavailableError,
   sanitizePostgrestErrorForLog,
@@ -166,7 +167,7 @@ export async function GET(
     const { data: usuario, error } = await supabase
       .from("usuarios")
       .select(
-        "id, nombre, email, telefono, fecha_nacimiento, fecha_ingreso, tipo_contrato, salario_base, porcentaje_comision, ips, area, rol, estado, created_at, empresa_id"
+        "id, nombre, email, username, telefono, fecha_nacimiento, fecha_ingreso, tipo_contrato, salario_base, porcentaje_comision, ips, area, rol, estado, created_at, empresa_id"
       )
       .eq("id", id)
       .single();
@@ -320,6 +321,7 @@ export async function PATCH(
     const {
       nombre,
       email,
+      username,
       telefono,
       fecha_nacimiento,
       fecha_ingreso,
@@ -337,7 +339,7 @@ export async function PATCH(
 
     const { data: usuario, error: errGet } = await supabase
       .from("usuarios")
-      .select("id, email, estado, auth_user_id, empresa_id, rol")
+      .select("id, email, username, estado, auth_user_id, empresa_id, rol")
       .eq("id", id)
       .single();
 
@@ -381,6 +383,28 @@ export async function PATCH(
     const updates: Record<string, unknown> = {};
     if (nombre !== undefined) updates.nombre = nombre;
     if (estado !== undefined) updates.estado = estado;
+
+    // Username (opcional): "" o null lo limpia; si viene, valida formato + unicidad.
+    if (username !== undefined) {
+      const un = normalizeUsername(username);
+      if (un === "") {
+        updates.username = null;
+      } else if (!isValidUsername(un)) {
+        return NextResponse.json({ error: USERNAME_FORMAT_MSG }, { status: 400 });
+      } else if (un !== normalizeUsername(usuario.username)) {
+        const { data: dupUser } = await supabase
+          .from("usuarios")
+          .select("id")
+          .eq("username", un)
+          .neq("id", id)
+          .maybeSingle();
+        if (dupUser?.id) {
+          return NextResponse.json({ error: "Ese nombre de usuario ya está en uso." }, { status: 409 });
+        }
+        updates.username = un;
+      }
+    }
+
     if (telefono !== undefined) updates.telefono = telefono || null;
     if (fecha_nacimiento !== undefined) updates.fecha_nacimiento = fecha_nacimiento || null;
 

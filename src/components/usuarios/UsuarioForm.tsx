@@ -35,6 +35,8 @@ export function SectionCard({
 export type UsuarioFormValues = {
   nombre: string;
   email: string;
+  /** Usuario corto para login (opcional). Normalizado: minúsculas, sin espacios. */
+  username: string;
   telefono: string;
   fecha_nacimiento: string;
   fecha_ingreso: string;
@@ -59,6 +61,7 @@ export function emptyUsuarioForm(): UsuarioFormValues {
   return {
     nombre: "",
     email: "",
+    username: "",
     telefono: "",
     fecha_nacimiento: "",
     fecha_ingreso: "",
@@ -166,6 +169,21 @@ export function UsuarioFormFields({
             </div>
           </div>
           <div className="grid grid-cols-2 gap-4">
+            <div>
+              <label className={fLabel}>Usuario (para login)</label>
+              <input
+                type="text"
+                name="username"
+                value={form.username}
+                onChange={onChange}
+                placeholder="ej: carlos, caja1"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                className={fInput}
+              />
+              <p className="text-xs text-gray-400 mt-1">Opcional. Sirve para iniciar sesión sin escribir el email. Minúsculas, sin espacios.</p>
+            </div>
             <div>
               <label className={fLabel}>Fecha de nacimiento</label>
               <input type="date" name="fecha_nacimiento" value={form.fecha_nacimiento} onChange={onChange} className={fInput} />

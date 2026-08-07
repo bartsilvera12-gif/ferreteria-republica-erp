@@ -23,6 +23,7 @@ type Usuario = {
   id: string;
   nombre: string | null;
   email: string;
+  username?: string | null;
   telefono: string | null;
   fecha_nacimiento: string | null;
   fecha_ingreso?: string | null;
@@ -110,6 +111,7 @@ function usuarioToForm(u: Usuario): UsuarioFormValues {
     ...emptyUsuarioForm(),
     nombre: u.nombre ?? "",
     email: u.email ?? "",
+    username: u.username ?? "",
     telefono: u.telefono ?? "",
     fecha_nacimiento: u.fecha_nacimiento ? u.fecha_nacimiento.slice(0, 10) : "",
     fecha_ingreso: u.fecha_ingreso ? String(u.fecha_ingreso).slice(0, 10) : "",
@@ -200,6 +202,7 @@ function UsuarioDetailContent() {
     }
     let normalized = value;
     if (name === "email" || type === "email") normalized = value.toLowerCase();
+    else if (name === "username") normalized = value.toLowerCase().replace(/\s+/g, "");
     else if (name === "nombre") normalized = value.toUpperCase();
     setForm((prev) => ({ ...prev, [name]: normalized } as UsuarioFormValues));
   }
@@ -231,6 +234,7 @@ function UsuarioDetailContent() {
       const body: Record<string, unknown> = {
         nombre: form.nombre.trim(),
         email: form.email.trim().toLowerCase(),
+        username: form.username.trim().toLowerCase(),
         telefono: form.telefono.trim() || undefined,
         fecha_nacimiento: form.fecha_nacimiento || undefined,
         fecha_ingreso: form.fecha_ingreso || undefined,

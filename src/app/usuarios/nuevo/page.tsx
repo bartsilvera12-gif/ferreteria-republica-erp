@@ -28,6 +28,7 @@ export default function NuevoUsuarioPage() {
     } else {
       let normalized = value;
       if (name === "email" || type === "email") normalized = value.toLowerCase();
+      else if (name === "username") normalized = value.toLowerCase().replace(/\s+/g, "");
       else if (upper.includes(name)) normalized = value.toUpperCase();
       setForm((prev) => ({ ...prev, [name]: normalized } as UsuarioFormValues));
     }
@@ -73,6 +74,7 @@ export default function NuevoUsuarioPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           email: form.email.trim().toLowerCase(),
+          username: form.username.trim().toLowerCase() || undefined,
           password: form.password,
           nombre: form.nombre.trim(),
           telefono: form.telefono.trim() || undefined,

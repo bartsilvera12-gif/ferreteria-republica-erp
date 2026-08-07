@@ -1,9 +1,25 @@
 import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { supabaseServiceRoleClientOptions } from "@/lib/supabase/schema";
+import { getServiceAuthUsuario } from "@/lib/auth/get-service-auth-usuario";
+import { esRolAdminEmpresa } from "@/lib/modulos/resolve-effective-modules";
 
+/**
+ * Crea SOLO la cuenta de Auth (Supabase). Endpoint legacy; el alta real de
+ * usuarios del ERP es POST /api/empresas/usuarios/nuevo. Requiere sesión de un
+ * administrador. El service role nunca se loguea ni se devuelve al navegador.
+ */
 export async function POST(req: Request) {
   try {
+    // Autorización: solo un administrador autenticado puede crear cuentas.
+    const authR = await getServiceAuthUsuario(req);
+    if (!authR.ok) {
+      return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+    }
+    if (!authR.catalogUsuario || !esRolAdminEmpresa(authR.catalogUsuario.rol)) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+
     const { email, password } = await req.json();
 
     if (!email || !password) {
@@ -15,11 +31,6 @@ export async function POST(req: Request) {
 
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-    console.log("[create-user] URL:", url);
-    console.log("[create-user] KEY length:", key?.length ?? 0);
-    console.log("[create-user] KEY starts with:", key?.slice(0, 20));
-
     if (!url || !key) {
       return NextResponse.json(
         { error: "Variables de entorno no configuradas" },
@@ -29,26 +40,19 @@ export async function POST(req: Request) {
 
     const supabase = createClient(url, key, { ...supabaseServiceRoleClientOptions });
 
-    console.log("[create-user] email recibido:", email);
-
     const { data, error } = await supabase.auth.admin.createUser({
       email,
       password,
       email_confirm: true,
     });
 
-    console.log("[create-user] Supabase error:", error);
-    console.log("[create-user] Supabase data:", data?.user?.id);
-
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 400 });
     }
 
     return NextResponse.json({ user: data.user });
-
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : "Error interno";
-    console.error("[create-user] catch:", message);
     return NextResponse.json({ error: message }, { status: 500 });
   }
 }

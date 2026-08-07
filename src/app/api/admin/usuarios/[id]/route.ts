@@ -7,12 +7,32 @@ import {
 } from "@/lib/modulos/resolve-effective-modules";
 import { filterDashboardViewIdsForEmpresa } from "@/lib/dashboard/resolve-effective-dashboard-views";
 import { syncUsuarioDashboardViews } from "@/lib/dashboard/sync-usuario-dashboard-views";
+import { getServiceAuthUsuario } from "@/lib/auth/get-service-auth-usuario";
 
 function getSupabase() {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!url || !key) throw new Error("Config no disponible");
   return createClient(url, key, { ...supabaseServiceRoleClientOptions });
+}
+
+/**
+ * Autoriza al solicitante: sesión válida + rol admin. Devuelve su empresa y si es
+ * super_admin, para acotar por tenant. Cierra el agujero de service role abierto.
+ */
+async function authorizeAdmin(req: Request): Promise<
+  | { ok: true; empresaId: string | null; esSuperAdmin: boolean }
+  | { ok: false; status: number; error: string }
+> {
+  const authR = await getServiceAuthUsuario(req);
+  if (!authR.ok) return { ok: false, status: 401, error: "No autenticado" };
+  const u = authR.catalogUsuario;
+  if (!u || !esRolAdminEmpresa(u.rol)) return { ok: false, status: 403, error: "Sin permiso" };
+  return {
+    ok: true,
+    empresaId: u.empresa_id ?? null,
+    esSuperAdmin: (u.rol ?? "").trim().toLowerCase() === "super_admin",
+  };
 }
 
 /** Obtiene el auth user id: usa auth_user_id si existe, sino busca por email en listUsers (con paginación). */
@@ -38,16 +58,23 @@ export async function GET(
 ) {
   try {
     const { id } = await params;
+    const authz = await authorizeAdmin(_req);
+    if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
     const supabase = getSupabase();
     const { data: usuario, error } = await supabase
       .from("usuarios")
-      .select("id, nombre, email, telefono, fecha_nacimiento, rol, estado, created_at")
+      .select("id, nombre, email, telefono, fecha_nacimiento, rol, estado, created_at, empresa_id")
       .eq("id", id)
       .single();
     if (error || !usuario) {
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
     }
-    return NextResponse.json(usuario);
+    if (!authz.esSuperAdmin && usuario.empresa_id !== authz.empresaId) {
+      return NextResponse.json({ error: "Sin permiso" }, { status: 403 });
+    }
+    const rest = { ...usuario } as Record<string, unknown>;
+    delete rest.empresa_id;
+    return NextResponse.json(rest);
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Error";
     return NextResponse.json({ error: msg }, { status: 500 });
@@ -60,6 +87,9 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params;
+    const authz = await authorizeAdmin(req);
+    if (!authz.ok) return NextResponse.json({ error: authz.error }, { status: authz.status });
+
     const body = await req.json();
     const {
       nombre,
@@ -82,6 +112,10 @@ export async function PATCH(
 
     if (errGet || !usuario) {
       return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 });
+    }
+
+    if (!authz.esSuperAdmin && usuario.empresa_id !== authz.empresaId) {
+      return NextResponse.json({ error: "Sin permiso para editar este usuario" }, { status: 403 });
     }
 
     const authUserId = await getAuthUserId(supabase, usuario);

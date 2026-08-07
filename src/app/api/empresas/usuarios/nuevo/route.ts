@@ -3,6 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
 import { getServiceAuthUsuario } from "@/lib/auth/get-service-auth-usuario";
 import { esRolAdminEmpresa } from "@/lib/modulos/resolve-effective-modules";
+import { normalizeUsername, isValidUsername, USERNAME_FORMAT_MSG } from "@/lib/auth/username";
 
 function emailExistsInAuthError(msg: string): boolean {
   const m = msg.toLowerCase();
@@ -64,6 +65,8 @@ export async function POST(req: Request) {
     const email = String(body.email ?? "").trim().toLowerCase();
     const password = String(body.password ?? "");
     const nombre = String(body.nombre ?? "").trim();
+    const usernameRaw = body.username === undefined || body.username === null ? "" : String(body.username);
+    const username = normalizeUsername(usernameRaw);
     const telefono = body.telefono ? String(body.telefono).trim() : null;
     const fecha_nacimiento = body.fecha_nacimiento ? String(body.fecha_nacimiento) : null;
     const fecha_ingreso = body.fecha_ingreso ? String(body.fecha_ingreso) : null;
@@ -97,6 +100,21 @@ export async function POST(req: Request) {
 
     if (porcentaje_comision != null && (porcentaje_comision < 0 || porcentaje_comision > 100)) {
       return NextResponse.json({ error: "La comisión debe estar entre 0 y 100." }, { status: 400 });
+    }
+
+    // Username (opcional): formato válido + unicidad case-insensitive en el schema.
+    if (username) {
+      if (!isValidUsername(username)) {
+        return NextResponse.json({ error: USERNAME_FORMAT_MSG }, { status: 400 });
+      }
+      const { data: dupUser } = await supabase
+        .from("usuarios")
+        .select("id")
+        .eq("username", username)
+        .maybeSingle();
+      if (dupUser?.id) {
+        return NextResponse.json({ error: "Ese nombre de usuario ya está en uso." }, { status: 409 });
+      }
     }
 
     const empresaId = admin.empresa_id;
@@ -140,9 +158,11 @@ export async function POST(req: Request) {
       .eq("email", email)
       .maybeSingle();
 
-    const payload = {
+    const payload: Record<string, unknown> = {
       empresa_id: empresaId,
       email,
+      // Solo tocar username si se especificó (no pisar el existente al re-vincular).
+      ...(username ? { username } : {}),
       nombre,
       telefono,
       fecha_nacimiento,
@@ -159,9 +179,14 @@ export async function POST(req: Request) {
 
     let targetId: string;
 
+    const mapUsuarioErr = (msg: string): string =>
+      /usuarios_username_lower_uidx|username/i.test(msg) && /duplicate|unique|23505/i.test(msg)
+        ? "Ese nombre de usuario ya está en uso."
+        : msg;
+
     if (existente?.id) {
       const { error: upErr } = await supabase.from("usuarios").update(payload).eq("id", existente.id);
-      if (upErr) return NextResponse.json({ error: upErr.message }, { status: 400 });
+      if (upErr) return NextResponse.json({ error: mapUsuarioErr(upErr.message) }, { status: 400 });
       targetId = existente.id;
     } else {
       const { data: inserted, error: insErr } = await supabase
@@ -169,7 +194,7 @@ export async function POST(req: Request) {
         .insert([payload])
         .select("id")
         .single();
-      if (insErr) return NextResponse.json({ error: insErr.message }, { status: 400 });
+      if (insErr) return NextResponse.json({ error: mapUsuarioErr(insErr.message) }, { status: 400 });
       if (!inserted?.id) {
         return NextResponse.json({ error: "No se pudo obtener el id del usuario creado." }, { status: 500 });
       }

@@ -2,14 +2,13 @@
 
 import { useState } from "react";
 import Image from "next/image";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { Eye, EyeOff } from "lucide-react";
-import { signIn } from "@/lib/auth";
+import { clearBrowserEmpresaDataSchemaCache } from "@/lib/supabase/browser-data-client";
+import { clearModuleAccessCache } from "@/lib/modulos/module-access-cache";
 
 export default function LoginPage() {
-  const router = useRouter();
-
-  const [email, setEmail] = useState("");
+  const [identificador, setIdentificador] = useState("");
   const [password, setPassword] = useState("");
   const [showPass, setShowPass] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -20,25 +19,31 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
 
-    const { error: authError } = await signIn(email, password);
+    try {
+      // El username se resuelve a email SERVER-SIDE; la sesión queda en cookies.
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ identificador, password }),
+      });
+      const json = await res.json().catch(() => ({}));
 
-    setLoading(false);
-
-    if (authError) {
-      const msg = authError.message || "Credenciales incorrectas.";
-      if (msg.includes("Invalid login credentials") || msg.includes("invalid_credentials")) {
-        setError("Credenciales incorrectas. Verificá tu email y contraseña.");
-      } else if (msg.includes("Email not confirmed")) {
-        setError("Tu email no está confirmado. Revisá tu bandeja de entrada o contactá al administrador.");
-      } else if (msg.includes("user_banned") || msg.includes("User is banned")) {
-        setError("Tu cuenta está desactivada. Contactá al administrador.");
-      } else {
-        setError(msg);
+      if (!res.ok || !json?.ok) {
+        setLoading(false);
+        setError(typeof json?.error === "string" ? json.error : "Usuario/email o contraseña incorrectos.");
+        return;
       }
-      return;
-    }
 
-    router.push("/");
+      // Limpiar caches del usuario anterior antes de recargar con la nueva sesión.
+      clearBrowserEmpresaDataSchemaCache();
+      clearModuleAccessCache();
+      // Navegación completa: el cliente browser lee la sesión desde las cookies.
+      window.location.assign("/");
+    } catch {
+      setLoading(false);
+      setError("No se pudo iniciar sesión. Revisá tu conexión e intentá de nuevo.");
+    }
   }
 
   return (
@@ -60,12 +65,16 @@ export default function LoginPage() {
         <div className="w-full rounded-2xl border border-white/20 bg-white/[0.97] p-5 shadow-[0_24px_48px_-12px_rgba(0,0,0,0.38)] backdrop-blur-md sm:p-6">
           <form onSubmit={handleSubmit} className="space-y-4 sm:space-y-5">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-[#0F172A]">Correo electrónico</label>
+              <label className="mb-1.5 block text-sm font-medium text-[#0F172A]">Usuario o correo electrónico</label>
               <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="usuario@empresa.com"
+                type="text"
+                autoComplete="username"
+                autoCapitalize="none"
+                autoCorrect="off"
+                spellCheck={false}
+                value={identificador}
+                onChange={(e) => setIdentificador(e.target.value)}
+                placeholder="carlos  o  usuario@empresa.com"
                 required
                 autoFocus
                 className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-[#0F172A] transition-all placeholder:text-slate-400 focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#0EA5E9]"
@@ -94,6 +103,11 @@ export default function LoginPage() {
                 >
                   {showPass ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                 </button>
+              </div>
+              <div className="mt-1.5 text-right">
+                <Link href="/forgot-password" className="text-xs font-medium text-[#0EA5E9] hover:text-[#0284C7]">
+                  ¿Olvidaste tu contraseña?
+                </Link>
               </div>
             </div>
 
