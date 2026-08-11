@@ -90,7 +90,7 @@ export async function getReporteFacturas(
       JOIN ${tV} v ON v.id = fa.venta_id AND v.empresa_id = fa.empresa_id
       LEFT JOIN ${tC} c ON c.id = v.cliente_id AND c.empresa_id = fa.empresa_id
      WHERE fa.empresa_id = $1::uuid
-       AND (fa.emitida_at AT TIME ZONE 'America/Asuncion')::date BETWEEN $2::date AND $3::date
+       AND (fa.emitida_at AT TIME ZONE INTERVAL '-3 hours')::date BETWEEN $2::date AND $3::date
        ${filtroCliente}
      ORDER BY fa.emitida_at DESC`,
     args

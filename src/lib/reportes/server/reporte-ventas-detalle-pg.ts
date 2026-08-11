@@ -83,8 +83,8 @@ export async function getReporteVentasDetalle(
   const cond: string[] = [];
   const hd = (f.horaDesde || "").trim();
   const hh = (f.horaHasta || "").trim();
-  if (/^\d{1,2}:\d{2}$/.test(hd)) { args.push(hd); cond.push(`(v.fecha AT TIME ZONE 'America/Asuncion')::time >= $${args.length}::time`); }
-  if (/^\d{1,2}:\d{2}$/.test(hh)) { args.push(hh); cond.push(`(v.fecha AT TIME ZONE 'America/Asuncion')::time <= $${args.length}::time`); }
+  if (/^\d{1,2}:\d{2}$/.test(hd)) { args.push(hd); cond.push(`(v.fecha AT TIME ZONE INTERVAL '-3 hours')::time >= $${args.length}::time`); }
+  if (/^\d{1,2}:\d{2}$/.test(hh)) { args.push(hh); cond.push(`(v.fecha AT TIME ZONE INTERVAL '-3 hours')::time <= $${args.length}::time`); }
   if (f.clienteId) { args.push(f.clienteId); cond.push(`v.cliente_id = $${args.length}::uuid`); }
   if (f.tipo) { args.push(f.tipo); cond.push(`v.tipo_venta = $${args.length}`); }
   if (f.codigo) { args.push(`%${f.codigo}%`); cond.push(`v.numero_control ILIKE $${args.length}`); }
@@ -119,7 +119,7 @@ export async function getReporteVentasDetalle(
       LEFT JOIN ${tPc} pc ON pc.venta_id = v.id AND pc.empresa_id = v.empresa_id
       LEFT JOIN ${tU} uv ON uv.email = pc.armado_por_email
      WHERE v.empresa_id = $1::uuid
-       AND (v.fecha AT TIME ZONE 'America/Asuncion')::date BETWEEN $2::date AND $3::date
+       AND (v.fecha AT TIME ZONE INTERVAL '-3 hours')::date BETWEEN $2::date AND $3::date
        ${where}
      ORDER BY v.fecha DESC
      LIMIT 5000`,
