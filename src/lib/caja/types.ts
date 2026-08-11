@@ -72,6 +72,8 @@ export interface CajaResumen {
   total_efectivo: number;
   total_tarjeta: number;
   total_transferencia: number;
+  /** Ventas a crédito: cuentan como venta pero NO ingresan a la caja. (#1) */
+  total_credito: number;
   ingresos_efectivo: number;
   egresos_efectivo: number;
   retiros_efectivo: number;
@@ -98,6 +100,8 @@ export interface CajaReporteRow {
   total_efectivo: number;
   total_tarjeta: number;
   total_transferencia: number;
+  /** Ventas a crédito: cuentan como venta pero NO ingresan a la caja. (#1) */
+  total_credito: number;
   ingresos_efectivo: number;
   egresos_efectivo: number;
   retiros_efectivo: number;
@@ -154,6 +158,8 @@ export interface CajasReporte {
     total_efectivo: number;
     total_tarjeta: number;
     total_transferencia: number;
+    /** Ventas a crédito del período: no ingresan a caja. (#1) */
+    total_credito: number;
     /** Suma neta de diferencias (sobrante − faltante). */
     total_diferencia: number;
     /** Faltantes acumulados (valor absoluto de diferencias negativas). */

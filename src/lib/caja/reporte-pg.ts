@@ -100,7 +100,7 @@ function emptyReport(rango: { desde: string; hasta: string }): CajasReporte {
     hasta: rango.hasta,
     totales: {
       cantidad_cajas: 0, cajas_abiertas: 0, cajas_cerradas: 0,
-      total_vendido: 0, total_efectivo: 0, total_tarjeta: 0, total_transferencia: 0,
+      total_vendido: 0, total_efectivo: 0, total_tarjeta: 0, total_transferencia: 0, total_credito: 0,
       total_diferencia: 0, faltantes: 0, sobrantes: 0, cajas_con_diferencia: 0,
     },
     cajas: [],
@@ -136,9 +136,10 @@ export async function getReporteCajasPg(
     `SELECT v.caja_id::text AS caja_id,
         COUNT(*) FILTER (WHERE v.estado <> 'anulada') AS cantidad,
         COALESCE(SUM(v.total) FILTER (WHERE v.estado <> 'anulada'), 0) AS total_vendido,
-        COALESCE(SUM(CASE WHEN pd.tiene THEN pd.efe ELSE (CASE WHEN COALESCE(v.metodo_pago,'efectivo') NOT IN ('tarjeta','transferencia') THEN v.total ELSE 0 END) END) FILTER (WHERE v.estado <> 'anulada'), 0) AS efectivo,
-        COALESCE(SUM(CASE WHEN pd.tiene THEN pd.tar ELSE (CASE WHEN v.metodo_pago = 'tarjeta' THEN v.total ELSE 0 END) END) FILTER (WHERE v.estado <> 'anulada'), 0) AS tarjeta,
-        COALESCE(SUM(CASE WHEN pd.tiene THEN pd.tra ELSE (CASE WHEN v.metodo_pago = 'transferencia' THEN v.total ELSE 0 END) END) FILTER (WHERE v.estado <> 'anulada'), 0) AS transferencia
+        COALESCE(SUM(v.total) FILTER (WHERE v.estado <> 'anulada' AND v.tipo_venta = 'CREDITO'), 0) AS credito,
+        COALESCE(SUM(CASE WHEN v.tipo_venta = 'CREDITO' THEN 0 WHEN pd.tiene THEN pd.efe ELSE (CASE WHEN COALESCE(v.metodo_pago,'efectivo') NOT IN ('tarjeta','transferencia') THEN v.total ELSE 0 END) END) FILTER (WHERE v.estado <> 'anulada'), 0) AS efectivo,
+        COALESCE(SUM(CASE WHEN v.tipo_venta = 'CREDITO' THEN 0 WHEN pd.tiene THEN pd.tar ELSE (CASE WHEN v.metodo_pago = 'tarjeta' THEN v.total ELSE 0 END) END) FILTER (WHERE v.estado <> 'anulada'), 0) AS tarjeta,
+        COALESCE(SUM(CASE WHEN v.tipo_venta = 'CREDITO' THEN 0 WHEN pd.tiene THEN pd.tra ELSE (CASE WHEN v.metodo_pago = 'transferencia' THEN v.total ELSE 0 END) END) FILTER (WHERE v.estado <> 'anulada'), 0) AS transferencia
       FROM ${tV} v
       LEFT JOIN LATERAL (
         SELECT COUNT(*) > 0 AS tiene,
@@ -151,11 +152,11 @@ export async function getReporteCajasPg(
       GROUP BY v.caja_id`,
     [empresaId, cajaIds]
   );
-  const vAgg = new Map<string, { cantidad: number; total: number; efectivo: number; tarjeta: number; transferencia: number }>();
+  const vAgg = new Map<string, { cantidad: number; total: number; efectivo: number; tarjeta: number; transferencia: number; credito: number }>();
   for (const r of vQ.rows as Record<string, unknown>[]) {
     vAgg.set(String(r.caja_id), {
       cantidad: num(r.cantidad), total: num(r.total_vendido),
-      efectivo: num(r.efectivo), tarjeta: num(r.tarjeta), transferencia: num(r.transferencia),
+      efectivo: num(r.efectivo), tarjeta: num(r.tarjeta), transferencia: num(r.transferencia), credito: num(r.credito),
     });
   }
 
@@ -180,7 +181,7 @@ export async function getReporteCajasPg(
   const nombreById = await nombresUsuarios(schema, empresaId, cajas.flatMap((c) => [c.abierta_por, c.cerrada_por]).filter((x): x is string => !!x));
 
   const filas: CajaReporteRow[] = cajas.map((c) => {
-    const v = vAgg.get(c.id) ?? { cantidad: 0, total: 0, efectivo: 0, tarjeta: 0, transferencia: 0 };
+    const v = vAgg.get(c.id) ?? { cantidad: 0, total: 0, efectivo: 0, tarjeta: 0, transferencia: 0, credito: 0 };
     const m = mAgg.get(c.id) ?? { ingresos: 0, egresos: 0, retiros: 0, ajustes: 0 };
     const efectivoEsperado = c.monto_apertura + v.efectivo + m.ingresos - m.egresos - m.retiros + m.ajustes;
     return {
@@ -190,7 +191,7 @@ export async function getReporteCajasPg(
       cerrada_por_nombre: c.cerrada_por ? nombreById.get(c.cerrada_por) ?? null : null,
       monto_apertura: c.monto_apertura,
       cantidad_ventas: v.cantidad, total_vendido: v.total,
-      total_efectivo: v.efectivo, total_tarjeta: v.tarjeta, total_transferencia: v.transferencia,
+      total_efectivo: v.efectivo, total_tarjeta: v.tarjeta, total_transferencia: v.transferencia, total_credito: v.credito,
       ingresos_efectivo: m.ingresos, egresos_efectivo: m.egresos, retiros_efectivo: m.retiros, ajustes_efectivo: m.ajustes,
       efectivo_esperado: efectivoEsperado,
       monto_esperado_efectivo: c.monto_esperado_efectivo,
@@ -211,6 +212,7 @@ export async function getReporteCajasPg(
     totales.total_efectivo += f.total_efectivo;
     totales.total_tarjeta += f.total_tarjeta;
     totales.total_transferencia += f.total_transferencia;
+    totales.total_credito += f.total_credito;
     if (f.diferencia != null && f.diferencia !== 0) {
       totales.cajas_con_diferencia++;
       totales.total_diferencia += f.diferencia;
@@ -268,11 +270,14 @@ export async function getDetalleCajaPg(
     estado: (r.estado as string | null) ?? null,
   }));
 
-  let totalEfectivo = 0, totalTarjeta = 0, totalTransferencia = 0, totalVendido = 0, cantidadVentas = 0;
+  let totalEfectivo = 0, totalTarjeta = 0, totalTransferencia = 0, totalCredito = 0, totalVendido = 0, cantidadVentas = 0;
   for (const r of vQ.rows as Record<string, unknown>[]) {
     if (String(r.estado) === "anulada") continue;
     cantidadVentas++;
     totalVendido += num(r.total);
+    // Ventas a CRÉDITO: no ingresan a caja ahora (cobranza posterior). No suman
+    // al efectivo esperado del arqueo. (#1)
+    if (String(r.tipo_venta) === "CREDITO") { totalCredito += num(r.total); continue; }
     totalEfectivo += num(r.efectivo_arqueo);
     totalTarjeta += num(r.tarjeta_arqueo);
     totalTransferencia += num(r.transferencia_arqueo);
@@ -326,7 +331,7 @@ export async function getDetalleCajaPg(
     cerrada_por_nombre: c.cerrada_por ? nombreById.get(c.cerrada_por) ?? null : null,
     monto_apertura: c.monto_apertura,
     cantidad_ventas: cantidadVentas, total_vendido: totalVendido,
-    total_efectivo: totalEfectivo, total_tarjeta: totalTarjeta, total_transferencia: totalTransferencia,
+    total_efectivo: totalEfectivo, total_tarjeta: totalTarjeta, total_transferencia: totalTransferencia, total_credito: totalCredito,
     ingresos_efectivo: ingresosEf, egresos_efectivo: egresosEf, retiros_efectivo: retirosEf, ajustes_efectivo: ajustesEf,
     efectivo_esperado: efectivoEsperado,
     monto_esperado_efectivo: c.monto_esperado_efectivo,

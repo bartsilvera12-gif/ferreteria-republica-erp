@@ -205,6 +205,7 @@ export async function getReporteCajas(
       total_efectivo: 0,
       total_tarjeta: 0,
       total_transferencia: 0,
+      total_credito: 0,
       total_diferencia: 0,
       faltantes: 0,
       sobrantes: 0,
@@ -219,7 +220,7 @@ export async function getReporteCajas(
   // 2) Ventas de esas cajas (en lote).
   const vQ = await sb
     .from("ventas")
-    .select("id, caja_id, total, metodo_pago, estado")
+    .select("id, caja_id, total, metodo_pago, tipo_venta, estado")
     .eq("empresa_id", empresaId)
     .in("caja_id", cajaIds);
   if (vQ.error) throw new Error(vQ.error.message);
@@ -228,6 +229,7 @@ export async function getReporteCajas(
     caja_id: string | null;
     total: number | string;
     metodo_pago: string | null;
+    tipo_venta: string | null;
     estado: string | null;
   }>;
 
@@ -280,6 +282,7 @@ export async function getReporteCajas(
     total_efectivo: number;
     total_tarjeta: number;
     total_transferencia: number;
+    total_credito: number;
     ingresos_efectivo: number;
     egresos_efectivo: number;
     retiros_efectivo: number;
@@ -292,6 +295,7 @@ export async function getReporteCajas(
     total_efectivo: 0,
     total_tarjeta: 0,
     total_transferencia: 0,
+    total_credito: 0,
     ingresos_efectivo: 0,
     egresos_efectivo: 0,
     retiros_efectivo: 0,
@@ -306,6 +310,10 @@ export async function getReporteCajas(
     const t = num(v.total);
     a.cantidad_ventas++;
     a.total_vendido += t;
+    // Ventas a CRÉDITO: no ingresa dinero al cajón en el momento (la cobranza es
+    // un movimiento posterior). Cuenta como venta pero no suma a efectivo /
+    // tarjeta / transferencia del arqueo. (#1)
+    if (v.tipo_venta === "CREDITO") { a.total_credito += t; continue; }
     // Se reparte por el detalle de cobro (soporta pagos combinados). Si una
     // venta no tuviera detalle, se cae al método de la venta como antes.
     const det = detallePorVenta.get(v.id);
@@ -357,6 +365,7 @@ export async function getReporteCajas(
       total_efectivo: a.total_efectivo,
       total_tarjeta: a.total_tarjeta,
       total_transferencia: a.total_transferencia,
+      total_credito: a.total_credito,
       ingresos_efectivo: a.ingresos_efectivo,
       egresos_efectivo: a.egresos_efectivo,
       retiros_efectivo: a.retiros_efectivo,
@@ -380,6 +389,7 @@ export async function getReporteCajas(
     totales.total_efectivo += f.total_efectivo;
     totales.total_tarjeta += f.total_tarjeta;
     totales.total_transferencia += f.total_transferencia;
+    totales.total_credito += f.total_credito;
     if (f.diferencia != null && f.diferencia !== 0) {
       totales.cajas_con_diferencia++;
       totales.total_diferencia += f.diferencia;
@@ -467,7 +477,8 @@ export async function getDetalleCaja(
     totalVendido = 0,
     totalEfectivo = 0,
     totalTarjeta = 0,
-    totalTransferencia = 0;
+    totalTransferencia = 0,
+    totalCredito = 0;
   // Detalle de cobro por venta: soporta pagos combinados (p. ej. saldo a favor
   // + efectivo). Sin esto, una venta pagada en parte con crédito inflaría el
   // efectivo esperado del arqueo.
@@ -477,6 +488,9 @@ export async function getDetalleCaja(
     if (v.estado === "anulada") continue;
     cantidadVentas++;
     totalVendido += v.total;
+    // Ventas a CRÉDITO: no ingresa efectivo al cajón ahora (la cobranza va por el
+    // módulo de créditos). No suma al efectivo esperado del cierre. (#1)
+    if (v.tipo_venta === "CREDITO") { totalCredito += v.total; continue; }
     const det = detPorVenta.get(v.id);
     if (det && det.length > 0) {
       for (const d of det) {
@@ -559,6 +573,7 @@ export async function getDetalleCaja(
     total_efectivo: totalEfectivo,
     total_tarjeta: totalTarjeta,
     total_transferencia: totalTransferencia,
+    total_credito: totalCredito,
     ingresos_efectivo: ingresosEf,
     egresos_efectivo: egresosEf,
     retiros_efectivo: retirosEf,
@@ -806,13 +821,14 @@ async function computeResumen(
   // Ventas asociadas (excluye anuladas si la columna estado existe).
   const vQ = await sb
     .from("ventas")
-    .select("total, metodo_pago, estado")
+    .select("total, metodo_pago, tipo_venta, estado")
     .eq("empresa_id", empresaId)
     .eq("caja_id", caja.id);
   if (vQ.error) throw new Error(vQ.error.message);
   const ventas = (vQ.data ?? []) as unknown as Array<{
     total: number | string;
     metodo_pago: string | null;
+    tipo_venta: string | null;
     estado: string | null;
   }>;
 
@@ -820,12 +836,16 @@ async function computeResumen(
   let totalEfectivo = 0;
   let totalTarjeta = 0;
   let totalTransferencia = 0;
+  let totalCredito = 0;
   let count = 0;
   for (const v of ventas) {
     if (v.estado === "anulada") continue;
     count++;
     const t = num(v.total);
     totalVendido += t;
+    // Ventas a CRÉDITO: no ingresa dinero al cajón ahora (la cobranza va por el
+    // módulo de créditos). Cuenta como venta pero NO como efectivo esperado. (#1)
+    if (v.tipo_venta === "CREDITO") { totalCredito += t; continue; }
     if (v.metodo_pago === "tarjeta") totalTarjeta += t;
     else if (v.metodo_pago === "transferencia") totalTransferencia += t;
     else totalEfectivo += t; // efectivo o sin especificar
@@ -897,6 +917,7 @@ async function computeResumen(
     total_efectivo: totalEfectivo,
     total_tarjeta: totalTarjeta,
     total_transferencia: totalTransferencia,
+    total_credito: totalCredito,
     ingresos_efectivo: ingresosEf,
     egresos_efectivo: egresosEf,
     retiros_efectivo: retirosEf,

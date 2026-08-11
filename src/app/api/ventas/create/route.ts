@@ -396,6 +396,10 @@ export async function POST(request: NextRequest) {
     // Con saldo a favor son DOS filas: el saldo aplicado y el resto por el medio
     // elegido. La suma sigue siendo el total de la venta.
     try {
+      // Ventas a CRÉDITO: no se cobra nada en el momento (la cobranza se hace
+      // después por el módulo de créditos). No se registra detalle de cobro para
+      // no inflar el efectivo esperado del arqueo de caja. (#1)
+      if (tipoVenta === "CONTADO") {
       const pd = (o.pago_detalle ?? null) as Record<string, unknown> | null;
       const str = (v: unknown, max = 200) =>
         v === null || v === undefined || String(v).trim() === "" ? null : String(v).trim().slice(0, max);
@@ -446,6 +450,7 @@ export async function POST(request: NextRequest) {
             observacion: str(pd?.observacion, 500),
           });
         }
+      }
       }
     } catch (e) {
       console.error("[ventas/create] pago_detalle best-effort fallo (venta OK):", e instanceof Error ? e.message : e);

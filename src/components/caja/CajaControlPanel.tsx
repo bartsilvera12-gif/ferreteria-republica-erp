@@ -324,12 +324,13 @@ export default function CajaControlPanel({ onStateChange }: Props) {
             )}
 
             {/* Metricas en vivo por caja */}
-            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-px bg-slate-100">
+            <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-px bg-slate-100">
               <Metric label="Apertura" value={fmtGs(c.monto_apertura)} icon={<Wallet className="h-3.5 w-3.5" />} />
               <Metric label="Ventas" value={String(cr.cantidad_ventas)} icon={<CheckCircle2 className="h-3.5 w-3.5" />} />
               <Metric label="Efectivo" value={fmtGs(cr.total_efectivo)} icon={<ArrowDownRight className="h-3.5 w-3.5 text-emerald-600" />} highlight="emerald" />
               <Metric label="Transfer" value={fmtGs(cr.total_transferencia)} icon={<ArrowDownRight className="h-3.5 w-3.5 text-sky-600" />} />
               <Metric label="Tarjeta" value={fmtGs(cr.total_tarjeta)} icon={<ArrowDownRight className="h-3.5 w-3.5 text-violet-600" />} />
+              <Metric label="Crédito (no ingresa)" value={fmtGs(cr.total_credito)} icon={<ArrowDownRight className="h-3.5 w-3.5 text-amber-600" />} />
               <Metric label="Esperado efectivo" value={fmtGs(cr.efectivo_esperado)} icon={<Wallet className="h-3.5 w-3.5 text-[#4FAEB2]" />} highlight="turquesa" />
             </div>
 
@@ -807,6 +808,9 @@ function ModalCerrar({
           )}
           {resumen.total_transferencia > 0 && (
             <Row label="Ventas transferencia (no suma)" value={fmtGs(resumen.total_transferencia)} subtle />
+          )}
+          {resumen.total_credito > 0 && (
+            <Row label="Ventas a crédito (no ingresa a caja)" value={fmtGs(resumen.total_credito)} subtle />
           )}
           {resumen.ingresos_efectivo > 0 && (
             <Row label="+ Ingresos manuales" value={fmtGs(resumen.ingresos_efectivo)} />

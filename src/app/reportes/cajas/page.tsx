@@ -93,7 +93,7 @@ export default function CajasReportePage() {
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             <StatCard compact accent label="Cajas en el período" value={String(t.cantidad_cajas)} hint={`${t.cajas_cerradas} cerradas · ${t.cajas_abiertas} abiertas`} />
-            <StatCard compact label="Total vendido" value={formatGs(t.total_vendido)} hint={`${formatGs(t.total_efectivo)} en efectivo`} />
+            <StatCard compact label="Total vendido" value={formatGs(t.total_vendido)} hint={`${formatGs(t.total_efectivo)} efectivo · ${formatGs(t.total_credito)} crédito`} />
             <StatCard compact label="Diferencia neta" value={formatGs(t.total_diferencia)} hint={`${t.cajas_con_diferencia} caja(s) con diferencia`} />
             <StatCard compact label="Faltantes / Sobrantes" value={`${formatGs(t.faltantes)} / ${formatGs(t.sobrantes)}`} hint="faltante / sobrante acumulado" />
           </div>

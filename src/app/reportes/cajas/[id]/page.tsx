@@ -176,11 +176,12 @@ export default function CajaDetalledPage() {
       ) : (
         <>
           {/* Resumen del arqueo */}
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
             <Resumen label="Vendido" value={formatGs(c.total_vendido)} hint={`${c.cantidad_ventas} venta(s)`} accent />
             <Resumen label="Efectivo" value={formatGs(c.total_efectivo)} />
             <Resumen label="Tarjeta" value={formatGs(c.total_tarjeta)} />
             <Resumen label="Transferencia" value={formatGs(c.total_transferencia)} />
+            <Resumen label="Crédito (no ingresa)" value={formatGs(c.total_credito)} hint="cobranza posterior" />
             <Resumen label="Efectivo esperado" value={formatGs(c.efectivo_esperado)} hint="apertura + efectivo ± movs" />
             <Resumen
               label="Contado / Diferencia"
