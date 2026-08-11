@@ -100,6 +100,7 @@ export interface ProveedorRow {
   email: string | null;
   direccion: string | null;
   contacto: string | null;
+  contacto_telefono: string | null;
   estado: string;
   condicion_pago: string | null;
   plazo_pago_dias: number | null;
@@ -111,7 +112,7 @@ export interface ProveedorRow {
 
 const PROV_COLS = `
   id, empresa_id, nombre, nombre_comercial, razon_social, ruc, telefono, email,
-  direccion, contacto, estado, condicion_pago, plazo_pago_dias, moneda_preferida,
+  direccion, contacto, contacto_telefono, estado, condicion_pago, plazo_pago_dias, moneda_preferida,
   observaciones, created_at, updated_at
 `;
 
@@ -151,6 +152,7 @@ export interface InsertProveedorInput {
   email?: string | null;
   direccion?: string | null;
   contacto?: string | null;
+  contacto_telefono?: string | null;
   estado?: "activo" | "inactivo";
   condicion_pago?: "contado" | "credito" | "mixto" | null;
   plazo_pago_dias?: number | null;
@@ -183,11 +185,11 @@ export async function insertProveedor(
   const { rows } = await pool().query<ProveedorRow>(
     `INSERT INTO ${t} (
        empresa_id, nombre, nombre_comercial, razon_social, ruc, telefono, email,
-       direccion, contacto, estado, condicion_pago, plazo_pago_dias,
+       direccion, contacto, contacto_telefono, estado, condicion_pago, plazo_pago_dias,
        moneda_preferida, observaciones
      ) VALUES (
        $1::uuid, $2, $3, $4, $5, $6, $7,
-       $8, $9, $10, $11, $12::integer, $13, $14
+       $8, $9, $10, $11, $12, $13::integer, $14, $15
      ) RETURNING ${PROV_COLS}`,
     [
       empresaId,
@@ -199,6 +201,7 @@ export async function insertProveedor(
       d.email ?? null,
       d.direccion ?? null,
       d.contacto ?? null,
+      d.contacto_telefono ?? null,
       d.estado ?? "activo",
       d.condicion_pago ?? null,
       d.plazo_pago_dias ?? null,
@@ -233,6 +236,7 @@ export async function updateProveedor(
   if (d.email !== undefined) setIf("email", d.email ?? null);
   if (d.direccion !== undefined) setIf("direccion", d.direccion ?? null);
   if (d.contacto !== undefined) setIf("contacto", d.contacto ?? null);
+  if (d.contacto_telefono !== undefined) setIf("contacto_telefono", d.contacto_telefono ?? null);
   if (d.estado !== undefined) setIf("estado", d.estado);
   if (d.condicion_pago !== undefined) setIf("condicion_pago", d.condicion_pago ?? null);
   if (d.plazo_pago_dias !== undefined) setIf("plazo_pago_dias", d.plazo_pago_dias ?? null, "::integer");

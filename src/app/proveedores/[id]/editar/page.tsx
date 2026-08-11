@@ -39,6 +39,7 @@ export default function EditarProveedorPage() {
         email: p.email ?? "",
         direccion: p.direccion ?? "",
         contacto: p.contacto ?? "",
+        contacto_telefono: p.contacto_telefono ?? "",
         estado: p.estado,
         condicion_pago: p.condicion_pago ?? "",
         plazo_pago_dias: p.plazo_pago_dias != null ? String(p.plazo_pago_dias) : "",
@@ -70,6 +71,7 @@ export default function EditarProveedorPage() {
       email: form.email.trim() || null,
       direccion: form.direccion.trim() || null,
       contacto: form.contacto.trim() || null,
+      contacto_telefono: form.contacto_telefono.trim() || null,
       estado: form.estado,
       condicion_pago: form.condicion_pago === "" ? null : form.condicion_pago,
       plazo_pago_dias:

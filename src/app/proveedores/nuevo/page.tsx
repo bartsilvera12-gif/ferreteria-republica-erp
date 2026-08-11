@@ -35,6 +35,7 @@ export default function NuevoProveedorPage() {
       email: form.email.trim() || null,
       direccion: form.direccion.trim() || null,
       contacto: form.contacto.trim() || null,
+      contacto_telefono: form.contacto_telefono.trim() || null,
       estado: form.estado,
       condicion_pago: form.condicion_pago === "" ? null : form.condicion_pago,
       plazo_pago_dias:

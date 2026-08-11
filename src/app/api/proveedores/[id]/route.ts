@@ -28,6 +28,7 @@ function mapProveedorRow(r: ProveedorRow): Proveedor {
     email: r.email ?? null,
     direccion: r.direccion ?? null,
     contacto: r.contacto ?? null,
+    contacto_telefono: r.contacto_telefono ?? null,
     estado: r.estado === "inactivo" ? "inactivo" : "activo",
     condicion_pago:
       r.condicion_pago === "contado" || r.condicion_pago === "credito" || r.condicion_pago === "mixto"
@@ -102,6 +103,7 @@ export async function PATCH(request: NextRequest, ctx: { params: Promise<{ id: s
     if (body.email !== undefined) patch.email = body.email == null ? null : String(body.email).trim().toLowerCase() || null;
     if (body.direccion !== undefined) patch.direccion = normalizeUpperNullable(body.direccion);
     if (body.contacto !== undefined) patch.contacto = normalizeUpperNullable(body.contacto);
+    if (body.contacto_telefono !== undefined) patch.contacto_telefono = body.contacto_telefono == null ? null : String(body.contacto_telefono).trim() || null;
     if (body.estado !== undefined) patch.estado = body.estado === "inactivo" ? "inactivo" : "activo";
     if (body.condicion_pago !== undefined) {
       patch.condicion_pago =

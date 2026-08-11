@@ -25,6 +25,7 @@ export interface Proveedor {
   email: string | null;
   direccion: string | null;
   contacto: string | null;
+  contacto_telefono: string | null;
   estado: EstadoProveedor;
   condicion_pago: CondicionPagoProveedor | null;
   plazo_pago_dias: number | null;
@@ -46,6 +47,7 @@ export type NuevoProveedorInput = {
   email?: string | null;
   direccion?: string | null;
   contacto?: string | null;
+  contacto_telefono?: string | null;
   estado?: EstadoProveedor;
   condicion_pago?: CondicionPagoProveedor | null;
   plazo_pago_dias?: number | null;

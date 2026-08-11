@@ -16,6 +16,7 @@ export interface ProveedorFormValues {
   razon_social: string;
   ruc: string;
   telefono: string;
+  contacto_telefono: string;
   email: string;
   direccion: string;
   contacto: string;
@@ -37,6 +38,7 @@ export function emptyProveedorForm(): ProveedorFormValues {
     email: "",
     direccion: "",
     contacto: "",
+    contacto_telefono: "",
     estado: "activo",
     condicion_pago: "",
     plazo_pago_dias: "",
@@ -134,11 +136,21 @@ export default function ProveedorForm({
           />
         </div>
         <div>
-          <label className={labelClass}>Contacto principal</label>
+          <label className={labelClass}>Persona de contacto / Vendedor</label>
           <input
             className={`${inputClass} uppercase`}
             value={values.contacto}
             onChange={(e) => patch("contacto", e.target.value)}
+            disabled={disabled}
+          />
+        </div>
+        <div>
+          <label className={labelClass}>Teléfono del contacto / vendedor</label>
+          <input
+            className={inputClass}
+            value={values.contacto_telefono}
+            onChange={(e) => patch("contacto_telefono", e.target.value)}
+            placeholder="0981-000000"
             disabled={disabled}
           />
         </div>

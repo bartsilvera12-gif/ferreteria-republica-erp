@@ -28,6 +28,7 @@ function mapProveedorRow(r: ProveedorRow): Proveedor {
     email: r.email ?? null,
     direccion: r.direccion ?? null,
     contacto: r.contacto ?? null,
+    contacto_telefono: r.contacto_telefono ?? null,
     estado: r.estado === "inactivo" ? "inactivo" : "activo",
     condicion_pago:
       r.condicion_pago === "contado" || r.condicion_pago === "credito" || r.condicion_pago === "mixto"
@@ -123,6 +124,7 @@ export async function POST(request: NextRequest) {
     const email = body.email == null ? null : String(body.email).trim().toLowerCase() || null;
     const direccion = normalizeUpperNullable(body.direccion);
     const contacto = normalizeUpperNullable(body.contacto);
+    const contacto_telefono = body.contacto_telefono == null ? null : String(body.contacto_telefono).trim() || null;
     const observaciones = normalizeUpperNullable(body.observaciones);
     const estado = body.estado === "inactivo" ? "inactivo" : "activo";
     const condicion_pago =
@@ -168,6 +170,7 @@ export async function POST(request: NextRequest) {
         email,
         direccion,
         contacto,
+        contacto_telefono,
         estado,
         condicion_pago,
         plazo_pago_dias,
