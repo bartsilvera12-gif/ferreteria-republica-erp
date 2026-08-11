@@ -158,6 +158,8 @@ export interface ProductosPaginadosOpts {
   q?: string;
   /** uuid de categoria | "__sin__" para los que no tienen categoria asignada | "" para todas */
   categoria?: string;
+  /** Incluir productos inactivos (para poder reactivarlos). */
+  incluirInactivos?: boolean;
 }
 export interface ProductosPaginadosResult {
   productos: Producto[];
@@ -179,6 +181,7 @@ export async function getProductosPaginated(
   params.set("offset", String(offset));
   if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
   if (opts.categoria) params.set("categoria", opts.categoria);
+  if (opts.incluirInactivos) params.set("incluir_inactivos", "1");
   try {
     const r = await fetch(`/api/productos?${params.toString()}`, {
       credentials: "include",

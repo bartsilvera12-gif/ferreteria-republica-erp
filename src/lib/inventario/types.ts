@@ -57,6 +57,8 @@ export interface Producto {
   tiempo_prep_minutos?: number;
   /** Descripción detallada (visible en Menú y edición). */
   descripcion?: string | null;
+  /** Activo (false = inactivo, oculto de pedidos, edición en solo lectura). */
+  activo?: boolean;
   /** Marca del producto (para agrupar/filtrar). */
   marca?: string | null;
   /** Observaciones internas (no salen en el ticket). */

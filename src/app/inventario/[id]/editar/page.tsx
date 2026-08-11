@@ -42,6 +42,8 @@ export default function EditarProductoPage() {
   const [descripcion, setDescripcion] = useState("");
   const [marca, setMarca] = useState("");
   const [observaciones, setObservaciones] = useState("");
+  const [activo, setActivo] = useState(true);
+  const [reactivando, setReactivando] = useState(false);
   const [form, setForm] = useState({
     nombre: "",
     sku: "",
@@ -257,6 +259,7 @@ export default function EditarProductoPage() {
       setDescripcion(p.descripcion ?? "");
       setMarca(p.marca ?? "");
       setObservaciones(p.observaciones ?? "");
+      setActivo(p.activo !== false);
       setValorizado(p.valorizado ?? true);
       setUnidadCompra(p.unidad_compra ?? "");
       setUnidadReceta(p.unidad_receta ?? "");
@@ -433,6 +436,19 @@ export default function EditarProductoPage() {
     }
   }
 
+  async function reactivar() {
+    if (reactivando) return;
+    setReactivando(true);
+    try {
+      const ok = await updateProducto(id, { activo: true });
+      if (ok) setActivo(true);
+    } catch (err) {
+      setErrorGeneral(err instanceof Error ? err.message : "No se pudo reactivar el producto.");
+    } finally {
+      setReactivando(false);
+    }
+  }
+
   const costo = parseFloat(form.costo_promedio);
   const precio = parseFloat(form.precio_venta);
   const tieneAmbos = !isNaN(costo) && !isNaN(precio) && costo > 0 && precio > 0;
@@ -521,6 +537,22 @@ export default function EditarProductoPage() {
 
       <div className="bg-white rounded-xl shadow p-6">
         <form className="space-y-6" onSubmit={handleSubmit} noValidate>
+          {!activo && (
+            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+              <span>
+                <strong>Producto inactivo (solo lectura).</strong> No aparece en pedidos ni se puede editar. Reactivalo para volver a usarlo.
+              </span>
+              <button
+                type="button"
+                onClick={reactivar}
+                disabled={reactivando}
+                className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+              >
+                {reactivando ? "Reactivando…" : "Reactivar producto"}
+              </button>
+            </div>
+          )}
+          <fieldset disabled={!activo} className="space-y-6 min-w-0 disabled:opacity-70">
           {errorGeneral && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-sm text-red-700">{errorGeneral}</p>
@@ -1221,20 +1253,23 @@ export default function EditarProductoPage() {
             </select>
           </div>
 
+          </fieldset>
           <div className="flex gap-4 pt-2">
-            <button
-              type="submit"
-              disabled={submitting}
-              className="bg-gray-900 text-white px-5 py-3 rounded-lg text-sm hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {submitting ? "Guardando..." : "Guardar cambios"}
-            </button>
+            {activo && (
+              <button
+                type="submit"
+                disabled={submitting}
+                className="bg-gray-900 text-white px-5 py-3 rounded-lg text-sm hover:bg-gray-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {submitting ? "Guardando..." : "Guardar cambios"}
+              </button>
+            )}
             <button
               type="button"
               onClick={() => router.push("/inventario")}
               className="border border-gray-300 px-5 py-3 rounded-lg text-sm hover:bg-gray-50 transition-colors"
             >
-              Cancelar
+              {activo ? "Cancelar" : "Volver"}
             </button>
           </div>
         </form>

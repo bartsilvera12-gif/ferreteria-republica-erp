@@ -95,8 +95,11 @@ export async function GET(request: NextRequest) {
         // suficiente para mostrar paginacion en la UI.
         count: "planned",
       })
-      .eq("empresa_id", ctx.auth.empresa_id)
-      .eq("activo", true);
+      .eq("empresa_id", ctx.auth.empresa_id);
+
+    // Por defecto solo activos; con incluir_inactivos=1 se ven todos (para reactivar).
+    const incluirInactivos = searchParams.get("incluir_inactivos") === "1";
+    if (!incluirInactivos) query = query.eq("activo", true);
 
     if (q) {
       // Búsqueda por tokens (palabras en cualquier orden) en nombre, sku o código de barras.

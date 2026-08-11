@@ -185,6 +185,7 @@ export async function PATCH(
       patch.tiempo_prep_minutos = Math.floor(body.tiempo_prep_minutos);
     if (body.descripcion !== undefined)
       patch.descripcion = body.descripcion == null ? null : String(body.descripcion).trim() || null;
+    if (body.activo !== undefined) patch.activo = body.activo === true;
     if (body.observaciones !== undefined)
       patch.observaciones = body.observaciones == null ? null : String(body.observaciones).trim() || null;
     if (body.marca !== undefined)

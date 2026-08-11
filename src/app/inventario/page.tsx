@@ -102,6 +102,7 @@ export default function InventarioPage() {
   // el reporte /reportes/rotacion-abc — se consume su API para no duplicarla.
   const [abcMap, setAbcMap] = useState<Map<string, RangoABC>>(new Map());
   const [filtroRango, setFiltroRango] = useState<RangoABC | "">("");
+  const [verInactivos, setVerInactivos] = useState(false);
 
   // Modal de eliminacion
   const [deleting, setDeleting] = useState<Producto | null>(null);
@@ -178,7 +179,7 @@ export default function InventarioPage() {
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    getProductosPaginated({ page, pageSize, q: search, categoria: categoriaId })
+    getProductosPaginated({ page, pageSize, q: search, categoria: categoriaId, incluirInactivos: verInactivos })
       .then(({ productos, total }) => {
         if (cancel) return;
         setProductos(productos);
@@ -190,7 +191,7 @@ export default function InventarioPage() {
     return () => {
       cancel = true;
     };
-  }, [page, pageSize, search, categoriaId, refreshKey]);
+  }, [page, pageSize, search, categoriaId, verInactivos, refreshKey]);
 
   // Paginacion derivada
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -334,6 +335,16 @@ export default function InventarioPage() {
                 ))}
               </select>
 
+              <label className="flex h-10 items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-3 text-sm text-slate-600" title="Mostrar también los productos inactivos (para reactivarlos)">
+                <input
+                  type="checkbox"
+                  checked={verInactivos}
+                  onChange={(e) => { setVerInactivos(e.target.checked); setPage(1); }}
+                  className="h-4 w-4 rounded border-slate-300 text-[#4FAEB2] focus:ring-[#4FAEB2]"
+                />
+                Ver inactivos
+              </label>
+
               <select
                 value={filtroRango}
                 onChange={(e) => setFiltroRango(e.target.value as RangoABC | "")}
@@ -467,6 +478,9 @@ export default function InventarioPage() {
                           <div className="min-w-0">
                             <p className="truncate font-bold text-slate-900">
                               {p.nombre}
+                              {p.activo === false && (
+                                <span className="ml-2 rounded-full bg-amber-100 px-1.5 py-0.5 align-middle text-[10px] font-semibold text-amber-700">Inactivo</span>
+                              )}
                             </p>
                             <p className="mt-0.5 font-mono text-[11px] text-slate-600 lg:hidden">
                               {p.sku}
