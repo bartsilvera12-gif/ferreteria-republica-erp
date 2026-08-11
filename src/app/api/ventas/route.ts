@@ -22,6 +22,7 @@ interface VentaRow {
   usuario_nombre?: string | null;
   vendedor?: string | null;
   numero_factura?: string | null;
+  cliente_nombre?: string | null;
 }
 
 interface VentaItemRow {
@@ -95,7 +96,11 @@ export async function GET(request: NextRequest) {
               (SELECT fa.numero_completo
                  FROM ${tFa} fa
                 WHERE fa.venta_id = v.id AND fa.empresa_id = v.empresa_id
-                LIMIT 1) AS numero_factura
+                LIMIT 1) AS numero_factura,
+              (SELECT COALESCE(NULLIF(TRIM(c.empresa), ''), NULLIF(TRIM(c.nombre_contacto), ''), NULLIF(TRIM(c.nombre), ''))
+                 FROM ${quoteSchemaTable(schema, "clientes")} c
+                WHERE c.id = v.cliente_id AND c.empresa_id = v.empresa_id
+                LIMIT 1) AS cliente_nombre
          FROM ${tV} v
         WHERE v.empresa_id = $1::uuid
         ORDER BY v.fecha DESC
@@ -152,6 +157,7 @@ export async function GET(request: NextRequest) {
         usuario_nombre: r.usuario_nombre ?? null,
         vendedor: r.vendedor ?? null,
         numero_factura: r.numero_factura ?? null,
+        cliente_nombre: r.cliente_nombre ?? null,
       };
     });
 

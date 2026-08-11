@@ -144,6 +144,7 @@ export default function VentasPage() {
       busqueda,
       v.numero_control,
       v.numero_factura ?? "",
+      v.cliente_nombre ?? "",
       ...v.items.map((i) => i.producto_nombre),
       ...v.items.map((i) => i.sku),
     )) return false;
@@ -246,7 +247,7 @@ export default function VentasPage() {
         <div className="flex flex-wrap items-center gap-3 mb-5 pb-5 border-b border-gray-100">
           <input
             type="text"
-            placeholder="Buscar por número, producto o SKU..."
+            placeholder="Buscar por número, cliente, producto o SKU..."
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
             className={`${inputFilterClass} min-w-0 flex-1 sm:min-w-64`}

@@ -86,4 +86,7 @@ export interface Venta {
 
   /** Número de factura autoimpresor (001-002-0000123) si la venta se facturó. */
   numero_factura?: string | null;
+
+  /** Nombre del cliente (para mostrar/buscar en el historial). */
+  cliente_nombre?: string | null;
 }
