@@ -200,6 +200,7 @@ export interface CompraPanelFila {
   total: number;
   estado: string;
   orden_compra_numero: string | null;
+  tipo_pago: "contado" | "credito";
 }
 
 /**

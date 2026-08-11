@@ -52,6 +52,7 @@ export default function ComprasReportePage() {
   const [busqueda, setBusqueda] = useState("");
   const [filtroProveedor, setFiltroProveedor] = useState("");
   const [filtroEstado, setFiltroEstado] = useState("");
+  const [filtroTipo, setFiltroTipo] = useState<"" | "contado" | "credito">("");
 
   // Detalle de una compra (modal, sin salir del reporte). Las líneas se cargan
   // una vez (getCompras devuelve las filas planas) y se filtran por numero_control.
@@ -91,9 +92,10 @@ export default function ComprasReportePage() {
     return data.compras.filter((c) => {
       if (filtroProveedor && c.proveedor_nombre !== filtroProveedor) return false;
       if (filtroEstado && c.estado !== filtroEstado) return false;
+      if (filtroTipo && c.tipo_pago !== filtroTipo) return false;
       return productoMatchesQuery(busqueda, c.numero_control, c.numero_factura, c.proveedor_nombre);
     });
-  }, [data, busqueda, filtroProveedor, filtroEstado]);
+  }, [data, busqueda, filtroProveedor, filtroEstado, filtroTipo]);
 
   const pendientesFiltrados = useMemo(() => {
     if (!data) return [];
@@ -125,6 +127,13 @@ export default function ComprasReportePage() {
           <div className="flex items-center gap-3">
             <RangoFechasSelector desde={desde} hasta={hasta} onChange={(r) => { setDesde(r.desde); setHasta(r.hasta); }} />
             <ExportExcelButton url={`/api/reportes/compras-panel/export?desde=${desde}&hasta=${hasta}`} />
+            <a
+              href={`/api/reportes/compras/pdf?desde=${desde}&hasta=${hasta}${filtroProveedor ? `&proveedor=${encodeURIComponent(filtroProveedor)}` : ""}${filtroTipo ? `&tipo=${filtroTipo}` : ""}&productos=1&auto=1`}
+              target="_blank" rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-lg border border-[#4FAEB2]/30 bg-white px-4 py-2 text-sm font-bold text-[#3F8E91] hover:bg-[#4FAEB2]/10"
+            >
+              PDF
+            </a>
           </div>
         }
       />
@@ -164,6 +173,14 @@ export default function ComprasReportePage() {
           onChange={(e) => setBusqueda(e.target.value)}
           className="min-w-0 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 sm:min-w-72"
         />
+        {vista === "compras" && (
+          <select value={filtroTipo} onChange={(e) => setFiltroTipo(e.target.value as "" | "contado" | "credito")}
+            className="w-40 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30">
+            <option value="">Contado y crédito</option>
+            <option value="contado">Solo contado</option>
+            <option value="credito">Solo crédito</option>
+          </select>
+        )}
         {proveedores.length > 1 && (
           <select value={filtroProveedor} onChange={(e) => setFiltroProveedor(e.target.value)}
             className="w-52 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30">

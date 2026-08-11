@@ -47,6 +47,7 @@ export async function getComprasPanel(
             max(numero_factura)    AS numero_factura,
             max(estado)            AS estado,
             max(orden_compra_numero) AS orden_compra_numero,
+            max(tipo_pago)         AS tipo_pago,
             count(*)               AS items_count,
             sum(total)             AS total
        FROM ${tCompras}
@@ -64,6 +65,7 @@ export async function getComprasPanel(
     total: num(r.total),
     estado: r.estado != null ? String(r.estado) : "registrada",
     orden_compra_numero: r.orden_compra_numero != null ? String(r.orden_compra_numero) : null,
+    tipo_pago: r.tipo_pago === "credito" ? "credito" : "contado",
   }));
 
   // ── Vista 2: ordenados no comprados (líneas de OC con pendiente > 0).
