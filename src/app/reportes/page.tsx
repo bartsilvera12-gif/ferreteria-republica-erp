@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText, PackageMinus } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText, PackageMinus, Boxes } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -121,6 +121,15 @@ export default function ReportesPage() {
             icon={PackageMinus}
             description="Productos cuyo stock actual quedó por debajo del mínimo definido. Ordenados por mayor faltante."
             href="/reportes/stock-minimo"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Productos vendidos"
+            subtitle="Cuánto se vendió de cada uno"
+            icon={Boxes}
+            description="Unidades y total vendido por producto (resumido) o cada venta con factura, cajero y vendedor (detallado). Filtrable por categoría y fechas."
+            href="/reportes/productos-vendidos"
           />
         </li>
       </ul>
