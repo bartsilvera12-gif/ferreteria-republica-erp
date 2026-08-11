@@ -214,7 +214,7 @@ export async function buildComprobanteVentaPdf(data: ComprobantePdfData, emisor:
   drawHeader();
 
   let sumSub = 0, sumEx = 0, sumIva5 = 0, sumIva10 = 0, sumTot = 0;
-  const NAME_LH = 12, SKU_LH = 11, PAD = 9;
+  const NAME_LH = 13, SKU_LH = 12, TOP_PAD = 9, BOT_PAD = 12;
   for (const it of data.items) {
     const cant = Number(it.cantidad) || 0;
     const tasa = tasaDe(it.tipo_iva);
@@ -231,10 +231,10 @@ export async function buildComprobanteVentaPdf(data: ComprobantePdfData, emisor:
     const skuTxt = [it.sku ? String(it.sku) : "", showsPres && cantBase > 1 ? `= ${cant * cantBase} u.` : ""].filter(Boolean).join("   ");
 
     const nameLines = wrap(it.producto_nombre, bold, 9.5, cw[1] - 16);
-    const rowH = nameLines.length * NAME_LH + (skuTxt ? SKU_LH : 0) + PAD;
+    const rowH = TOP_PAD + nameLines.length * NAME_LH + (skuTxt ? SKU_LH : 0) + BOT_PAD;
     if (c.y - rowH < BOTTOM + 40) { c.page = doc.addPage(A4); c.y = TOP; membrete(c); drawHeader(); }
 
-    const baseY = c.y - 3;
+    const baseY = c.y - TOP_PAD;
     c.page.drawText(fit(cantTxt, reg, 8.5, cw[0] - 6), { x: cx[0] + (cw[0] - reg.widthOfTextAtSize(fit(cantTxt, reg, 8.5, cw[0] - 6), 8.5)) / 2, y: baseY, size: 8.5, font: reg, color: SLATE });
     let dy = baseY;
     for (const ln of nameLines) { c.page.drawText(ln, { x: cx[1] + 8, y: dy, size: 9.5, font: bold, color: TINTA }); dy -= NAME_LH; }
