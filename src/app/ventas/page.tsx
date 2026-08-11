@@ -408,6 +408,16 @@ export default function VentasPage() {
                               Imprimir
                             </a>
                           )}
+                          <a
+                            href={`/api/ventas/${v.id}/comprobante`}
+                            target="_blank"
+                            rel="noopener"
+                            className={`${BTN_ACCION} border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300 hover:bg-emerald-100`}
+                            title="Comprobante de venta A4 (PDF, no fiscal)"
+                          >
+                            <FileText className="h-3.5 w-3.5 shrink-0" aria-hidden />
+                            Comprobante
+                          </a>
                           {v.genera_nota_remision && (
                             <a
                               href={`/api/ventas/${v.id}/ticket?tipo=remision`}
