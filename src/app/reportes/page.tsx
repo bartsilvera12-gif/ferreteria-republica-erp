@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText, PackageMinus } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -112,6 +112,15 @@ export default function ReportesPage() {
             icon={CalendarClock}
             description="Días estimados que dura el stock según el ritmo de venta (30/60/90 días), fecha de quiebre y estado (crítico/bajo/normal/sobrestock)."
             href="/reportes/proyeccion-inventario"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Stock mínimo"
+            subtitle="Productos por reponer"
+            icon={PackageMinus}
+            description="Productos cuyo stock actual quedó por debajo del mínimo definido. Ordenados por mayor faltante."
+            href="/reportes/stock-minimo"
           />
         </li>
       </ul>
