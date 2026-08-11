@@ -59,6 +59,10 @@ type LineaCompra = {
   monto_iva: number;
   total: number;
   margen_venta: number | null;
+  // Control de precios (#19): última compra recibida de este producto.
+  ultimo_costo?: number | null;
+  ultimo_precio_venta?: number | null;
+  ultima_fecha?: string | null;
 };
 
 // ── SegmentedControl ───────────────────────────────────────────────────────────
@@ -217,8 +221,26 @@ export default function NuevaCompraPage() {
         monto_iva: 0,
         total: 0,
         margen_venta: null,
+        ultimo_costo: null,
+        ultimo_precio_venta: null,
+        ultima_fecha: null,
       }),
     ]);
+    void cargarUltimoPrecio(prod.id);
+  }
+
+  // Control de precios (#19): trae el costo/precio de la última compra recibida
+  // del producto y lo adosa a la línea (solo informativo; no pisa lo cargado).
+  async function cargarUltimoPrecio(productoId: string) {
+    try {
+      const r = await fetch(`/api/compras/ultimo-precio?ids=${encodeURIComponent(productoId)}`, { credentials: "include", cache: "no-store" });
+      const j = await r.json();
+      const info = j?.success ? j.data?.items?.[productoId] : null;
+      if (!info) return;
+      setLineas((prev) => prev.map((l) => (l.producto_id === productoId
+        ? { ...l, ultimo_costo: info.costo ?? null, ultimo_precio_venta: info.precio_venta ?? null, ultima_fecha: info.fecha ?? null }
+        : l)));
+    } catch { /* informativo: si falla, no se muestra el comparativo */ }
   }
 
   function editarLinea(idx: number, patch: Partial<LineaCompra>) {
@@ -663,6 +685,16 @@ export default function NuevaCompraPage() {
                           {cab.moneda === "USD" && l.costo_unitario_pyg > 0 && (
                             <div className="mt-0.5 text-right text-[10px] text-gray-400">≈ {formatGs(l.costo_unitario_pyg)}</div>
                           )}
+                          {l.ultimo_costo != null && l.ultimo_costo > 0 && (
+                            <div className="mt-0.5 text-right text-[10px] leading-tight">
+                              <span className="text-gray-400">Últ.: {formatGs(l.ultimo_costo)}</span>
+                              {l.costo_unitario_pyg > 0 && (() => {
+                                const d = ((l.costo_unitario_pyg - l.ultimo_costo!) / l.ultimo_costo!) * 100;
+                                if (Math.abs(d) < 0.05) return null;
+                                return <span className={`ml-1 font-semibold ${d > 0 ? "text-red-600" : "text-emerald-600"}`}>{d > 0 ? "+" : ""}{d.toFixed(1)}%</span>;
+                              })()}
+                            </div>
+                          )}
                         </td>
                         <td className="py-2 px-3">
                           <select value={l.iva_tipo}
@@ -681,6 +713,15 @@ export default function NuevaCompraPage() {
                             className="w-28 rounded-md border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20" />
                           {l.margen_venta !== null && (
                             <div className={`mt-0.5 text-right text-[10px] ${margenColor(l.margen_venta)}`}>Margen {l.margen_venta.toFixed(1)}%</div>
+                          )}
+                          {l.ultimo_precio_venta != null && l.ultimo_precio_venta > 0 && (
+                            <div className="mt-0.5 text-right text-[10px] leading-tight text-gray-400">
+                              Últ.: {formatGs(l.ultimo_precio_venta)}
+                              {l.ultimo_precio_venta !== l.precio_venta && l.precio_venta > 0 && (
+                                <button type="button" onClick={() => editarLinea(i, { precio_venta: l.ultimo_precio_venta! })}
+                                  className="ml-1 font-semibold text-[#0EA5E9] hover:underline">usar</button>
+                              )}
+                            </div>
                           )}
                         </td>
                         <td className="py-2 px-3 text-right tabular-nums font-semibold text-gray-800">{formatGs(l.total)}</td>
