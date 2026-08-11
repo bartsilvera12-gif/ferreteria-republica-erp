@@ -888,6 +888,26 @@ export default function EditarProductoPage() {
               />
             )}
 
+            {/* KIT / combo: componentes que se descuentan al vender */}
+            {id && (
+              <div className="mt-5 pt-4 border-t border-gray-100">
+                <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-2">
+                  KIT / Combo
+                </p>
+                <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+                  <p className="text-sm text-slate-600">
+                    Convertí este producto en un KIT: al venderlo descuenta el stock de sus componentes.
+                  </p>
+                  <Link
+                    href={`/inventario/${String(id)}/kit`}
+                    className="shrink-0 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-semibold text-white hover:bg-[#3F8E91]"
+                  >
+                    Definir componentes
+                  </Link>
+                </div>
+              </div>
+            )}
+
             {/* Descuento promocional (oferta) */}
             <div className="mt-5 pt-4 border-t border-gray-100">
               <p className="text-xs uppercase tracking-wide font-semibold text-gray-500 mb-3">
