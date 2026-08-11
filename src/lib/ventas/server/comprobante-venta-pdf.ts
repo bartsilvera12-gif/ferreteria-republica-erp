@@ -276,7 +276,7 @@ export async function buildComprobanteVentaPdf(data: ComprobantePdfData, emisor:
     if (m === "tarjeta") return "Tarjeta"; if (m === "transferencia") return "Transferencia";
     if (m === "efectivo") return "Efectivo"; if (m === "mixto") return "Mixto"; return "—";
   })();
-  c.y -= barH + 6;
+  c.y -= barH + 16;
   const fp = `Forma de pago: ${metodo}`;
   c.page.drawText(fp, { x: A4[0] - MX - reg.widthOfTextAtSize(fp, 9.5), y: c.y, size: 9.5, font: reg, color: SLATE });
 
