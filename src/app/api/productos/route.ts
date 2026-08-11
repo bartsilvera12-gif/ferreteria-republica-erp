@@ -16,7 +16,7 @@ const PRODUCTO_COLS =
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "es_vendible, es_insumo, controla_stock, destacado, visible_web, oferta_semana_destacada, valorizado, unidad_compra, unidad_receta, " +
-  "factor_compra_receta, tiempo_prep_minutos, descripcion, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
+  "factor_compra_receta, tiempo_prep_minutos, descripcion, observaciones, marca, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
   "discount_type, discount_value, discount_starts_at, discount_ends_at";
 
 function toNumber(v: unknown): unknown {
@@ -99,8 +99,8 @@ export async function GET(request: NextRequest) {
       .eq("activo", true);
 
     if (q) {
-      // Búsqueda por tokens (palabras en cualquier orden) en nombre o sku.
-      query = applyTokenSearch(query, q, ["nombre", "sku"]);
+      // Búsqueda por tokens (palabras en cualquier orden) en nombre, sku o código de barras.
+      query = applyTokenSearch(query, q, ["nombre", "sku", "codigo_barras", "marca"]);
     }
     if (categoria === "__sin__") {
       query = query.is("categoria_principal_id", null);
@@ -264,6 +264,10 @@ export async function POST(request: NextRequest) {
     if (tiempoPrepMinutos !== undefined) insertPayload.tiempo_prep_minutos = tiempoPrepMinutos;
     const descripcion = typeof body.descripcion === "string" ? body.descripcion.trim() || null : (body.descripcion === null ? null : undefined);
     if (descripcion !== undefined) insertPayload.descripcion = descripcion;
+    const observaciones = typeof body.observaciones === "string" ? body.observaciones.trim() || null : (body.observaciones === null ? null : undefined);
+    if (observaciones !== undefined) insertPayload.observaciones = observaciones;
+    const marca = typeof body.marca === "string" ? body.marca.trim() || null : (body.marca === null ? null : undefined);
+    if (marca !== undefined) insertPayload.marca = marca;
     insertPayload.precio_mayorista = toNumberOrNull(body.precio_mayorista);
     insertPayload.cantidad_minima_mayorista = toNumberOrNull(body.cantidad_minima_mayorista);
     insertPayload.precio_distribuidor = toNumberOrNull(body.precio_distribuidor);

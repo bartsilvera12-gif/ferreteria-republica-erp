@@ -33,6 +33,8 @@ export default function NuevoProductoPage() {
   const [form, setForm] = useState({
     nombre: "",
     descripcion: "",
+    marca: "",
+    observaciones: "",
     sku: "",
     codigo_barras: "",
     costo_promedio: "",
@@ -330,6 +332,8 @@ export default function NuevoProductoPage() {
         guardado = await saveProducto({
           nombre: form.nombre.trim().toUpperCase(),
           descripcion: form.descripcion.trim() || null,
+          marca: form.marca.trim() || null,
+          observaciones: form.observaciones.trim() || null,
           sku: form.sku.trim().toUpperCase(),
           costo_promedio: parseFloat(form.costo_promedio) || 0,
           precio_venta: parseFloat(form.precio_venta) || 0,
@@ -553,6 +557,32 @@ export default function NuevoProductoPage() {
                   : "Descripción opcional del producto"
               }
               rows={tipoGastro === "menu" ? 3 : 2}
+              className={inputClass}
+            />
+          </div>
+
+          {/* Marca */}
+          <div>
+            <label className={labelClass}>Marca</label>
+            <input
+              type="text"
+              name="marca"
+              value={form.marca}
+              onChange={handleChange}
+              placeholder="Ej: Tramontina, Stanley…"
+              className={inputClass}
+            />
+          </div>
+
+          {/* Observaciones internas */}
+          <div>
+            <label className={labelClass}>Observaciones <span className="text-xs font-normal text-slate-400">(uso interno)</span></label>
+            <textarea
+              name="observaciones"
+              value={form.observaciones}
+              onChange={handleChange}
+              placeholder="Notas internas del producto (no salen en el ticket)."
+              rows={2}
               className={inputClass}
             />
           </div>

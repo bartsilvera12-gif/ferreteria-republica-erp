@@ -40,6 +40,8 @@ export default function EditarProductoPage() {
 
   // descripcion live separately because form se inicializa al cargar
   const [descripcion, setDescripcion] = useState("");
+  const [marca, setMarca] = useState("");
+  const [observaciones, setObservaciones] = useState("");
   const [form, setForm] = useState({
     nombre: "",
     sku: "",
@@ -253,6 +255,8 @@ export default function EditarProductoPage() {
       setDiscountEndsAt(toLocalInput(p.discount_ends_at));
       setModoReceta(p.modo_receta === "produccion_previa" ? "produccion_previa" : "preparado_al_vender");
       setDescripcion(p.descripcion ?? "");
+      setMarca(p.marca ?? "");
+      setObservaciones(p.observaciones ?? "");
       setValorizado(p.valorizado ?? true);
       setUnidadCompra(p.unidad_compra ?? "");
       setUnidadReceta(p.unidad_receta ?? "");
@@ -403,6 +407,8 @@ export default function EditarProductoPage() {
         factor_compra_receta: Math.max(parseFloat(factorCompraReceta) || 1, 0.0001),
         tiempo_prep_minutos: Math.max(parseInt(tiempoPrepMinutos) || 0, 0),
         descripcion: descripcion.trim() || null,
+        marca: marca.trim() || null,
+        observaciones: observaciones.trim() || null,
         // Modo de receta solo aplica a Menú con receta; en otros tipos se mantiene el default.
         modo_receta: tipoGastro === "menu" && tieneReceta ? modoReceta : "preparado_al_vender",
       };
@@ -552,6 +558,28 @@ export default function EditarProductoPage() {
                   : "Descripción opcional del producto"
               }
               rows={tipoGastro === "menu" ? 3 : 2}
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Marca</label>
+            <input
+              type="text"
+              value={marca}
+              onChange={(e) => setMarca(e.target.value)}
+              placeholder="Ej: Tramontina, Stanley…"
+              className={inputClass}
+            />
+          </div>
+
+          <div>
+            <label className={labelClass}>Observaciones <span className="text-xs font-normal text-slate-400">(uso interno)</span></label>
+            <textarea
+              value={observaciones}
+              onChange={(e) => setObservaciones(e.target.value)}
+              placeholder="Notas internas del producto (no salen en el ticket)."
+              rows={2}
               className={inputClass}
             />
           </div>
