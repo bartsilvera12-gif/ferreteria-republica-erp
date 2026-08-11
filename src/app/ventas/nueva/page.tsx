@@ -1956,7 +1956,7 @@ export default function NuevaVentaPage() {
                 Imprimir factura
               </a>
               <a
-                href={`/api/ventas/${postVenta.id}/comprobante?auto=1`}
+                href={`/api/ventas/${postVenta.id}/comprobante`}
                 target="_blank"
                 rel="noopener"
                 className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-100"

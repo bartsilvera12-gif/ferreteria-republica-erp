@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
-import { renderComprobanteVentaA4, type ComprobanteItem } from "@/lib/ventas/server/render-comprobante-venta";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import { getAutoimpresor } from "@/lib/facturacion/server/facturacion-modo-pg";
+import { EMPRESA_DOC } from "@/lib/documentos/membrete";
+import { buildComprobanteVentaPdf, type ComprobantePdfData, type ComprobanteEmisor, type ComprobantePdfItem } from "@/lib/ventas/server/comprobante-venta-pdf";
 
 /**
- * GET /api/ventas/[id]/comprobante?auto=1
- * Comprobante de venta A4 (HTML imprimible, NO fiscal). Con `auto=1` abre el
- * diálogo de impresión (→ Guardar como PDF).
+ * GET /api/ventas/[id]/comprobante — Comprobante de venta A4 como PDF real (no
+ * fiscal). Se sirve inline: el visor del navegador permite imprimir o descargar.
+ * Con ?download=1 fuerza la descarga del archivo.
  */
-const NEGOCIO_FALLBACK = "Ferretería República";
-
 export async function GET(request: NextRequest, ctxParams: { params: Promise<{ id: string }> }) {
   const { id } = await ctxParams.params;
   const ctx = await getTenantSupabaseFromAuth(request);
@@ -23,34 +24,22 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   if (!vQ.data) return new NextResponse("Venta no encontrada", { status: 404 });
   const venta = vQ.data as Record<string, unknown>;
 
-  let negocio = NEGOCIO_FALLBACK;
-  const envName = (process.env.NEURA_CLIENT_NAME ?? "").trim();
-  if (envName) negocio = envName;
-  else {
-    try {
-      const eQ = await ctx.supabase.from("empresas").select("nombre_empresa").eq("id", empresaId).maybeSingle();
-      const n = (eQ.data as { nombre_empresa?: string | null } | null)?.nombre_empresa?.trim();
-      if (n) negocio = n;
-    } catch { /* fallback */ }
-  }
-
   const iQ = await ctx.supabase
     .from("ventas_items")
-    .select("producto_nombre, sku, cantidad, precio_venta, total_linea, tipo_iva, presentacion_nombre, presentacion_cantidad_base")
+    .select("producto_nombre, sku, cantidad, total_linea, tipo_iva, presentacion_nombre, presentacion_cantidad_base")
     .eq("venta_id", id).eq("empresa_id", empresaId);
   if (iQ.error) return new NextResponse(`Error items: ${iQ.error.message}`, { status: 500 });
-  const items: ComprobanteItem[] = ((iQ.data ?? []) as Record<string, unknown>[]).map((r) => ({
+  const items: ComprobantePdfItem[] = ((iQ.data ?? []) as Record<string, unknown>[]).map((r) => ({
     cantidad: Number(r.cantidad ?? 0),
     producto_nombre: String(r.producto_nombre ?? ""),
     sku: (r.sku as string | null) ?? null,
-    precio_venta: Number(r.precio_venta ?? 0),
     total_linea: Number(r.total_linea ?? 0),
     tipo_iva: (r.tipo_iva as string | null) ?? null,
     presentacion_nombre: (r.presentacion_nombre as string | null) ?? null,
     presentacion_cantidad_base: r.presentacion_cantidad_base == null ? null : Number(r.presentacion_cantidad_base),
   }));
 
-  let cliente: { nombre: string | null; ruc: string | null; documento: string | null; direccion: string | null; telefono: string | null } | null = null;
+  let cliente: ComprobantePdfData["cliente"] = null;
   if (venta.cliente_id) {
     const cQ = await ctx.supabase
       .from("clientes")
@@ -66,9 +55,24 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     }
   }
 
-  const origin = new URL(request.url).origin;
-  const html = renderComprobanteVentaA4({
-    negocio,
+  // Emisor: datos reales del autoimpresor (razón social, RUC, dirección, teléfono).
+  let emisor: ComprobanteEmisor = {
+    nombre: EMPRESA_DOC.nombre, ruc: null, direccion: EMPRESA_DOC.direccion[0] ?? null,
+    telefono: EMPRESA_DOC.telefono || null, actividad: EMPRESA_DOC.actividad[0] ?? null,
+  };
+  try {
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    const cfg = await getAutoimpresor(schema, empresaId);
+    emisor = {
+      nombre: cfg.razon_social_emisor?.trim() || EMPRESA_DOC.nombre,
+      ruc: cfg.ruc_emisor?.trim() || null,
+      direccion: cfg.direccion_matriz?.trim() || EMPRESA_DOC.direccion[0] || null,
+      telefono: cfg.telefono?.trim() || EMPRESA_DOC.telefono || null,
+      actividad: EMPRESA_DOC.actividad[0] ?? null,
+    };
+  } catch { /* fallback a EMPRESA_DOC */ }
+
+  const data: ComprobantePdfData = {
     numero_control: String(venta.numero_control ?? ""),
     fecha: String(venta.fecha ?? ""),
     metodo_pago: (venta.metodo_pago as string | null) ?? null,
@@ -78,8 +82,18 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
     vendedor: null,
     cliente,
     items,
-    origin,
-  });
+  };
 
-  return new NextResponse(html, { status: 200, headers: { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" } });
+  const pdf = await buildComprobanteVentaPdf(data, emisor);
+  const slug = String(venta.numero_control ?? "comprobante").replace(/[^a-zA-Z0-9-]+/g, "-");
+  const disposition = new URL(request.url).searchParams.get("download") === "1" ? "attachment" : "inline";
+
+  return new NextResponse(new Uint8Array(pdf), {
+    status: 200,
+    headers: {
+      "Content-Type": "application/pdf",
+      "Content-Disposition": `${disposition}; filename="comprobante-${slug}.pdf"`,
+      "Cache-Control": "no-store",
+    },
+  });
 }
