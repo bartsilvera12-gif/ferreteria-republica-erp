@@ -657,7 +657,6 @@ export default function NuevoPedidoPage() {
                             it.presentaciones.map((pp) => (
                               <option key={pp.id} value={pp.id}>
                                 {pp.nombre}
-                                {pp.cantidad_base !== 1 ? ` (= ${pp.cantidad_base} ${it.unidad_medida})` : ""}
                               </option>
                             ))
                           )}

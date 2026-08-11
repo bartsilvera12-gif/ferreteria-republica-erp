@@ -38,6 +38,8 @@ export interface FacturaTicketData {
   items: Array<{
     cantidad: number;
     descripcion: string;
+    /** Nombre de la presentación (ej. "10X25"), solo el nombre, sin equivalencia. */
+    presentacion?: string | null;
     precioUnitario: number;
     totalLinea: number;
     tipo_iva: string;
@@ -145,9 +147,10 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
 
   const itemsHtml = d.items
     .map((it) => {
+      const pres = it.presentacion?.trim();
       return `<tr class="it">
           <td class="qty"><strong>${it.cantidad}×</strong></td>
-          <td class="name">${esc(it.descripcion)}</td>
+          <td class="name">${esc(it.descripcion)}${pres ? ` <span class="pres">[${esc(pres)}]</span>` : ""}</td>
           <td class="amt">${gs(it.totalLinea)}</td>
         </tr>
         <tr class="sub"><td></td><td colspan="2">${it.cantidad} × ${gs(it.precioUnitario)} ${ivaTag(it.tipo_iva)}</td></tr>`;
@@ -167,7 +170,9 @@ export function renderFacturaTicketHTML(d: FacturaTicketData): string {
 <style>
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
-  body { font-family: ui-monospace, "Courier New", monospace; font-size: ${fontPx}px; color:#000; background:#f1f1f1; margin:0; padding:20px; }
+  /* Todo el ticket en negrita: los usuarios (adultos mayores) leen mejor. */
+  body { font-family: ui-monospace, "Courier New", monospace; font-size: ${fontPx}px; font-weight:700; color:#000; background:#f1f1f1; margin:0; padding:20px; }
+  .paper, .paper * { font-weight:700; }
   .paper { background:#fff; width:${d.widthMm}mm; margin:0 auto; padding:6mm 4mm; box-shadow:0 1px 4px rgba(0,0,0,.1); }
   .head { text-align:center; }
   .logo { text-align:center; }

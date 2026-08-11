@@ -489,9 +489,6 @@ export default function ProductPickerModal({
                         {presentaciones.map((pp) => (
                           <option key={pp.id} value={pp.id}>
                             {pp.nombre}
-                            {pp.cantidad_base !== 1
-                              ? ` (= ${pp.cantidad_base} ${sel.unidad_medida})`
-                              : ""}
                           </option>
                         ))}
                       </select>

@@ -28,6 +28,7 @@ import { EMPRESA_DOC } from "@/lib/documentos/membrete";
 
 interface ItemRow {
   producto_nombre: string;
+  presentacion_nombre: string | null;
   cantidad: number | string;
   precio_venta: number | string;
   total_linea: number | string;
@@ -64,7 +65,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   // Ítems
   const iQ = await ctx.supabase
     .from("ventas_items")
-    .select("producto_nombre, cantidad, precio_venta, total_linea, monto_iva, tipo_iva")
+    .select("producto_nombre, presentacion_nombre, cantidad, precio_venta, total_linea, monto_iva, tipo_iva")
     .eq("venta_id", id)
     .eq("empresa_id", empresaId);
   if (iQ.error) return new NextResponse(`Error items: ${iQ.error.message}`, { status: 500 });
@@ -72,6 +73,7 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
   const items = itemsRaw.map((it) => ({
     cantidad: Number(it.cantidad),
     descripcion: it.producto_nombre,
+    presentacion: it.presentacion_nombre,
     precioUnitario: Number(it.precio_venta),
     totalLinea: Number(it.total_linea),
     tipo_iva: it.tipo_iva,

@@ -1350,8 +1350,6 @@ export default function NuevaVentaPage() {
                                 {item.presentacion_nombre && (
                                   <p className="text-[11px] text-slate-500">
                                     {item.presentacion_nombre}
-                                    {item.presentacion_cantidad_base != null && item.presentacion_cantidad_base !== 1
-                                      ? ` = ${item.cantidad * item.presentacion_cantidad_base}` : ""}
                                   </p>
                                 )}
                               </div>
