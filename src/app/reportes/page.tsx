@@ -2,7 +2,7 @@
 
 import PageHeader from "@/components/ui/PageHeader";
 import { ReportCard } from "@/components/reportes/ReportCard";
-import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText, PackageMinus, Boxes } from "lucide-react";
+import { Wallet, Truck, Package, ShoppingCart, ArrowLeftRight, Lock, BarChart3, CalendarClock, CreditCard, FileText, PackageMinus, Boxes, TrendingUp } from "lucide-react";
 
 /** Hub de reportería operativa (Fase 1: Estado de cuenta + Proveedores). */
 export default function ReportesPage() {
@@ -130,6 +130,15 @@ export default function ReportesPage() {
             icon={Boxes}
             description="Unidades y total vendido por producto (resumido) o cada venta con factura, cajero y vendedor (detallado). Filtrable por categoría y fechas."
             href="/reportes/productos-vendidos"
+          />
+        </li>
+        <li>
+          <ReportCard
+            title="Variación de precios"
+            subtitle="Cambios de costo y venta"
+            icon={TrendingUp}
+            description="Productos que cambiaron de costo y/o precio de venta al recibir compras: anterior vs actual, variación % y quién recibió."
+            href="/reportes/variacion-precios"
           />
         </li>
       </ul>
