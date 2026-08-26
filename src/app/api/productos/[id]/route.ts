@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { ajustarStockConMovimiento } from "@/lib/inventario/server/ajuste-stock-pg";
+import { deleteProductoPg, ProductoConHistorialError } from "@/lib/inventario/server/productos-pg";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
@@ -309,10 +310,13 @@ export async function PATCH(
 /**
  * DELETE /api/productos/[id]
  *
- * Soft delete: setea activo=false. El producto deja de aparecer en el
- * listado del ERP y en el sitio publico. NO se borra fisicamente para
- * preservar integridad con ventas/movimientos historicos. El usuario
- * puede reactivarlo desde la base si fuera necesario.
+ * Borrado FÍSICO: elimina la fila de productos de la base. Se usa cuando el
+ * producto se cargó por error o nunca se usó. Distinto de DESACTIVAR (PATCH
+ * con activo=false), que solo lo inhabilita de forma reversible.
+ *
+ * Si el producto tiene historial (ventas, compras, movimientos) o es
+ * componente de un KIT, la base lo protege (FK ON DELETE RESTRICT): en ese
+ * caso devolvemos 409 sugiriendo desactivar en lugar de eliminar.
  */
 export async function DELETE(
   request: NextRequest,
@@ -324,20 +328,17 @@ export async function DELETE(
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const empresaId = ctx.auth.empresa_id;
 
-    const upd = await ctx.supabase
-      .from("productos")
-      .update({ activo: false })
-      .eq("empresa_id", empresaId)
-      .eq("id", id)
-      .select("id")
-      .maybeSingle();
-
-    if (upd.error) {
-      console.error("[/api/productos/[id] DELETE]", upd.error.message);
-      return NextResponse.json(errorResponse("No se pudo eliminar el producto."), { status: 500 });
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    try {
+      const borrado = await deleteProductoPg(schema, empresaId, id);
+      if (!borrado) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+      return NextResponse.json(successResponse({ id }));
+    } catch (e) {
+      if (e instanceof ProductoConHistorialError) {
+        return NextResponse.json(errorResponse(e.message), { status: 409 });
+      }
+      throw e;
     }
-    if (!upd.data) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
-    return NextResponse.json(successResponse({ id }));
   } catch (err) {
     console.error("[/api/productos/[id] DELETE] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo eliminar el producto."), { status: 500 });

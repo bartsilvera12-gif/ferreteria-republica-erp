@@ -23,6 +23,8 @@ import {
   X,
   Pencil,
   Trash2,
+  EyeOff,
+  RotateCcw,
 } from "lucide-react";
 
 const metodoBadge: Record<MetodoValuacion, string> = {
@@ -108,6 +110,33 @@ export default function InventarioPage() {
   const [deleting, setDeleting] = useState<Producto | null>(null);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Desactivar / reactivar (reversible, in-line). id del producto en curso.
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+
+  /**
+   * Alterna activo del producto. Desactivar es reversible: el producto deja de
+   * aparecer en ventas y buscadores hasta reactivarlo (distinto de Eliminar,
+   * que borra la fila). Usa PATCH activo=true/false.
+   */
+  async function toggleActivo(p: Producto) {
+    if (togglingId) return;
+    setTogglingId(p.id);
+    try {
+      const r = await fetch(`/api/productos/${p.id}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ activo: p.activo === false }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (r.ok && j?.success) setRefreshKey((k) => k + 1);
+    } catch {
+      /* la fila queda igual; el usuario puede reintentar */
+    } finally {
+      setTogglingId(null);
+    }
+  }
 
   async function confirmarEliminar() {
     if (!deleting) return;
@@ -461,11 +490,31 @@ export default function InventarioPage() {
                           </Link>
                           <button
                             type="button"
+                            onClick={() => toggleActivo(p)}
+                            disabled={togglingId === p.id}
+                            title={p.activo === false ? "Reactivar producto" : "Desactivar producto (reversible)"}
+                            aria-label={`${p.activo === false ? "Reactivar" : "Desactivar"} ${p.nombre}`}
+                            className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-all disabled:opacity-40 ${
+                              p.activo === false
+                                ? "text-emerald-600 hover:bg-emerald-50"
+                                : "text-slate-500 hover:bg-amber-50 hover:text-amber-600"
+                            }`}
+                          >
+                            {togglingId === p.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : p.activo === false ? (
+                              <RotateCcw className="h-4 w-4" />
+                            ) : (
+                              <EyeOff className="h-4 w-4" />
+                            )}
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => {
                               setDeleting(p);
                               setDeleteError(null);
                             }}
-                            title="Eliminar producto"
+                            title="Eliminar producto (permanente)"
                             aria-label={`Eliminar ${p.nombre}`}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-red-50 hover:text-red-600"
                           >
@@ -645,8 +694,9 @@ export default function InventarioPage() {
                 ¿Eliminar este producto?
               </h3>
               <p className="mt-1.5 text-center text-[13px] leading-relaxed text-slate-500">
-                El producto deja de aparecer en el inventario y en el sitio
-                público. Se puede reactivar después si fue por error.
+                Se borra de la base de forma <strong>permanente</strong>. Esta acción no se
+                puede deshacer. Si tiene ventas o compras registradas, no se podrá eliminar:
+                en ese caso, desactivalo.
               </p>
             </div>
 

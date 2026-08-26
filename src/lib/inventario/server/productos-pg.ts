@@ -57,6 +57,88 @@ function classifyUnique(err: unknown): never {
   throw err as Error;
 }
 
+/**
+ * El producto no se puede BORRAR físicamente porque tiene historial que lo
+ * referencia con FK ON DELETE RESTRICT (ventas, compras, movimientos de
+ * inventario) o porque se usa como componente de un KIT de otro producto.
+ * La UI debe sugerir DESACTIVAR en su lugar.
+ */
+export class ProductoConHistorialError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ProductoConHistorialError";
+  }
+}
+
+/**
+ * Borrado FÍSICO de un producto (distinto de desactivar, que solo pone
+ * activo=false). Se usa cuando el producto se cargó por error / nunca se usó.
+ *
+ * Estrategia transaccional:
+ * 1. Limpia la receta propia del producto (si es un KIT): receta_items y
+ *    recetas cuyo producto_id sea este. Son registros "hijos" del producto.
+ * 2. Borra la fila de productos. Las tablas puente (producto_categorias,
+ *    presentaciones, costos de proveedor) caen solas por ON DELETE CASCADE.
+ * 3. Si alguna FK ON DELETE RESTRICT lo impide (ventas / compras /
+ *    movimientos_inventario, o receta_items.insumo_producto_id apuntando a
+ *    este producto), Postgres tira 23503: revertimos y lanzamos
+ *    ProductoConHistorialError para que la UI sugiera desactivar.
+ *
+ * Devuelve true si borró, false si el producto no existía.
+ */
+export async function deleteProductoPg(
+  schemaRaw: string,
+  empresaId: string,
+  id: string
+): Promise<boolean> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tProdT = tProd(schema);
+  const tRecetas = quoteSchemaTable(schema, "recetas");
+  const tRecetaItems = quoteSchemaTable(schema, "receta_items");
+
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+
+    // 1. Limpiar la receta propia del producto (cuando ES un KIT). Los ítems
+    //    que apuntan a OTROS productos como insumo se borran acá sin problema;
+    //    lo que sí bloquea (más abajo) es que ESTE producto sea insumo de otro.
+    await client.query(
+      `DELETE FROM ${tRecetaItems}
+        WHERE empresa_id = $1::uuid
+          AND receta_id IN (
+            SELECT id FROM ${tRecetas}
+             WHERE empresa_id = $1::uuid AND producto_id = $2::uuid
+          )`,
+      [empresaId, id]
+    );
+    await client.query(
+      `DELETE FROM ${tRecetas} WHERE empresa_id = $1::uuid AND producto_id = $2::uuid`,
+      [empresaId, id]
+    );
+
+    // 2. Borrar el producto. CASCADE limpia las tablas puente propias.
+    const del = await client.query(
+      `DELETE FROM ${tProdT} WHERE empresa_id = $1::uuid AND id = $2::uuid RETURNING id`,
+      [empresaId, id]
+    );
+
+    await client.query("COMMIT");
+    return (del.rowCount ?? 0) > 0;
+  } catch (err) {
+    try { await client.query("ROLLBACK"); } catch { /* noop */ }
+    const code = (err as { code?: string })?.code;
+    if (code === "23503") {
+      throw new ProductoConHistorialError(
+        "El producto tiene historial (ventas, compras o movimientos) o se usa como componente de un KIT. Desactivalo en lugar de eliminarlo."
+      );
+    }
+    throw err as Error;
+  } finally {
+    client.release();
+  }
+}
+
 // ─── Tipos ────────────────────────────────────────────────────────────────
 
 export interface ProductoRow {

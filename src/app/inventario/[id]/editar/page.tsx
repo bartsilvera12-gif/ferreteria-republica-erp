@@ -44,6 +44,11 @@ export default function EditarProductoPage() {
   const [observaciones, setObservaciones] = useState("");
   const [activo, setActivo] = useState(true);
   const [reactivando, setReactivando] = useState(false);
+  // Acción destructiva pendiente de confirmar en el modal: desactivar (reversible)
+  // o eliminar (borrado físico). null = modal cerrado.
+  const [accionPendiente, setAccionPendiente] = useState<null | "desactivar" | "eliminar">(null);
+  const [accionCargando, setAccionCargando] = useState(false);
+  const [accionError, setAccionError] = useState<string | null>(null);
   const [form, setForm] = useState({
     nombre: "",
     sku: "",
@@ -446,6 +451,33 @@ export default function EditarProductoPage() {
       setErrorGeneral(err instanceof Error ? err.message : "No se pudo reactivar el producto.");
     } finally {
       setReactivando(false);
+    }
+  }
+
+  /** Confirma la acción destructiva pendiente (desactivar o eliminar). */
+  async function confirmarAccion() {
+    if (accionCargando || !accionPendiente) return;
+    setAccionCargando(true);
+    setAccionError(null);
+    try {
+      if (accionPendiente === "desactivar") {
+        // Desactivar: reversible. Deja de aparecer en buscadores/ventas hasta reactivar.
+        const ok = await updateProducto(id, { activo: false });
+        if (!ok) throw new Error("No se pudo desactivar el producto.");
+        router.push("/inventario");
+      } else {
+        // Eliminar: borrado físico. Puede devolver 409 si el producto tiene historial.
+        const r = await fetch(`/api/productos/${id}`, { method: "DELETE", credentials: "include" });
+        const j = await r.json().catch(() => ({}));
+        if (!r.ok || !j?.success) {
+          throw new Error((j as { error?: string })?.error ?? "No se pudo eliminar el producto.");
+        }
+        router.push("/inventario");
+      }
+    } catch (err) {
+      setAccionError(err instanceof Error ? err.message : "No se pudo completar la acción.");
+    } finally {
+      setAccionCargando(false);
     }
   }
 
@@ -1274,7 +1306,7 @@ export default function EditarProductoPage() {
           </div>
 
           </fieldset>
-          <div className="flex gap-4 pt-2">
+          <div className="flex flex-wrap items-center gap-4 pt-2">
             {activo && (
               <button
                 type="submit"
@@ -1291,9 +1323,117 @@ export default function EditarProductoPage() {
             >
               {activo ? "Cancelar" : "Volver"}
             </button>
+
+            {/* Acciones destructivas: solo cuando el producto está activo.
+                Desactivar (reversible) y Eliminar (borrado físico) son distintas. */}
+            {activo && (
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => { setAccionError(null); setAccionPendiente("desactivar"); }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-semibold text-amber-800 transition-colors hover:bg-amber-100"
+                  title="Inhabilita el producto sin borrarlo. Deja de aparecer en ventas y buscadores hasta reactivarlo."
+                >
+                  Desactivar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => { setAccionError(null); setAccionPendiente("eliminar"); }}
+                  className="inline-flex items-center gap-2 rounded-lg border border-rose-300 bg-white px-4 py-3 text-sm font-semibold text-rose-700 transition-colors hover:bg-rose-50"
+                  title="Borra el producto de la base de forma permanente. No se puede si tiene historial de ventas o compras."
+                >
+                  Eliminar
+                </button>
+              </div>
+            )}
           </div>
         </form>
       </div>
+
+      {/* Modal de confirmación: desactivar (reversible) o eliminar (permanente) */}
+      {accionPendiente && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          onClick={() => !accionCargando && setAccionPendiente(null)}
+        >
+          <div
+            className="w-full max-w-sm overflow-hidden rounded-2xl bg-white shadow-2xl ring-1 ring-slate-900/5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex flex-col items-center px-6 pt-7 pb-2">
+              <div
+                className={`flex h-12 w-12 items-center justify-center rounded-full ${
+                  accionPendiente === "eliminar" ? "bg-rose-50 ring-4 ring-rose-50/60" : "bg-amber-50 ring-4 ring-amber-50/60"
+                }`}
+              >
+                <span className={`text-xl ${accionPendiente === "eliminar" ? "text-rose-600" : "text-amber-600"}`}>
+                  {accionPendiente === "eliminar" ? "🗑️" : "⏸️"}
+                </span>
+              </div>
+              <h3 className="mt-4 text-center text-base font-semibold tracking-tight text-slate-900">
+                {accionPendiente === "eliminar" ? "¿Eliminar este producto?" : "¿Desactivar este producto?"}
+              </h3>
+              <p className="mt-1.5 text-center text-[13px] leading-relaxed text-slate-500">
+                {accionPendiente === "eliminar" ? (
+                  <>
+                    Se borra de la base de forma <strong>permanente</strong>. Esta acción no se
+                    puede deshacer. Si el producto tiene ventas o compras registradas, no se podrá
+                    eliminar: en ese caso, desactivalo.
+                  </>
+                ) : (
+                  <>
+                    El producto queda <strong>inhabilitado</strong> pero no se borra. Deja de
+                    aparecer en ventas y buscadores hasta que lo reactives. Ideal si querés volver a
+                    usarlo más adelante.
+                  </>
+                )}
+              </p>
+            </div>
+
+            <div className="mx-6 mt-3 rounded-xl border border-slate-200 bg-slate-50/60 px-4 py-3">
+              <p className="truncate text-[13px] font-semibold text-slate-900">{form.nombre || "Producto"}</p>
+              {form.sku && (
+                <p className="mt-0.5 text-[11px] uppercase tracking-wider text-slate-400">
+                  SKU <span className="font-mono text-slate-500">{form.sku}</span>
+                </p>
+              )}
+            </div>
+
+            {accionError && (
+              <div className="mx-6 mt-3 rounded-lg border border-rose-100 bg-rose-50/70 px-3 py-2 text-[12px] text-rose-700">
+                {accionError}
+              </div>
+            )}
+
+            <div className="mt-5 flex gap-2 border-t border-slate-100 bg-slate-50/40 px-5 py-3">
+              <button
+                type="button"
+                onClick={() => setAccionPendiente(null)}
+                disabled={accionCargando}
+                className="flex-1 rounded-lg border-2 border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-all hover:border-slate-300 hover:bg-slate-50 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={confirmarAccion}
+                disabled={accionCargando}
+                className={`flex-1 rounded-lg px-4 py-2 text-sm font-semibold text-white transition-all active:scale-[0.98] disabled:opacity-60 ${
+                  accionPendiente === "eliminar"
+                    ? "bg-rose-600 hover:bg-rose-700 shadow-sm shadow-rose-600/25"
+                    : "bg-amber-600 hover:bg-amber-700 shadow-sm shadow-amber-600/25"
+                }`}
+              >
+                {accionCargando
+                  ? "Procesando..."
+                  : accionPendiente === "eliminar"
+                  ? "Eliminar"
+                  : "Desactivar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {id && <ProveedoresCostos productoId={id} />}
     </div>
