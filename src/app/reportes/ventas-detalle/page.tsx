@@ -22,6 +22,7 @@ interface ItemRow { producto_nombre: string; cantidad: number; precio_venta: num
 interface Rep {
   ventas: VentaRow[];
   totales: { cantidad: number; subtotal: number; monto_iva: number; total: number; total_contado: number; total_credito: number; facturadas: number; saldo_pendiente: number };
+  truncado: boolean;
 }
 
 function gs(v: number) { return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`; }
@@ -187,7 +188,12 @@ export default function ReporteVentasDetallePage() {
           <ShoppingCart className="h-4 w-4 text-[#4FAEB2]" />
           <h2 className="text-[15px] font-bold text-slate-800">Detalle de ventas</h2>
           {cargando && <Loader2 className="h-4 w-4 animate-spin text-[#4FAEB2]" />}
-          {!cargando && data && <span className="text-xs text-slate-400">{data.ventas.length} filas</span>}
+          {!cargando && data && (
+            <span className="text-xs text-slate-400">
+              {data.ventas.length.toLocaleString("es-PY")} filas
+              {data.truncado ? ` (más recientes; los totales incluyen las ${data.totales.cantidad.toLocaleString("es-PY")} del período)` : ""}
+            </span>
+          )}
         </div>
         {cargando ? (
           <p className="px-5 py-10 text-center text-sm text-slate-400">Cargando…</p>

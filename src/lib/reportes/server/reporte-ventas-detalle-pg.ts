@@ -17,6 +17,9 @@ const n = (v: unknown): number => {
   return Number.isFinite(x) ? x : 0;
 };
 
+/** Tope de filas que se envían al cliente (los totales se calculan aparte, sin tope). */
+const LIMITE_FILAS = 5000;
+
 export interface VentaReporteRow {
   id: string;
   numero_control: string;
@@ -64,6 +67,8 @@ export interface VentasDetalleResult {
     facturadas: number;
     saldo_pendiente: number;
   };
+  /** true si el período tiene más ventas que las filas devueltas (tope LIMITE_FILAS). */
+  truncado: boolean;
 }
 
 export async function getReporteVentasDetalle(
@@ -101,7 +106,39 @@ export async function getReporteVentasDetalle(
 
   const where = cond.length ? ` AND ${cond.join(" AND ")}` : "";
 
-  const { rows } = await pool().query(
+  // FROM + JOINs + WHERE compartidos por la consulta de filas y la de totales,
+  // para que ambos apliquen EXACTAMENTE los mismos filtros.
+  const fromWhere = `
+      FROM ${tV} v
+      LEFT JOIN ${tC} c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
+      LEFT JOIN ${tFa} fa ON fa.venta_id = v.id AND fa.empresa_id = v.empresa_id
+      LEFT JOIN ${tCxc} cxc ON cxc.venta_id = v.id AND cxc.empresa_id = v.empresa_id
+      LEFT JOIN ${tPc} pc ON pc.venta_id = v.id AND pc.empresa_id = v.empresa_id
+      LEFT JOIN ${tU} uv ON uv.email = pc.armado_por_email
+     WHERE v.empresa_id = $1::uuid
+       AND (v.fecha AT TIME ZONE INTERVAL '-3 hours')::date BETWEEN $2::date AND $3::date
+       ${where}`;
+
+  // Totales por AGREGADO sobre TODO el conjunto filtrado (SIN LIMIT). Antes se
+  // reducían las filas ya truncadas a 5000, por lo que el total quedaba corto.
+  // Las ventas anuladas NO suman al dinero (mismo criterio que el resto del
+  // sistema) pero sí cuentan en `cantidad`. `total_contado` incluye tipo_venta NULL.
+  const totalesQ = pool().query(
+    `SELECT
+        count(*)::int AS cantidad,
+        COALESCE(SUM(v.subtotal)  FILTER (WHERE v.estado IS DISTINCT FROM 'anulada'), 0)::float8 AS subtotal,
+        COALESCE(SUM(v.monto_iva) FILTER (WHERE v.estado IS DISTINCT FROM 'anulada'), 0)::float8 AS monto_iva,
+        COALESCE(SUM(v.total)     FILTER (WHERE v.estado IS DISTINCT FROM 'anulada'), 0)::float8 AS total,
+        COALESCE(SUM(v.total)     FILTER (WHERE v.estado IS DISTINCT FROM 'anulada' AND v.tipo_venta = 'CREDITO'), 0)::float8 AS total_credito,
+        COALESCE(SUM(v.total)     FILTER (WHERE v.estado IS DISTINCT FROM 'anulada' AND v.tipo_venta IS DISTINCT FROM 'CREDITO'), 0)::float8 AS total_contado,
+        count(*) FILTER (WHERE v.estado IS DISTINCT FROM 'anulada' AND fa.id IS NOT NULL)::int AS facturadas,
+        COALESCE(SUM(cxc.saldo)   FILTER (WHERE v.estado IS DISTINCT FROM 'anulada' AND v.tipo_venta = 'CREDITO'), 0)::float8 AS saldo_pendiente
+      ${fromWhere}`,
+    args
+  );
+
+  // Filas mostradas: tope de seguridad para no enviar un dataset gigante al cliente.
+  const filasQ = pool().query(
     `SELECT
         v.id::text AS id, v.numero_control, v.fecha, v.tipo_venta, v.estado, v.metodo_pago,
         v.subtotal, v.monto_iva, v.total,
@@ -112,19 +149,14 @@ export async function getReporteVentasDetalle(
         fa.numero_completo AS numero_factura,
         cxc.saldo AS saldo_credito,
         cxc.estado AS estado_cobro
-      FROM ${tV} v
-      LEFT JOIN ${tC} c ON c.id = v.cliente_id AND c.empresa_id = v.empresa_id
-      LEFT JOIN ${tFa} fa ON fa.venta_id = v.id AND fa.empresa_id = v.empresa_id
-      LEFT JOIN ${tCxc} cxc ON cxc.venta_id = v.id AND cxc.empresa_id = v.empresa_id
-      LEFT JOIN ${tPc} pc ON pc.venta_id = v.id AND pc.empresa_id = v.empresa_id
-      LEFT JOIN ${tU} uv ON uv.email = pc.armado_por_email
-     WHERE v.empresa_id = $1::uuid
-       AND (v.fecha AT TIME ZONE INTERVAL '-3 hours')::date BETWEEN $2::date AND $3::date
-       ${where}
+      ${fromWhere}
      ORDER BY v.fecha DESC
-     LIMIT 5000`,
+     LIMIT ${LIMITE_FILAS}`,
     args
   );
+
+  const [filasRes, totRes] = await Promise.all([filasQ, totalesQ]);
+  const rows = filasRes.rows;
 
   const ventas: VentaReporteRow[] = rows.map((r: Record<string, unknown>) => ({
     id: String(r.id),
@@ -145,25 +177,19 @@ export async function getReporteVentasDetalle(
     estado_cobro: (r.estado_cobro as string | null) ?? null,
   }));
 
-  const totales = ventas.reduce(
-    (a, v) => {
-      const anulada = v.estado === "anulada";
-      a.cantidad += 1;
-      if (!anulada) {
-        a.subtotal += v.subtotal;
-        a.monto_iva += v.monto_iva;
-        a.total += v.total;
-        if (v.tipo_venta === "CREDITO") a.total_credito += v.total;
-        else a.total_contado += v.total;
-        if (v.facturada) a.facturadas += 1;
-        if (v.tipo_venta === "CREDITO" && v.saldo_credito) a.saldo_pendiente += v.saldo_credito;
-      }
-      return a;
-    },
-    { cantidad: 0, subtotal: 0, monto_iva: 0, total: 0, total_contado: 0, total_credito: 0, facturadas: 0, saldo_pendiente: 0 }
-  );
+  const t = (totRes.rows[0] ?? {}) as Record<string, unknown>;
+  const totales = {
+    cantidad: n(t.cantidad),
+    subtotal: n(t.subtotal),
+    monto_iva: n(t.monto_iva),
+    total: n(t.total),
+    total_contado: n(t.total_contado),
+    total_credito: n(t.total_credito),
+    facturadas: n(t.facturadas),
+    saldo_pendiente: n(t.saldo_pendiente),
+  };
 
-  return { ventas, totales };
+  return { ventas, totales, truncado: ventas.length < totales.cantidad };
 }
 
 export interface VentaItemRow {

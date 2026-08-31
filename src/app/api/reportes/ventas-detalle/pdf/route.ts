@@ -131,6 +131,7 @@ export async function GET(request: NextRequest) {
     <div class="card"><div class="lbl">Saldo pendiente</div><div class="val">Gs. ${gs(r.totales.saldo_pendiente)}</div></div>
   </div>
   ${tabla}
+  ${!resumido && r.truncado ? `<div class="nota">La tabla muestra las ${r.ventas.length.toLocaleString("es-PY")} ventas más recientes del período; los totales de arriba incluyen las ${r.totales.cantidad.toLocaleString("es-PY")} ventas. Acotá el rango de fechas para listarlas todas.</div>` : ""}
   <div class="foot">Reporte generado desde Zentra — Ferretería República. Documento no fiscal.</div>
 </div>
 <div class="actions"><button type="button" onclick="window.print()">Imprimir / Guardar PDF</button></div>
