@@ -9,6 +9,7 @@
  */
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
+import { escapeIlikeToken, normalizeText, splitTokens } from "@/lib/productos/token-search";
 
 function pool() {
   const p = getChatPostgresPool();
@@ -130,23 +131,146 @@ export interface InsertCompraInput {
   usuario_nombre: string | null;
 }
 
+export interface ListComprasFilters {
+  /** Texto libre por tokens: N.o de control, proveedor, producto, timbrado o N.o de factura. */
+  q?: string | null;
+  tipoPago?: "contado" | "credito" | null;
+  /** YYYY-MM-DD inclusive. */
+  desde?: string | null;
+  /** YYYY-MM-DD inclusive: se compara contra el dia completo. */
+  hasta?: string | null;
+  /** 1-based. */
+  page?: number;
+  /** Compras (grupos de numero_control) por pagina. `null` = sin paginar, para el export. */
+  pageSize?: number | null;
+}
+
+export interface ListComprasResult {
+  rows: CompraRow[];
+  /** Compras (no filas) que cumplen el filtro, ignorando la paginacion. */
+  total: number;
+  page: number;
+  pageSize: number | null;
+}
+
+/**
+ * Tokens listos para `LIKE ALL`: minusculas, sin acentos y con los comodines
+ * del usuario neutralizados. Mismo criterio que `productoMatchesQuery` en el
+ * cliente — cada palabra tiene que aparecer, en cualquier orden.
+ */
+function tokensLikeAll(q: string): string[] | null {
+  const tokens = splitTokens(normalizeText(q)).map(escapeIlikeToken).filter(Boolean);
+  if (tokens.length === 0) return null;
+  return tokens.map((t) => `%${t}%`);
+}
+
+/**
+ * Si el usuario escribe solo digitos ("95") arma el numero_control canonico
+ * COMP-000095, para poder ordenarlo antes que COMP-000950.
+ */
+function numeroControlExacto(q: string): string | null {
+  const soloDigitos = q.trim().replace(/^COMP-/i, "");
+  if (!/^\d{1,6}$/.test(soloDigitos)) return null;
+  return `COMP-${soloDigitos.padStart(6, "0")}`;
+}
+
+const PAGE_SIZE_MAX = 200;
+
+/** Pares acento -> letra base, para que el filtro del server ignore tildes igual que el cliente. */
+const ACENTOS_DESDE = "áéíóúüñÁÉÍÓÚÜÑ";
+const ACENTOS_HASTA = "aeiouunAEIOUUN";
+
+/**
+ * Lista compras con busqueda, filtros y paginacion resueltos en Postgres.
+ *
+ * Antes traia las ultimas 500 filas y la pantalla filtraba en el navegador: una
+ * compra mas vieja que esas 500 no aparecia ni en el listado ni en el export.
+ *
+ * La unidad de paginacion es la compra (`numero_control`), no la fila: una
+ * compra de 8 productos son 8 filas y tiene que venir entera. El CTE elige los
+ * numero_control de la pagina y la consulta externa trae todas sus filas.
+ */
 export async function listCompras(
   schemaRaw: string,
-  empresaId: string
-): Promise<CompraRow[]> {
+  empresaId: string,
+  filters: ListComprasFilters = {}
+): Promise<ListComprasResult> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const t = quoteSchemaTable(schema, "compras");
   const tProd = quoteSchemaTable(schema, "productos");
-  // JOIN a productos para traer la unidad de medida: la usa la edición de
-  // compra para saber si la cantidad admite decimales. La compra no la guarda.
-  const { rows } = await pool().query<CompraRow>(
-    `SELECT ${COLS.split(",").map((c) => `c.${c.trim()}`).join(", ")}, p.unidad_medida AS unidad_medida
-       FROM ${t} c
-       LEFT JOIN ${tProd} p ON p.id = c.producto_id
-      WHERE c.empresa_id = $1::uuid ORDER BY c.fecha DESC LIMIT 500`,
-    [empresaId]
-  );
-  return rows;
+  const cols = COLS.split(",").map((c) => `c.${c.trim()}`).join(", ");
+
+  const qRaw = filters.q?.trim() ?? "";
+  const tokens = qRaw ? tokensLikeAll(qRaw) : null;
+  const exacto = qRaw ? numeroControlExacto(qRaw) : null;
+  const tipoPago = filters.tipoPago ?? null;
+  const desde = filters.desde?.trim() || null;
+  const hasta = filters.hasta?.trim() || null;
+
+  const pageSize =
+    filters.pageSize === null || filters.pageSize === undefined
+      ? null
+      : Math.min(Math.max(1, Math.floor(filters.pageSize)), PAGE_SIZE_MAX);
+  const page = Math.max(1, Math.floor(filters.page ?? 1));
+  const offset = pageSize === null ? 0 : (page - 1) * pageSize;
+
+  /**
+   * Orden fijo: los dos argumentos de `translate` van siempre en $7/$8, y la
+   * paginacion queda al final en $9/$10 para que su ausencia no corra la
+   * numeracion del resto.
+   */
+  const params: unknown[] = [
+    empresaId, tokens, tipoPago, desde, hasta, exacto, ACENTOS_DESDE, ACENTOS_HASTA,
+  ];
+  if (pageSize !== null) params.push(pageSize, offset);
+
+  const sql = `
+    WITH grupo AS (
+      SELECT
+        c.numero_control,
+        MAX(c.fecha) AS fecha_max,
+        translate(lower(
+          c.numero_control
+          || ' ' || COALESCE(MAX(c.proveedor_nombre), '')
+          || ' ' || COALESCE(MAX(c.nro_timbrado), '')
+          || ' ' || COALESCE(MAX(c.numero_factura), '')
+          || ' ' || COALESCE(string_agg(c.producto_nombre, ' '), '')
+        ), $7, $8) AS heno
+      FROM ${t} c
+      WHERE c.empresa_id = $1::uuid
+        AND ($3::text IS NULL OR c.tipo_pago = $3)
+        AND ($4::date IS NULL OR c.fecha >= $4::date)
+        AND ($5::date IS NULL OR c.fecha < ($5::date + INTERVAL '1 day'))
+      GROUP BY c.numero_control
+    ),
+    filtrado AS (
+      SELECT * FROM grupo
+      WHERE $2::text[] IS NULL OR heno LIKE ALL ($2::text[])
+    ),
+    pagina AS (
+      SELECT numero_control, fecha_max, COUNT(*) OVER() AS total_grupos
+      FROM filtrado
+      ORDER BY ($6::text IS NOT NULL AND numero_control = $6) DESC, fecha_max DESC, numero_control DESC
+      ${pageSize === null ? "" : "LIMIT $9 OFFSET $10"}
+    )
+    SELECT ${cols}, p.unidad_medida AS unidad_medida, pagina.total_grupos
+      FROM ${t} c
+      JOIN pagina ON pagina.numero_control = c.numero_control
+      LEFT JOIN ${tProd} p ON p.id = c.producto_id
+     WHERE c.empresa_id = $1::uuid
+     ORDER BY pagina.fecha_max DESC, c.numero_control DESC, c.fecha DESC
+  `;
+
+  const { rows } = await pool().query<CompraRow & { total_grupos: string }>(sql, params);
+
+  const total = rows.length > 0 ? Number(rows[0].total_grupos) : 0;
+  const limpias = rows.map((r) => {
+    const copia: Partial<CompraRow & { total_grupos: string }> = { ...r };
+    delete copia.total_grupos;
+    return copia as CompraRow;
+  });
+
+  return { rows: limpias, total, page, pageSize };
 }
 
 /** Genera proximo COMP-XXXXXX leyendo el maximo existente. */

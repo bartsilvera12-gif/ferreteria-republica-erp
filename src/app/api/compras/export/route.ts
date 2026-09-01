@@ -2,6 +2,7 @@ import { NextRequest } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { listCompras } from "@/lib/compras/server/compras-pg";
+import { fechaParam, tipoPagoParam } from "@/lib/compras/query-params";
 import { buildXlsxBuffer, xlsxResponseHeaders, nowStamp } from "@/lib/excel/export";
 
 export async function GET(request: NextRequest) {
@@ -11,7 +12,15 @@ export async function GET(request: NextRequest) {
   const schema = await fetchDataSchemaForEmpresaId(empresaId);
 
   try {
-    const rows = await listCompras(schema, empresaId);
+    /** Mismos filtros que el listado, sin tope de filas: exporta lo que el usuario esta viendo. */
+    const sp = request.nextUrl.searchParams;
+    const { rows } = await listCompras(schema, empresaId, {
+      q: sp.get("q"),
+      tipoPago: tipoPagoParam(sp),
+      desde: fechaParam(sp, "desde"),
+      hasta: fechaParam(sp, "hasta"),
+      pageSize: null,
+    });
     const buf = buildXlsxBuffer(rows, [
       { header: "NUMERO_CONTROL", value: (r) => r.numero_control, width: 16 },
       { header: "FECHA", value: (r) => r.fecha ? new Date(r.fecha) : "", width: 18 },

@@ -72,9 +72,10 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
 
   useEffect(() => {
     let cancel = false;
-    getCompras().then((todas) => {
+    /** Se pide por numero_control: antes dependia de que la compra estuviera entre las ultimas 500. */
+    getCompras({ q: numeroControl }).then(({ compras }) => {
       if (cancel) return;
-      const rows = todas.filter((c) => c.numero_control === numeroControl);
+      const rows = compras.filter((c) => c.numero_control === numeroControl);
       if (rows.length === 0) { setError("Compra no encontrada."); setCargando(false); return; }
       if (rows.some((r) => r.orden_compra_numero)) {
         setBloqueada("Esta compra proviene de una orden de compra. Para corregirla, ajustá la orden de compra correspondiente.");
