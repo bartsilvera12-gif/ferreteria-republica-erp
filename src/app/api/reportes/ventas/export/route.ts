@@ -20,7 +20,11 @@ export async function GET(request: NextRequest) {
     const resumen = [
       { concepto: "Reporte", valor: "Ventas" },
       { concepto: "Mes", valor: mes },
-      { concepto: "Total vendido", valor: r.totalVendido },
+      { concepto: "Total vendido (bruto, sin anuladas)", valor: r.totalVendido },
+      { concepto: "Devoluciones del mes", valor: r.cantidadDevoluciones },
+      { concepto: "Total devuelto", valor: r.totalDevuelto },
+      { concepto: "Entregado como cambio", valor: r.totalEntregadoCambio },
+      { concepto: "Venta neta", valor: r.totalNeto },
       { concepto: "Cantidad de ventas", valor: r.cantidadVentas },
       { concepto: "Cantidad de ítems (líneas)", valor: r.cantidadItems },
       { concepto: "Ticket promedio", valor: Math.round(r.ticketPromedio) },

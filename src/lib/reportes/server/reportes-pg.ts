@@ -50,6 +50,13 @@ const num = (v: unknown): number => Number(v ?? 0) || 0;
 
 // ── Estado de cuenta ─────────────────────────────────────────────────────────
 
+/**
+ * Estado de cuenta del mes. Las ventas anuladas no entran, igual que en
+ * `getReporteVentas`: si un reporte las contara y el otro no, los dos totales
+ * de "ventas del mes" no cerrarian entre si.
+ *
+ * Pendiente: este reporte todavia NO descuenta devoluciones (el de ventas si).
+ */
 export async function getEstadoCuenta(
   schemaRaw: string,
   empresaId: string,
@@ -63,7 +70,8 @@ export async function getEstadoCuenta(
 
   const ventasQ = p.query<{ total: number }>(
     `SELECT COALESCE(SUM(total),0)::float8 AS total FROM ${tVentas}
-      WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
+      WHERE empresa_id=$1::uuid AND estado <> 'anulada'
+        AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
     [empresaId, b.start, b.end]
   );
   const comprasQ = p.query<{ total: number }>(
@@ -78,7 +86,8 @@ export async function getEstadoCuenta(
   );
   const porCobrarQ = p.query<{ total: number }>(
     `SELECT COALESCE(SUM(total),0)::float8 AS total FROM ${tVentas}
-      WHERE empresa_id=$1::uuid AND tipo_venta='CREDITO' AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
+      WHERE empresa_id=$1::uuid AND estado <> 'anulada' AND tipo_venta='CREDITO'
+        AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz`,
     [empresaId, b.start, b.end]
   );
   const porPagarQ = p.query<{ total: number }>(
@@ -92,7 +101,8 @@ export async function getEstadoCuenta(
         SELECT fecha, 'Venta'::text AS tipo, numero_control AS referencia,
                'Venta a cliente'::text AS descripcion, total::float8 AS entrada, 0::float8 AS salida
           FROM ${tVentas}
-         WHERE empresa_id=$1::uuid AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
+         WHERE empresa_id=$1::uuid AND estado <> 'anulada'
+           AND fecha>=$2::timestamptz AND fecha<=$3::timestamptz
         UNION ALL
         SELECT MIN(fecha) AS fecha, 'Compra'::text, numero_control,
                MIN(proveedor_nombre), 0::float8, SUM(total)::float8
@@ -293,6 +303,50 @@ function normTipoPrecio(v: unknown): TipoPrecioReporte {
   return v === "mayorista" || v === "distribuidor" || v === "costo" ? v : "minorista";
 }
 
+interface DevolucionesTotales {
+  devoluciones: number;
+  total_devuelto: number;
+  total_entregado: number;
+}
+
+const DEVOLUCIONES_CERO: DevolucionesTotales = {
+  devoluciones: 0,
+  total_devuelto: 0,
+  total_entregado: 0,
+};
+
+/**
+ * Totales de devoluciones confirmadas del periodo.
+ *
+ * Se atribuyen por la fecha de la devolucion (`created_at`), no por la de la
+ * venta original: es cuando la plata sale de la caja, asi que es el criterio
+ * que cierra contra el arqueo del mes.
+ *
+ * El modulo de devoluciones solo esta instalado en algunos schemas; si las
+ * tablas no existen el reporte devuelve ceros en vez de fallar.
+ */
+async function queryDevoluciones(schema: string, args: unknown[]): Promise<DevolucionesTotales> {
+  const p = pool();
+  const { rows: existe } = await p.query<{ presente: boolean }>(
+    `SELECT to_regclass($1) IS NOT NULL AS presente`,
+    [`${schema}.devoluciones_venta`]
+  );
+  if (!existe[0]?.presente) return DEVOLUCIONES_CERO;
+
+  const tD = quoteSchemaTable(schema, "devoluciones_venta");
+  const { rows } = await p.query<DevolucionesTotales>(
+    `SELECT count(*)::int AS devoluciones,
+            COALESCE(SUM(d.total_devuelto),0)::float8 AS total_devuelto,
+            COALESCE(SUM(d.total_entregado),0)::float8 AS total_entregado
+       FROM ${tD} d
+      WHERE d.empresa_id=$1::uuid
+        AND d.estado='confirmada'
+        AND d.created_at>=$2::timestamptz AND d.created_at<=$3::timestamptz`,
+    args
+  );
+  return rows[0] ?? DEVOLUCIONES_CERO;
+}
+
 export async function getReporteVentas(
   schemaRaw: string,
   empresaId: string,
@@ -303,7 +357,12 @@ export async function getReporteVentas(
   const tVI = quoteSchemaTable(schema, "ventas_items");
   const tCli = quoteSchemaTable(schema, "clientes");
   const p = pool();
-  const perV = `v.empresa_id=$1::uuid AND v.fecha>=$2::timestamptz AND v.fecha<=$3::timestamptz`;
+  /**
+   * Una venta anulada no ocurrio: no suma en ningun total del reporte.
+   * Las `parcialmente_devuelta` / `devuelta_total` SI se cuentan en el bruto —
+   * fueron ventas reales — y se descuentan aparte via devoluciones.
+   */
+  const perV = `v.empresa_id=$1::uuid AND v.estado <> 'anulada' AND v.fecha>=$2::timestamptz AND v.fecha<=$3::timestamptz`;
   const args = [empresaId, b.start, b.end];
 
   // Totales de cabecera.
@@ -341,8 +400,8 @@ export async function getReporteVentas(
        FROM ${tVI} vi JOIN ${tV} v ON v.id=vi.venta_id WHERE ${perV}
       ORDER BY v.fecha DESC, v.numero_control DESC`, args);
 
-  const [tot, itemsTot, tipoPrecio, porProd, ventas, items] = await Promise.all([
-    totQ, itemsTotQ, tipoPrecioQ, porProdQ, ventasQ, itemsQ]);
+  const [tot, itemsTot, tipoPrecio, porProd, ventas, items, dev] = await Promise.all([
+    totQ, itemsTotQ, tipoPrecioQ, porProdQ, ventasQ, itemsQ, queryDevoluciones(schema, args)]);
 
   const cantidadVentas = num(tot.rows[0]?.ventas);
   const totalVendido = num(tot.rows[0]?.total);
@@ -356,6 +415,9 @@ export async function getReporteVentas(
     porTipoPrecio[normTipoPrecio(r.tipo_precio)] = { items: num(r.items), total: num(r.total) };
   }
 
+  const totalDevuelto = num(dev.total_devuelto);
+  const totalEntregadoCambio = num(dev.total_entregado);
+
   return {
     mes: b.mes,
     totalVendido,
@@ -363,6 +425,10 @@ export async function getReporteVentas(
     cantidadItems: num(itemsTot.rows[0]?.items),
     ticketPromedio: cantidadVentas > 0 ? totalVendido / cantidadVentas : 0,
     unidadesVendidas: num(itemsTot.rows[0]?.unidades),
+    cantidadDevoluciones: num(dev.devoluciones),
+    totalDevuelto,
+    totalEntregadoCambio,
+    totalNeto: totalVendido - totalDevuelto + totalEntregadoCambio,
     porTipoPrecio,
     porProducto: porProd.rows.map((r) => ({ ...r, cantidad: num(r.cantidad), total: num(r.total) })),
     ventas: ventas.rows.map((v) => ({

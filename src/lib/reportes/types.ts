@@ -140,11 +140,20 @@ export interface ItemVendidoRow {
 
 export interface VentasReporte {
   mes: string;
+  /** Bruto: ventas del mes sin anuladas, antes de descontar devoluciones. */
   totalVendido: number;
   cantidadVentas: number;
   cantidadItems: number;     // líneas vendidas
   ticketPromedio: number;
   unidadesVendidas: number;  // SUM(cantidad)
+  /** Devoluciones confirmadas con fecha en el mes (por fecha de devolución, no de venta). */
+  cantidadDevoluciones: number;
+  /** Valor de la mercadería devuelta en el mes. */
+  totalDevuelto: number;
+  /** Valor entregado como cambio: no se registra como venta nueva, así que suma al neto. */
+  totalEntregadoCambio: number;
+  /** `totalVendido - totalDevuelto + totalEntregadoCambio`. Es el número que cierra contra caja. */
+  totalNeto: number;
   /** Desglose por nivel de precio (datos null se cuentan como minorista). */
   porTipoPrecio: Record<TipoPrecioReporte, VentaTipoPrecioTotal>;
   porProducto: VentaProductoTotal[];
