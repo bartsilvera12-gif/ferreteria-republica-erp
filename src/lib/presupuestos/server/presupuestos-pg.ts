@@ -11,6 +11,10 @@ export interface PresupuestoItemInput {
   precio_unitario: number;
   iva_tipo: IvaTipoPresupuesto;
   descuento: number;
+  /** Presentación cotizada. `cantidad` va en presentaciones, no en unidades base. */
+  presentacion_id?: string | null;
+  presentacion_nombre?: string | null;
+  presentacion_cantidad_base?: number | null;
 }
 
 export interface CrearPresupuestoInput {
@@ -26,6 +30,13 @@ export interface CrearPresupuestoInput {
   plazo_entrega: string | null;
   observaciones: string | null;
   items: PresupuestoItemInput[];
+}
+
+/** PostgREST devuelve PGRST204 cuando una columna del payload no existe en la tabla. */
+function esColumnaFaltante(err: { code?: string; message?: string } | null): boolean {
+  if (!err) return false;
+  if (err.code === "PGRST204") return true;
+  return /column .* does not exist|could not find the .* column/i.test(err.message ?? "");
 }
 
 function round2(n: number): number {
@@ -154,8 +165,32 @@ export async function crearPresupuesto(
     monto_iva: calc.monto_iva,
     descuento: calc.descuento,
     total: calc.total,
+    presentacion_id: raw.presentacion_id ?? null,
+    presentacion_nombre: raw.presentacion_nombre ?? null,
+    presentacion_cantidad_base: raw.presentacion_cantidad_base ?? null,
   }));
-  const insItems = await sb.from("presupuesto_items").insert(itemsRows);
+
+  /**
+   * Las migraciones de este repo se aplican a mano, no en el deploy. Si el
+   * código sale antes que la migración de presentaciones, PostgREST rechaza el
+   * insert con PGRST204 ("column not found"). En ese caso se reintenta sin esas
+   * columnas: se pierde la presentación, pero el presupuesto se guarda igual.
+   */
+  let insItems = await sb.from("presupuesto_items").insert(itemsRows);
+  if (insItems.error && esColumnaFaltante(insItems.error)) {
+    console.warn(
+      "[presupuestos] presupuesto_items sin columnas de presentación; guardando sin ellas. " +
+        "Falta aplicar 20260901120000_ferreteriarepublica_presupuesto_items_presentacion.sql"
+    );
+    const sinPresentacion = itemsRows.map((row) => {
+      const copia: Partial<typeof row> = { ...row };
+      delete copia.presentacion_id;
+      delete copia.presentacion_nombre;
+      delete copia.presentacion_cantidad_base;
+      return copia;
+    });
+    insItems = await sb.from("presupuesto_items").insert(sinPresentacion);
+  }
   if (insItems.error) {
     // Rollback best-effort de la cabecera para no dejar un presupuesto sin ítems.
     try {
@@ -327,9 +362,14 @@ async function convertirEnPedidoCaja(
         precio_venta: Math.max(0, Number(it.precio_unitario) || 0),
         tipo_precio: "minorista" as const,
         tipo_iva,
-        presentacion_id: null,
-        presentacion_nombre: null,
-        presentacion_cantidad_base: null,
+        /**
+         * Se arrastra lo cotizado: el pedido descuenta
+         * `cantidad * presentacion_cantidad_base` del stock, igual que una venta.
+         */
+        presentacion_id: (it.presentacion_id as string | null) ?? null,
+        presentacion_nombre: (it.presentacion_nombre as string | null) ?? null,
+        presentacion_cantidad_base:
+          Number(it.presentacion_cantidad_base) > 0 ? Number(it.presentacion_cantidad_base) : null,
       };
     });
   if (pedidoItems.length === 0) {

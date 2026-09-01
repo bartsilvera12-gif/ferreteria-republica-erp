@@ -38,6 +38,15 @@ export interface PresupuestoItem {
   monto_iva: number;
   descuento: number;
   total: number;
+  /**
+   * Presentación de venta cotizada (Caja, Paquete, Unidad...). Snapshot, igual
+   * que en ventas_items: `cantidad` está expresada en presentaciones y
+   * `cantidad * presentacion_cantidad_base` da las unidades de stock.
+   * null = se cotizó en la unidad base del producto.
+   */
+  presentacion_id?: string | null;
+  presentacion_nombre?: string | null;
+  presentacion_cantidad_base?: number | null;
 }
 
 export interface Presupuesto {

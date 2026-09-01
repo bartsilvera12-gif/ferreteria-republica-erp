@@ -29,7 +29,8 @@ export async function GET(request: NextRequest, ctxParams: { params: Promise<{ i
 
   const itq = await ctx.supabase
     .from("presupuesto_items")
-    .select("producto_nombre, sku, cantidad, unidad_medida, precio_unitario, iva_tipo, descuento, total")
+    /** `*` para que `presentacion_nombre` aparezca cuando la migración esté aplicada. */
+    .select("*")
     .eq("empresa_id", empresaId)
     .eq("presupuesto_id", id)
     .order("created_at", { ascending: true });

@@ -33,6 +33,10 @@ function parseItems(raw: unknown): PresupuestoItemInput[] | null {
       precio_unitario: precio,
       iva_tipo: asIva(r.iva_tipo),
       descuento: Math.max(0, Number(r.descuento) || 0),
+      presentacion_id: r.presentacion_id ? String(r.presentacion_id) : null,
+      presentacion_nombre: r.presentacion_nombre ? String(r.presentacion_nombre) : null,
+      presentacion_cantidad_base:
+        Number(r.presentacion_cantidad_base) > 0 ? Number(r.presentacion_cantidad_base) : null,
     });
   }
   return out;

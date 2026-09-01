@@ -35,6 +35,8 @@ type ItemRow = {
   sku: string | null;
   cantidad: number | string;
   unidad_medida: string | null;
+  presentacion_nombre?: string | null;
+  presentacion_cantidad_base?: number | null;
   precio_unitario: number | string;
   iva_tipo: string;
   descuento: number | string;
@@ -253,7 +255,14 @@ export default function PresupuestoDetallePage() {
                     <span className="font-medium text-slate-800">{it.producto_nombre}</span>
                     {it.sku ? <span className="text-xs text-slate-400"> · {it.sku}</span> : null}
                   </td>
-                  <td className="px-4 py-3 text-center tabular-nums text-slate-600">{Number(it.cantidad).toLocaleString("es-PY")} {it.unidad_medida ?? ""}</td>
+                  <td className="px-4 py-3 text-center tabular-nums text-slate-600">
+                    {Number(it.cantidad).toLocaleString("es-PY")}{" "}
+                    {it.presentacion_nombre ? (
+                      <span className="font-medium text-slate-700">{it.presentacion_nombre}</span>
+                    ) : (
+                      it.unidad_medida ?? ""
+                    )}
+                  </td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-600">{fmtGs(it.precio_unitario, presu.moneda)}</td>
                   <td className="px-4 py-3 text-center text-slate-500">{it.iva_tipo}</td>
                   <td className="px-4 py-3 text-right tabular-nums text-slate-500">{Number(it.descuento) > 0 ? fmtGs(it.descuento, presu.moneda) : "—"}</td>

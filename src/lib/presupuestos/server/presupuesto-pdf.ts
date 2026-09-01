@@ -40,6 +40,7 @@ export interface PresupuestoPdfData {
     sku: string | null;
     cantidad: number;
     unidad_medida: string | null;
+    presentacion_nombre?: string | null;
     precio_unitario: number;
     iva_tipo: string;
     descuento: number;
@@ -284,7 +285,9 @@ export async function buildPresupuestoPdf(
     // Línea base de la primera fila (las columnas numéricas se alinean con el nombre).
     const baseY = c.y - 3;
     // Cant (centrada)
-    const cantTxt = fit(`${Number(it.cantidad).toLocaleString("es-PY", { maximumFractionDigits: 3 })}${it.unidad_medida ? " " + it.unidad_medida : ""}`, reg, 8.5, cw[0] - 8);
+    /** Se cotiza en presentaciones cuando hay una; si no, en la unidad base. */
+    const unidadTxt = it.presentacion_nombre || it.unidad_medida || "";
+    const cantTxt = fit(`${Number(it.cantidad).toLocaleString("es-PY", { maximumFractionDigits: 3 })}${unidadTxt ? " " + unidadTxt : ""}`, reg, 8.5, cw[0] - 8);
     c.page.drawText(cantTxt, { x: cx[0] + (cw[0] - reg.widthOfTextAtSize(cantTxt, 8.5)) / 2, y: baseY, size: 8.5, font: reg, color: SLATE });
     // Descripción: nombre en negrita (una o más líneas) + SKU en gris debajo.
     let dy = baseY;
