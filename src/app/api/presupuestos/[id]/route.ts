@@ -10,8 +10,12 @@ const PRESU_COLS =
   "fecha, fecha_vencimiento, condicion, forma_pago, plazo_entrega, observaciones, " +
   "convertido_pedido_id, convertido_venta_id, created_at, updated_at";
 
-const ITEM_COLS =
-  "id, producto_id, producto_nombre, sku, cantidad, unidad_medida, precio_unitario, iva_tipo, subtotal, monto_iva, descuento, total";
+/**
+ * `*` y no una lista explícita: las migraciones de este repo se aplican a mano,
+ * y nombrar `presentacion_*` antes de que la migración corra haría fallar el
+ * detalle entero. Con `*` las columnas aparecen cuando existen.
+ */
+const ITEM_COLS = "*";
 
 /** GET /api/presupuestos/[id] — detalle + ítems. */
 export async function GET(request: NextRequest, ctxParams: { params: Promise<{ id: string }> }) {

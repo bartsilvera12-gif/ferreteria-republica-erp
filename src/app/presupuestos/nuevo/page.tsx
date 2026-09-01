@@ -6,6 +6,7 @@ import Link from "next/link";
 import { FileText, ArrowLeft, Plus, Trash2, Loader2, Search, ImageIcon } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { calcMontoIvaIncluido, type IvaTipoPresupuesto, type CondicionPresupuesto } from "@/lib/presupuestos/types";
+import ProductPickerModal, { type AgregarVentaPayload } from "@/components/inventario/ProductPickerModal";
 import ClienteBuscadorServer from "@/components/clientes/ClienteBuscadorServer";
 import { clienteNombre as clienteNombreLib } from "@/lib/clientes/storage";
 
@@ -43,6 +44,10 @@ type Item = {
   precio_unitario: number;
   iva_tipo: IvaTipoPresupuesto;
   descuento: number;
+  /** Presentación cotizada (Caja, Paquete...). null = unidad base del producto. */
+  presentacion_id: string | null;
+  presentacion_nombre: string | null;
+  presentacion_cantidad_base: number | null;
 };
 
 function fmtGs(n: number) {
@@ -69,6 +74,7 @@ export default function NuevoPresupuestoPage() {
   // búsqueda server-side por tokens sobre TODO el catálogo, agrega al instante.
   const [comboQuery, setComboQuery] = useState("");
   const [comboOpen, setComboOpen] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [comboHits, setComboHits] = useState<ComboHit[]>([]);
   const [comboBuscando, setComboBuscando] = useState(false);
   const [comboHighlight, setComboHighlight] = useState(-1);
@@ -151,7 +157,8 @@ export default function NuevoPresupuestoPage() {
   /** Agrega un producto del inventario al instante: si ya está, suma +1; si no, crea la línea. */
   function agregarProductoRapido(p: ComboHit) {
     setItems((prev) => {
-      const idx = prev.findIndex((it) => it.producto_id === p.id);
+      /** Sin presentación: solo se suma a una línea que tampoco tenga presentación. */
+      const idx = prev.findIndex((it) => it.producto_id === p.id && !it.presentacion_id);
       if (idx >= 0) {
         return prev.map((it, i) => (i === idx ? { ...it, cantidad: (Number(it.cantidad) || 0) + 1 } : it));
       }
@@ -166,6 +173,9 @@ export default function NuevoPresupuestoPage() {
           precio_unitario: p.precio_venta,
           iva_tipo: "10%",
           descuento: 0,
+          presentacion_id: null,
+          presentacion_nombre: null,
+          presentacion_cantidad_base: null,
         },
       ];
     });
@@ -207,8 +217,47 @@ export default function NuevoPresupuestoPage() {
         precio_unitario: 0,
         iva_tipo: "10%",
         descuento: 0,
+        presentacion_id: null,
+        presentacion_nombre: null,
+        presentacion_cantidad_base: null,
       },
     ]);
+  }
+
+  /**
+   * Alta desde el buscador avanzado: es el único camino que permite elegir
+   * presentación. Dos líneas del mismo producto con presentaciones distintas
+   * (una Caja y tres Unidades) son líneas separadas y no se fusionan.
+   */
+  function agregarDesdePicker(p: AgregarVentaPayload): boolean {
+    const presentacionId = p.presentacion_id ?? null;
+    setItems((prev) => {
+      const idx = prev.findIndex(
+        (it) => it.producto_id === p.producto.id && (it.presentacion_id ?? null) === presentacionId
+      );
+      if (idx >= 0) {
+        return prev.map((it, i) =>
+          i === idx ? { ...it, cantidad: (Number(it.cantidad) || 0) + p.cantidad } : it
+        );
+      }
+      return [
+        ...prev,
+        {
+          producto_id: p.producto.id,
+          producto_nombre: p.producto.nombre,
+          sku: p.producto.sku || null,
+          cantidad: p.cantidad,
+          unidad_medida: p.producto.unidad_medida ?? null,
+          precio_unitario: p.precio_input,
+          iva_tipo: p.iva === "EXENTA" ? "EXENTA" : p.iva,
+          descuento: 0,
+          presentacion_id: presentacionId,
+          presentacion_nombre: p.presentacion_nombre ?? null,
+          presentacion_cantidad_base: p.presentacion_cantidad_base ?? null,
+        },
+      ];
+    });
+    return true;
   }
 
   function updItem(i: number, patch: Partial<Item>) {
@@ -267,6 +316,9 @@ export default function NuevoPresupuestoPage() {
             precio_unitario: Number(it.precio_unitario),
             iva_tipo: it.iva_tipo,
             descuento: Number(it.descuento) || 0,
+            presentacion_id: it.presentacion_id,
+            presentacion_nombre: it.presentacion_nombre,
+            presentacion_cantidad_base: it.presentacion_cantidad_base,
           })),
         }),
       });
@@ -339,9 +391,19 @@ export default function NuevoPresupuestoPage() {
       <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-5">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h2 className="text-sm font-semibold text-gray-700">Productos</h2>
-          <button type="button" onClick={agregarManual} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
-            <Plus className="h-4 w-4" /> Ítem manual
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setPickerOpen(true)}
+              title="Buscador avanzado (presentaciones, niveles de precio)"
+              className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:border-[#0EA5E9] hover:text-[#0284C7]"
+            >
+              Buscador avanzado
+            </button>
+            <button type="button" onClick={agregarManual} className="inline-flex items-center gap-1 rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-600 hover:bg-slate-50">
+              <Plus className="h-4 w-4" /> Ítem manual
+            </button>
+          </div>
         </div>
 
         {/* Autocomplete: al elegir un producto se agrega solo y se limpia (igual que Caja). */}
@@ -429,6 +491,16 @@ export default function NuevoPresupuestoPage() {
                     <tr key={i}>
                       <td className="py-2 pr-2">
                         <input value={it.producto_nombre} onChange={(e) => updItem(i, { producto_nombre: e.target.value })} className={inputClass} placeholder="Descripción" />
+                        {it.presentacion_nombre && (
+                          <span className="mt-1 inline-flex items-center gap-1 rounded bg-[#4FAEB2]/10 px-1.5 py-0.5 text-[11px] font-semibold text-[#3F8E91]">
+                            {it.presentacion_nombre}
+                            {it.presentacion_cantidad_base && it.presentacion_cantidad_base > 1 && (
+                              <span className="font-normal text-slate-500">
+                                ×{it.presentacion_cantidad_base} {it.unidad_medida ?? "u"}
+                              </span>
+                            )}
+                          </span>
+                        )}
                       </td>
                       <td className="py-2 px-2">
                         <input type="number" min="1" step="1" inputMode="numeric" value={it.cantidad} onChange={(e) => updItem(i, { cantidad: Math.max(0, Math.floor(Number(e.target.value)) || 0) })} className={inputClass} />
@@ -516,6 +588,14 @@ export default function NuevoPresupuestoPage() {
           {guardando ? <><Loader2 className="h-4 w-4 animate-spin" /> Guardando…</> : "Guardar presupuesto"}
         </button>
       </div>
+
+      {/* Mismo buscador que usa Caja: es el que permite elegir presentación y nivel de precio. */}
+      <ProductPickerModal
+        open={pickerOpen}
+        onClose={() => setPickerOpen(false)}
+        onAgregar={agregarDesdePicker}
+        ivaDefault="10%"
+      />
     </div>
   );
 }
