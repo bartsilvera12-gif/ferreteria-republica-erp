@@ -77,17 +77,113 @@ export interface InsertCompraInput {
   usuario_nombre: string | null;
 }
 
+export interface ListComprasFilters {
+  /** Texto libre: N.o de control, proveedor, producto o timbrado. */
+  q?: string | null;
+  tipoPago?: "contado" | "credito" | null;
+  /** YYYY-MM-DD inclusive. */
+  desde?: string | null;
+  /** YYYY-MM-DD inclusive (se compara contra el dia completo). */
+  hasta?: string | null;
+  /** 1-based. */
+  page?: number;
+  /** Filas por pagina. `null` = sin paginar (export a Excel). */
+  pageSize?: number | null;
+}
+
+export interface ListComprasResult {
+  rows: CompraRow[];
+  /** Total de filas que cumplen el filtro, ignorando la paginacion. */
+  total: number;
+  page: number;
+  pageSize: number | null;
+}
+
+/** Escapa comodines para que el texto del usuario sea literal dentro de ILIKE. */
+function escapeLikePattern(raw: string): string {
+  return raw.replace(/([\\%_])/g, "\\$1");
+}
+
+/**
+ * Si el usuario escribe solo digitos ("95") arma el numero_control canonico
+ * COMP-000095 para poder priorizar la coincidencia exacta sobre COMP-000950.
+ */
+function numeroControlExacto(q: string): string | null {
+  const soloDigitos = q.trim().replace(/^COMP-/i, "");
+  if (!/^\d{1,6}$/.test(soloDigitos)) return null;
+  return `COMP-${soloDigitos.padStart(6, "0")}`;
+}
+
+const PAGE_SIZE_MAX = 200;
+
+/**
+ * Lista compras con busqueda, filtros y paginacion resueltos en Postgres.
+ *
+ * Antes se traian las ultimas 500 filas y se filtraba en el navegador, con lo
+ * cual cualquier compra mas vieja que esas 500 era invisible tanto en el
+ * listado como en el export a Excel.
+ */
 export async function listCompras(
   schemaRaw: string,
-  empresaId: string
-): Promise<CompraRow[]> {
+  empresaId: string,
+  filters: ListComprasFilters = {}
+): Promise<ListComprasResult> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const t = quoteSchemaTable(schema, "compras");
-  const { rows } = await pool().query<CompraRow>(
-    `SELECT ${COLS} FROM ${t} WHERE empresa_id = $1::uuid ORDER BY fecha DESC LIMIT 500`,
-    [empresaId]
-  );
-  return rows;
+
+  const qRaw = filters.q?.trim() ?? "";
+  const q = qRaw ? `%${escapeLikePattern(qRaw)}%` : null;
+  const exacto = qRaw ? numeroControlExacto(qRaw) : null;
+  const tipoPago = filters.tipoPago ?? null;
+  const desde = filters.desde?.trim() || null;
+  const hasta = filters.hasta?.trim() || null;
+
+  const pageSize =
+    filters.pageSize === null || filters.pageSize === undefined
+      ? null
+      : Math.min(Math.max(1, Math.floor(filters.pageSize)), PAGE_SIZE_MAX);
+  const page = Math.max(1, Math.floor(filters.page ?? 1));
+  const offset = pageSize === null ? 0 : (page - 1) * pageSize;
+
+  const where = `
+    WHERE empresa_id = $1::uuid
+      AND ($2::text IS NULL OR (
+            numero_control ILIKE $2 ESCAPE '\\'
+         OR proveedor_nombre ILIKE $2 ESCAPE '\\'
+         OR producto_nombre ILIKE $2 ESCAPE '\\'
+         OR nro_timbrado ILIKE $2 ESCAPE '\\'
+          ))
+      AND ($3::text IS NULL OR tipo_pago = $3)
+      AND ($4::date IS NULL OR fecha >= $4::date)
+      AND ($5::date IS NULL OR fecha < ($5::date + INTERVAL '1 day'))
+  `;
+
+  /**
+   * COUNT(*) OVER() devuelve el total sin paginar en la misma ida a la base.
+   * La coincidencia exacta de numero_control va primero para que buscar "95"
+   * muestre COMP-000095 arriba de COMP-000950.
+   */
+  const sql = `
+    SELECT ${COLS}, COUNT(*) OVER() AS total_filtrado
+    FROM ${t}
+    ${where}
+    ORDER BY ($6::text IS NOT NULL AND numero_control = $6) DESC, fecha DESC, numero_control DESC
+    ${pageSize === null ? "" : "LIMIT $7 OFFSET $8"}
+  `;
+
+  const params: unknown[] = [empresaId, q, tipoPago, desde, hasta, exacto];
+  if (pageSize !== null) params.push(pageSize, offset);
+
+  const { rows } = await pool().query<CompraRow & { total_filtrado: string }>(sql, params);
+
+  const total = rows.length > 0 ? Number(rows[0].total_filtrado) : 0;
+  const limpias = rows.map((r) => {
+    const copia: Partial<CompraRow & { total_filtrado: string }> = { ...r };
+    delete copia.total_filtrado;
+    return copia as CompraRow;
+  });
+
+  return { rows: limpias, total, page, pageSize };
 }
 
 /** Genera proximo COMP-XXXXXX leyendo el maximo existente. */

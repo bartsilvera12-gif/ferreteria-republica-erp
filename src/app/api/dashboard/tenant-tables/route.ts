@@ -29,6 +29,53 @@ function parseDateRangeFromQuery(sp: URLSearchParams): DateRange {
 }
 
 /**
+ * Dia siguiente a `ymd`, en YYYY-MM-DD.
+ *
+ * El filtro de rango usa `< diaSiguiente(hasta)` en vez de `<= hasta`: en las
+ * columnas `timestamptz` (por ejemplo `ventas.fecha`) comparar contra la fecha
+ * pelada equivale a `<= hasta 00:00:00`, con lo cual todo lo del ultimo dia del
+ * periodo quedaba afuera y los totales del reporte no cerraban.
+ * En columnas `date` el resultado es el mismo que `<= hasta`.
+ */
+function diaSiguiente(ymd: string): string {
+  const [y, m, d] = ymd.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d + 1));
+  return dt.toISOString().slice(0, 10);
+}
+
+/**
+ * PostgREST corta las respuestas en `max-rows` (1000 por defecto en Supabase) y
+ * lo hace en silencio: no hay error, simplemente faltan filas. Con varios meses
+ * de ventas eso hacia que el dashboard sumara un subconjunto del periodo.
+ *
+ * `fetchAllPaged` recorre el resultado por bloques hasta traerlo completo.
+ * `buildQuery` tiene que devolver una query nueva en cada llamada: los builders
+ * de supabase-js son de un solo uso.
+ */
+const PAGE_ROWS = 1000;
+const MAX_PAGES = 200;
+
+async function fetchAllPaged<T>(
+  buildQuery: () => {
+    range: (from: number, to: number) => PromiseLike<{ data: T[] | null; error: { message: string } | null }>;
+  }
+): Promise<{ data: T[] | null; error: { message: string } | null }> {
+  const acumulado: T[] = [];
+  for (let pagina = 0; pagina < MAX_PAGES; pagina++) {
+    const desde = pagina * PAGE_ROWS;
+    const { data, error } = await buildQuery().range(desde, desde + PAGE_ROWS - 1);
+    if (error) return { data: null, error };
+    const lote = data ?? [];
+    acumulado.push(...lote);
+    if (lote.length < PAGE_ROWS) return { data: acumulado, error: null };
+  }
+  console.warn("[dashboard/tenant-tables] fetchAllPaged corto en MAX_PAGES", {
+    filas: acumulado.length,
+  });
+  return { data: acumulado, error: null };
+}
+
+/**
  * Fallback PG directo para tablas operativas que necesita el dashboard
  * cuando el tenant `erp_*` no esta expuesto en PostgREST.
  * Por ahora solo cubrimos productos y compras (alimentan DashInventario);
@@ -67,7 +114,7 @@ async function fallbackComprasPg(
     const t = quoteSchemaTable(schema, "compras");
     if (range) {
       const { rows } = await pool.query(
-        `SELECT * FROM ${t} WHERE empresa_id = $1::uuid AND fecha >= $2::date AND fecha <= $3::date`,
+        `SELECT * FROM ${t} WHERE empresa_id = $1::uuid AND fecha >= $2::date AND fecha < ($3::date + INTERVAL '1 day')`,
         [empresaId, range.desde, range.hasta]
       );
       return rows;
@@ -98,7 +145,7 @@ async function fallbackVentasPg(
     const t = quoteSchemaTable(schema, "ventas");
     if (range) {
       const { rows } = await pool.query(
-        `SELECT * FROM ${t} WHERE empresa_id = $1::uuid AND fecha >= $2::date AND fecha <= $3::date`,
+        `SELECT * FROM ${t} WHERE empresa_id = $1::uuid AND fecha >= $2::date AND fecha < ($3::date + INTERVAL '1 day')`,
         [empresaId, range.desde, range.hasta]
       );
       return rows;
@@ -217,27 +264,27 @@ export async function GET(request: NextRequest) {
     /** Helper: arma una query con o sin filtro de fecha según `range`. */
     const buildFacturasQ = () => {
       const base = supabase.from("facturas").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
+      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
     };
     const buildPagosQ = () => {
       const base = supabase.from("pagos").select("id, factura_id, monto, fecha_pago").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha_pago", range.desde).lte("fecha_pago", range.hasta) : base;
+      return range ? base.gte("fecha_pago", range.desde).lt("fecha_pago", diaSiguiente(range.hasta)) : base;
     };
     const buildTipificacionesQ = () => {
       const base = supabase.from("tipificaciones").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
+      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
     };
     const buildVentasQ = () => {
       const base = supabase.from("ventas").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
+      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
     };
     const buildComprasQ = () => {
       const base = supabase.from("compras").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
+      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
     };
     const buildGastosQ = () => {
       const base = supabase.from("gastos").select("id, monto, fecha").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lte("fecha", range.hasta) : base;
+      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
     };
 
     /**
@@ -247,7 +294,7 @@ export async function GET(request: NextRequest) {
      */
     const ventasItemsParalelo = range
       ? Promise.resolve({ data: null as unknown[] | null, error: null as { message: string } | null })
-      : supabase.from("ventas_items").select("*").eq("empresa_id", empresaId);
+      : fetchAllPaged<unknown>(() => supabase.from("ventas_items").select("*").eq("empresa_id", empresaId));
 
     const [
       clientesQ,
@@ -265,19 +312,21 @@ export async function GET(request: NextRequest) {
       notaCreditoQ,
     ] = await Promise.all([
       /** Sin `.is("deleted_at", null)` en PostgREST: en tenants viejos la columna puede no existir y rompía todo el batch. */
-      supabase.from("clientes").select("*").eq("empresa_id", empresaId),
-      buildFacturasQ(),
-      buildPagosQ(),
-      buildTipificacionesQ(),
-      supabase.from("productos").select("*").eq("empresa_id", empresaId),
-      buildVentasQ(),
+      fetchAllPaged(() => supabase.from("clientes").select("*").eq("empresa_id", empresaId)),
+      fetchAllPaged(buildFacturasQ),
+      fetchAllPaged(buildPagosQ),
+      fetchAllPaged(buildTipificacionesQ),
+      fetchAllPaged(() => supabase.from("productos").select("*").eq("empresa_id", empresaId)),
+      fetchAllPaged(buildVentasQ),
       ventasItemsParalelo,
-      buildComprasQ(),
-      buildGastosQ(),
-      supabase
-        .from("suscripciones")
-        .select("id, cliente_id, precio, moneda, fecha_inicio, created_at")
-        .eq("empresa_id", empresaId),
+      fetchAllPaged(buildComprasQ),
+      fetchAllPaged(buildGastosQ),
+      fetchAllPaged(() =>
+        supabase
+          .from("suscripciones")
+          .select("id, cliente_id, precio, moneda, fecha_inicio, created_at")
+          .eq("empresa_id", empresaId)
+      ),
       supabase
         .from("clientes")
         .select("id")
@@ -328,11 +377,23 @@ export async function GET(request: NextRequest) {
       if (ventaIds.length === 0) {
         ventasItemsRows = [];
       } else {
-        const itemsRes = await supabase
-          .from("ventas_items")
-          .select("*")
-          .eq("empresa_id", empresaId)
-          .in("venta_id", ventaIds);
+        /**
+         * En lotes: un `.in(...)` con miles de UUIDs arma una URL que PostgREST
+         * rechaza, y cada lote se pagina porque los items superan holgadamente
+         * el tope de filas por respuesta.
+         */
+        const LOTE_IDS = 300;
+        const acumulado: unknown[] = [];
+        let itemsErr: { message: string } | null = null;
+        for (let i = 0; i < ventaIds.length && !itemsErr; i += LOTE_IDS) {
+          const lote = ventaIds.slice(i, i + LOTE_IDS);
+          const { data, error } = await fetchAllPaged<unknown>(() =>
+            supabase.from("ventas_items").select("*").eq("empresa_id", empresaId).in("venta_id", lote)
+          );
+          if (error) itemsErr = error;
+          else acumulado.push(...(data ?? []));
+        }
+        const itemsRes = { data: itemsErr ? null : acumulado, error: itemsErr };
         ventasItemsRows = pickRows("ventas_items", itemsRes, queryErrors);
         if ((ventasItemsRows.length === 0 && queryErrors.ventas_items) || (usarPg && ventasItemsRows.length === 0)) {
           ventasItemsRows = await fallbackVentasItemsPg(dataSchema, empresaId, ventaIds);

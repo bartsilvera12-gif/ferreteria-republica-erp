@@ -37,19 +37,72 @@ function mapRow(r: CompraApiRow): Compra {
   };
 }
 
-export async function getCompras(): Promise<Compra[]> {
+export interface ComprasQuery {
+  /** N.o de control, proveedor, producto o timbrado. */
+  q?: string;
+  tipoPago?: "contado" | "credito" | "";
+  /** YYYY-MM-DD */
+  desde?: string;
+  /** YYYY-MM-DD */
+  hasta?: string;
+  page?: number;
+  pageSize?: number;
+}
+
+export interface ComprasPage {
+  compras: Compra[];
+  /** Total de compras que cumplen el filtro, no solo las de esta pagina. */
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+/** Query string compartido por el listado y el export a Excel. */
+export function comprasQueryString(query: ComprasQuery = {}): string {
+  const sp = new URLSearchParams();
+  if (query.q?.trim()) sp.set("q", query.q.trim());
+  if (query.tipoPago) sp.set("tipo_pago", query.tipoPago);
+  if (query.desde) sp.set("desde", query.desde);
+  if (query.hasta) sp.set("hasta", query.hasta);
+  return sp.toString();
+}
+
+const PAGE_SIZE_DEFAULT = 50;
+
+export async function getCompras(query: ComprasQuery = {}): Promise<ComprasPage> {
+  const page = query.page && query.page > 0 ? query.page : 1;
+  const pageSize = query.pageSize && query.pageSize > 0 ? query.pageSize : PAGE_SIZE_DEFAULT;
+  const vacia: ComprasPage = { compras: [], total: 0, page, pageSize };
+
   try {
-    const r = await fetch("/api/compras", { credentials: "include", cache: "no-store" });
+    const sp = new URLSearchParams(comprasQueryString(query));
+    sp.set("page", String(page));
+    sp.set("page_size", String(pageSize));
+
+    const r = await fetch(`/api/compras?${sp.toString()}`, {
+      credentials: "include",
+      cache: "no-store",
+    });
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j?.success) {
       console.error("[compras] getCompras:", (j as { error?: string })?.error ?? r.status);
-      return [];
+      return vacia;
     }
-    const list = ((j.data as { compras?: CompraApiRow[] }).compras ?? []) as CompraApiRow[];
-    return list.map(mapRow);
+    const data = j.data as {
+      compras?: CompraApiRow[];
+      total?: number;
+      page?: number;
+      page_size?: number;
+    };
+    return {
+      compras: (data.compras ?? []).map(mapRow),
+      total: Number(data.total ?? 0),
+      page: Number(data.page ?? page),
+      pageSize: Number(data.page_size ?? pageSize),
+    };
   } catch (e) {
     console.error("[compras] getCompras:", e);
-    return [];
+    return vacia;
   }
 }
 

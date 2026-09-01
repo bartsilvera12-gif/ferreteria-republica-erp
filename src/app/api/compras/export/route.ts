@@ -4,6 +4,18 @@ import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema"
 import { listCompras } from "@/lib/compras/server/compras-pg";
 import { buildXlsxBuffer, xlsxResponseHeaders, nowStamp } from "@/lib/excel/export";
 
+/** `?fecha=YYYY-MM-DD`; devuelve null si el formato no es valido. */
+function fechaParam(sp: URLSearchParams, key: string): string | null {
+  const raw = sp.get(key)?.trim();
+  if (!raw) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
+/**
+ * GET /api/compras/export — Excel de compras.
+ * Acepta los mismos filtros que `/api/compras` para exportar exactamente lo que
+ * el usuario esta viendo; sin filtros exporta el historico completo.
+ */
 export async function GET(request: NextRequest) {
   const ctx = await getTenantSupabaseFromAuth(request);
   if (!ctx) return new Response("Unauthorized", { status: 401 });
@@ -11,7 +23,15 @@ export async function GET(request: NextRequest) {
   const schema = await fetchDataSchemaForEmpresaId(empresaId);
 
   try {
-    const rows = await listCompras(schema, empresaId);
+    const sp = request.nextUrl.searchParams;
+    const tipoPagoRaw = sp.get("tipo_pago")?.trim();
+    const { rows } = await listCompras(schema, empresaId, {
+      q: sp.get("q"),
+      tipoPago: tipoPagoRaw === "contado" || tipoPagoRaw === "credito" ? tipoPagoRaw : null,
+      desde: fechaParam(sp, "desde"),
+      hasta: fechaParam(sp, "hasta"),
+      pageSize: null,
+    });
     const buf = buildXlsxBuffer(rows, [
       { header: "NUMERO_CONTROL", value: (r) => r.numero_control, width: 16 },
       { header: "FECHA", value: (r) => r.fecha ? new Date(r.fecha) : "", width: 18 },

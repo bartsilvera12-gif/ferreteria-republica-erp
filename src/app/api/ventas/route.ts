@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
+import type { AppSupabaseClient } from "@/lib/supabase/schema";
 import type { Venta, LineaVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
 interface VentaRow {
@@ -51,6 +52,39 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
   }));
 }
 
+const LISTA_LIMITE = 500;
+const PAGE_ROWS = 1000;
+const LOTE_IDS = 300;
+
+/** Trae todos los items de las ventas indicadas, en lotes y paginando cada lote. */
+async function fetchVentasItems(
+  supabase: AppSupabaseClient,
+  empresaId: string,
+  ventaIds: string[]
+): Promise<VentaItemRow[]> {
+  const out: VentaItemRow[] = [];
+  const COLS =
+    "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, subtotal, monto_iva, total_linea";
+
+  for (let i = 0; i < ventaIds.length; i += LOTE_IDS) {
+    const lote = ventaIds.slice(i, i + LOTE_IDS);
+    for (let pagina = 0; ; pagina++) {
+      const desde = pagina * PAGE_ROWS;
+      const { data, error } = await supabase
+        .from("ventas_items")
+        .select(COLS)
+        .eq("empresa_id", empresaId)
+        .in("venta_id", lote)
+        .range(desde, desde + PAGE_ROWS - 1);
+      if (error) throw new Error(error.message);
+      const filas = (data ?? []) as VentaItemRow[];
+      out.push(...filas);
+      if (filas.length < PAGE_ROWS) break;
+    }
+  }
+  return out;
+}
+
 /** GET /api/ventas — listado vía PostgREST (compatible Hostinger sin pool). */
 export async function GET(request: NextRequest) {
   try {
@@ -65,19 +99,21 @@ export async function GET(request: NextRequest) {
       )
       .eq("empresa_id", empresaId)
       .order("fecha", { ascending: false })
-      .limit(500);
+      .limit(LISTA_LIMITE);
     if (ventasQ.error) throw new Error(ventasQ.error.message);
 
-    const itemsQ = await ctx.supabase
-      .from("ventas_items")
-      .select(
-        "venta_id, producto_id, producto_nombre, sku, cantidad, precio_venta_original, precio_venta, tipo_iva, subtotal, monto_iva, total_linea"
-      )
-      .eq("empresa_id", empresaId);
-    if (itemsQ.error) throw new Error(itemsQ.error.message);
-
     const ventasRows = (ventasQ.data ?? []) as VentaRow[];
-    const itemsRows = (itemsQ.data ?? []) as VentaItemRow[];
+    const ventaIds = ventasRows.map((v) => v.id);
+
+    /**
+     * Los items se piden solo para las ventas listadas y en lotes paginados.
+     *
+     * Antes se pedian todos los items de la empresa de una sola vez: PostgREST
+     * corta en `max-rows` sin devolver error, asi que a partir de cierto volumen
+     * llegaban items incompletos y las metricas de la pantalla (unidades
+     * vendidas, totales por venta) quedaban por debajo de lo real.
+     */
+    const itemsRows = await fetchVentasItems(ctx.supabase, empresaId, ventaIds);
 
     const byVenta = new Map<string, VentaItemRow[]>();
     for (const row of itemsRows) {

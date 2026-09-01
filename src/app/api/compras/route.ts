@@ -5,16 +5,45 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { listCompras, insertCompraConImpacto } from "@/lib/compras/server/compras-pg";
 
+const PAGE_SIZE_DEFAULT = 50;
+
+/** `?fecha=YYYY-MM-DD`; devuelve null si el formato no es valido. */
+function fechaParam(sp: URLSearchParams, key: string): string | null {
+  const raw = sp.get(key)?.trim();
+  if (!raw) return null;
+  return /^\d{4}-\d{2}-\d{2}$/.test(raw) ? raw : null;
+}
+
 /**
- * GET /api/compras — lista via PG directo.
+ * GET /api/compras — lista via PG directo, con busqueda, filtros y paginacion
+ * resueltos en la base.
+ *
+ * Query: `q`, `tipo_pago` (contado|credito), `desde`, `hasta` (YYYY-MM-DD),
+ * `page` (1-based), `page_size`.
  */
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
-    const rows = await listCompras(schema, ctx.auth.empresa_id);
-    return NextResponse.json(successResponse({ compras: rows }));
+
+    const sp = request.nextUrl.searchParams;
+    const tipoPagoRaw = sp.get("tipo_pago")?.trim();
+    const pageRaw = parseInt(sp.get("page") ?? "1", 10);
+    const pageSizeRaw = parseInt(sp.get("page_size") ?? String(PAGE_SIZE_DEFAULT), 10);
+
+    const { rows, total, page, pageSize } = await listCompras(schema, ctx.auth.empresa_id, {
+      q: sp.get("q"),
+      tipoPago: tipoPagoRaw === "contado" || tipoPagoRaw === "credito" ? tipoPagoRaw : null,
+      desde: fechaParam(sp, "desde"),
+      hasta: fechaParam(sp, "hasta"),
+      page: Number.isNaN(pageRaw) ? 1 : pageRaw,
+      pageSize: Number.isNaN(pageSizeRaw) ? PAGE_SIZE_DEFAULT : pageSizeRaw,
+    });
+
+    return NextResponse.json(
+      successResponse({ compras: rows, total, page, page_size: pageSize })
+    );
   } catch (err) {
     console.error("[/api/compras GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudieron cargar las compras."), { status: 500 });
