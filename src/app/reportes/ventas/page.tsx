@@ -64,12 +64,55 @@ export default function VentasReportePage() {
       ) : (
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
-            <StatCard compact label="Total vendido" value={formatGs(data.totalVendido)} accent />
+            <StatCard compact label="Venta neta" value={formatGs(data.totalNeto)} hint="bruto − devoluciones" accent />
+            <StatCard compact label="Total vendido" value={formatGs(data.totalVendido)} hint="bruto, sin anuladas" />
             <StatCard compact label="Ventas" value={String(data.cantidadVentas)} hint={`${data.cantidadItems} ítems / líneas`} />
             <StatCard compact label="Ticket promedio" value={formatGs(data.ticketPromedio)} hint="por venta" />
             <StatCard compact label="Unidades vendidas" value={String(data.unidadesVendidas)} />
-            <StatCard compact label="Ítems vendidos" value={String(data.cantidadItems)} />
           </div>
+
+          {/* Conciliacion: como se llega del bruto al neto. Solo si hubo devoluciones. */}
+          {data.cantidadDevoluciones > 0 && (
+            <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="mb-1 text-base font-semibold text-slate-800">Del bruto al neto</h2>
+              <p className="mb-4 text-xs text-slate-400">
+                Las devoluciones se cuentan por su propia fecha, no por la de la venta original:
+                es cuando la plata sale de la caja.
+              </p>
+              <dl className="divide-y divide-slate-100 text-sm">
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-500">Total vendido (bruto)</dt>
+                  <dd className="font-semibold tabular-nums text-slate-800">{formatGs(data.totalVendido)}</dd>
+                </div>
+                <div className="flex items-center justify-between py-2">
+                  <dt className="text-slate-500">
+                    Devoluciones
+                    <span className="ml-1.5 text-xs text-slate-400">
+                      ({data.cantidadDevoluciones})
+                    </span>
+                  </dt>
+                  <dd className="font-semibold tabular-nums text-rose-600">
+                    − {formatGs(data.totalDevuelto)}
+                  </dd>
+                </div>
+                {data.totalEntregadoCambio > 0 && (
+                  <div className="flex items-center justify-between py-2">
+                    <dt className="text-slate-500">
+                      Entregado como cambio
+                      <span className="ml-1.5 text-xs text-slate-400">no se registra como venta nueva</span>
+                    </dt>
+                    <dd className="font-semibold tabular-nums text-emerald-700">
+                      + {formatGs(data.totalEntregadoCambio)}
+                    </dd>
+                  </div>
+                )}
+                <div className="flex items-center justify-between py-2.5">
+                  <dt className="font-semibold text-slate-700">Venta neta</dt>
+                  <dd className="text-base font-bold tabular-nums text-slate-900">{formatGs(data.totalNeto)}</dd>
+                </div>
+              </dl>
+            </div>
+          )}
 
           {/* Desglose por tipo de precio */}
           <div className="bg-white border border-slate-200 rounded-xl shadow-sm p-6">
