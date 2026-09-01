@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fechaParam, tipoPagoParam } from "@/lib/compras/query-params";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
@@ -10,16 +11,42 @@ import {
   type CompraItemInput,
 } from "@/lib/compras/server/compras-pg";
 
+const PAGE_SIZE_DEFAULT = 25;
+
 /**
- * GET /api/compras — lista via PG directo.
+ * GET /api/compras — lista via PG directo, con busqueda, filtros y paginacion
+ * resueltos en la base.
+ *
+ * Query: `q`, `tipo_pago` (contado|credito), `desde`, `hasta` (YYYY-MM-DD),
+ * `page` (1-based), `page_size`. `total` cuenta compras, no filas.
  */
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     const schema = await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id);
-    const rows = await listCompras(schema, ctx.auth.empresa_id);
-    return NextResponse.json(successResponse({ compras: rows }));
+
+    const sp = request.nextUrl.searchParams;
+    const page = parseInt(sp.get("page") ?? "1", 10);
+    const pageSize = parseInt(sp.get("page_size") ?? String(PAGE_SIZE_DEFAULT), 10);
+
+    const res = await listCompras(schema, ctx.auth.empresa_id, {
+      q: sp.get("q"),
+      tipoPago: tipoPagoParam(sp),
+      desde: fechaParam(sp, "desde"),
+      hasta: fechaParam(sp, "hasta"),
+      page: Number.isNaN(page) ? 1 : page,
+      pageSize: Number.isNaN(pageSize) ? PAGE_SIZE_DEFAULT : pageSize,
+    });
+
+    return NextResponse.json(
+      successResponse({
+        compras: res.rows,
+        total: res.total,
+        page: res.page,
+        page_size: res.pageSize,
+      })
+    );
   } catch (err) {
     console.error("[/api/compras GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudieron cargar las compras."), { status: 500 });

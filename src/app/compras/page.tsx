@@ -2,19 +2,21 @@
 
 import Link from "next/link";
 import { Pencil } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
-import { getCompras } from "@/lib/compras/storage";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { getCompras, comprasQueryString } from "@/lib/compras/storage";
 import { getOrdenesCompra } from "@/lib/ordenes-compra/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
-import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type { Compra, TipoPago } from "@/lib/compras/types";
 import type { OrdenCompra, EstadoOrdenCompra } from "@/lib/ordenes-compra/types";
 
 const inputFilterClass =
   "border border-slate-200 rounded-lg px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#0EA5E9] focus:outline-none bg-white";
+
+const paginadorBtnClass =
+  "rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-semibold text-slate-600 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40";
 
 function formatGs(valor: number) {
   return `Gs. ${Math.round(valor).toLocaleString("es-PY")}`;
@@ -86,21 +88,82 @@ function resumenProductos(items: Compra[]): string {
   return `${items[0].producto_nombre} + ${items.length - 1} más`;
 }
 
+const PAGE_SIZE = 25;
+
 export default function ComprasPage() {
-  const [todas, setTodas] = useState<Compra[]>([]);
   const [ordenes, setOrdenes] = useState<OrdenCompra[]>([]);
-  const [busqueda, setBusqueda] = useState("");
-  const [filtroTipoPago, setFiltroTipoPago] = useState<TipoPago | "">("");
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+
+  /** Lo que el usuario tipea; se manda al servidor con 350 ms de debounce. */
+  const [busqueda, setBusqueda] = useState("");
+  const [busquedaAplicada, setBusquedaAplicada] = useState("");
+  const [filtroTipoPago, setFiltroTipoPago] = useState<TipoPago | "">("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+  const [pagina, setPagina] = useState(1);
+
+  /**
+   * Resultado servido, etiquetado con la consulta que lo produjo. Mientras la
+   * consulta actual no coincide con la etiqueta la pantalla esta cargando, y
+   * sigue mostrando el resultado anterior en vez de parpadear en blanco.
+   */
+  const [resultado, setResultado] = useState<{
+    clave: string;
+    filas: Compra[];
+    total: number;
+  } | null>(null);
+
+  useEffect(() => {
+    const id = setTimeout(() => {
+      setBusquedaAplicada(busqueda);
+      setPagina(1);
+    }, 350);
+    return () => clearTimeout(id);
+  }, [busqueda]);
+
+  const clave = JSON.stringify([busquedaAplicada, filtroTipoPago, desde, hasta, pagina]);
+  const cargando = resultado?.clave !== clave;
+  const totalCompras = resultado?.total ?? 0;
 
   useEffect(() => {
     let cancel = false;
-    getCompras().then((data) => { if (!cancel) setTodas(data); });
+    getCompras({
+      q: busquedaAplicada,
+      tipoPago: filtroTipoPago,
+      desde,
+      hasta,
+      page: pagina,
+      pageSize: PAGE_SIZE,
+    }).then((data) => {
+      if (cancel) return;
+      setResultado({ clave, filas: data.compras, total: data.total });
+    });
+    return () => { cancel = true; };
+  }, [clave, busquedaAplicada, filtroTipoPago, desde, hasta, pagina]);
+
+  useEffect(() => {
+    let cancel = false;
     getOrdenesCompra().then((data) => { if (!cancel) setOrdenes(data); });
     return () => { cancel = true; };
   }, []);
 
-  const grupos = useMemo(() => agrupar(todas), [todas]);
+  /** El servidor ya devuelve solo las compras de la pagina; aca solo se agrupan las filas. */
+  const grupos = useMemo(() => agrupar(resultado?.filas ?? []), [resultado]);
+
+  const totalPaginas = Math.max(1, Math.ceil(totalCompras / PAGE_SIZE));
+  const primera = totalCompras === 0 ? 0 : (pagina - 1) * PAGE_SIZE + 1;
+  const ultima = Math.min(pagina * PAGE_SIZE, totalCompras);
+
+  const exportQs = comprasQueryString({ q: busquedaAplicada, tipoPago: filtroTipoPago, desde, hasta });
+  const exportUrl = exportQs ? `/api/compras/export?${exportQs}` : "/api/compras/export";
+
+  const limpiarFiltros = useCallback(() => {
+    setBusqueda("");
+    setFiltroTipoPago("");
+    setDesde("");
+    setHasta("");
+    setPagina(1);
+  }, []);
 
   // Órdenes de compra por confirmar: pendientes o recibidas parcialmente.
   // El encargado las revisa y confirma la recepción desde acá.
@@ -116,20 +179,7 @@ export default function ComprasPage() {
     return [...map.values()].sort((a, b) => (a.fecha < b.fecha ? 1 : -1));
   }, [ordenes]);
 
-  const filtrados = useMemo(() => {
-    return grupos.filter((g) => {
-      const coincideTexto = busqueda.trim() === "" || productoMatchesQuery(
-        busqueda,
-        g.proveedor_nombre,
-        g.numero_control,
-        ...g.items.map((i) => i.producto_nombre),
-      );
-      const coincideTipoPago = filtroTipoPago === "" || g.tipo_pago === filtroTipoPago;
-      return coincideTexto && coincideTipoPago;
-    });
-  }, [grupos, busqueda, filtroTipoPago]);
-
-  const hayFiltros = busqueda || filtroTipoPago;
+  const hayFiltros = Boolean(busqueda || filtroTipoPago || desde || hasta);
 
   function toggle(numero: string) {
     setExpandidos((prev) => {
@@ -232,7 +282,7 @@ export default function ComprasPage() {
         <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-xl font-semibold">Compras registradas</h2>
           <div className="flex items-center gap-3">
-            <ExportExcelButton url="/api/compras/export" />
+            <ExportExcelButton url={exportUrl} />
             <Link href="/compras/desde-orden"
               className="rounded-lg border border-[#4FAEB2]/40 bg-[#4FAEB2]/[0.08] px-3 py-1.5 text-xs font-semibold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/[0.16] active:scale-95">
               Desde Orden de Compra
@@ -249,21 +299,37 @@ export default function ComprasPage() {
           <input type="text" placeholder="Buscar por proveedor, producto o N° control..."
             value={busqueda} onChange={(e) => setBusqueda(e.target.value)}
             className={`${inputFilterClass} min-w-0 flex-1 sm:min-w-72`} />
-          <FancySelect value={filtroTipoPago} onChange={(v) => setFiltroTipoPago(v as TipoPago | "")}
+          <FancySelect value={filtroTipoPago} onChange={(v) => { setFiltroTipoPago(v as TipoPago | ""); setPagina(1); }}
             ariaLabel="Filtrar por tipo de pago" className="w-44" size="sm"
             options={[
               { value: "", label: "Todos los pagos" },
               { value: "contado", label: "Contado" },
               { value: "credito", label: "Crédito" },
             ]} />
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            Desde
+            <input type="date" value={desde}
+              onChange={(e) => { setDesde(e.target.value); setPagina(1); }}
+              className={inputFilterClass} />
+          </label>
+          <label className="flex items-center gap-1.5 text-xs text-slate-500">
+            Hasta
+            <input type="date" value={hasta}
+              onChange={(e) => { setHasta(e.target.value); setPagina(1); }}
+              className={inputFilterClass} />
+          </label>
           {hayFiltros && (
-            <button onClick={() => { setBusqueda(""); setFiltroTipoPago(""); }}
+            <button onClick={limpiarFiltros}
               className="text-sm text-gray-400 hover:text-gray-600 transition-colors px-2">
               Limpiar filtros
             </button>
           )}
-          <span className="ml-auto text-sm text-gray-400">
-            {filtrados.length} de {grupos.length} compras
+          <span className="ml-auto text-sm text-gray-400 tabular-nums">
+            {cargando
+              ? "Buscando..."
+              : totalCompras === 0
+              ? "Sin resultados"
+              : `${primera}-${ultima} de ${totalCompras} compras`}
           </span>
         </div>
 
@@ -283,14 +349,18 @@ export default function ComprasPage() {
               </tr>
             </thead>
             <tbody>
-              {filtrados.length === 0 ? (
+              {grupos.length === 0 ? (
                 <tr>
                   <td colSpan={8} className="py-12 text-center text-gray-400">
-                    {grupos.length === 0 ? "No hay compras registradas" : "Ninguna compra coincide con los filtros"}
+                    {cargando
+                      ? "Cargando compras..."
+                      : hayFiltros
+                      ? "Ninguna compra coincide con los filtros"
+                      : "No hay compras registradas"}
                   </td>
                 </tr>
               ) : (
-                filtrados.map((g) => {
+                grupos.map((g) => {
                   const abierto = expandidos.has(g.numero_control);
                   const multi = g.items.length > 1;
                   return (
@@ -374,6 +444,23 @@ export default function ComprasPage() {
             </tbody>
           </table>
         </EdgeScrollArea>
+
+        {/* Paginacion */}
+        {totalCompras > PAGE_SIZE && (
+          <div className="mt-5 flex items-center justify-between gap-3 border-t border-slate-100 pt-4">
+            <button type="button" onClick={() => setPagina((p) => Math.max(1, p - 1))}
+              disabled={pagina <= 1 || cargando} className={paginadorBtnClass}>
+              Anterior
+            </button>
+            <span className="text-xs text-slate-500 tabular-nums">
+              Pagina {pagina} de {totalPaginas}
+            </span>
+            <button type="button" onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
+              disabled={pagina >= totalPaginas || cargando} className={paginadorBtnClass}>
+              Siguiente
+            </button>
+          </div>
+        )}
 
       </div>
 

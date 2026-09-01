@@ -57,15 +57,18 @@ export default function ComprasReportePage() {
   // Detalle de una compra (modal, sin salir del reporte). Las líneas se cargan
   // una vez (getCompras devuelve las filas planas) y se filtran por numero_control.
   const [detalle, setDetalle] = useState<ComprasPanel["compras"][number] | null>(null);
+  /** Filas de la compra abierta en el detalle, cacheadas por numero_control. */
   const [comprasFull, setComprasFull] = useState<Compra[] | null>(null);
   const [cargandoDetalle, setCargandoDetalle] = useState(false);
 
   async function abrirDetalle(c: ComprasPanel["compras"][number]) {
     setDetalle(c);
-    if (comprasFull == null) {
+    const yaCargada = comprasFull?.some((r) => r.numero_control === c.numero_control);
+    if (!yaCargada) {
       setCargandoDetalle(true);
-      const full = await getCompras();
-      setComprasFull(full);
+      /** Solo la compra abierta: antes traia las ultimas 500 para buscar una. */
+      const { compras } = await getCompras({ q: c.numero_control });
+      setComprasFull(compras);
       setCargandoDetalle(false);
     }
   }
