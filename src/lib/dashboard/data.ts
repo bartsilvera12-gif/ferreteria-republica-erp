@@ -1,6 +1,6 @@
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getProspectos } from "@/lib/crm/storage";
-import { toCalendarDateStr } from "@/lib/fechas/calendario";
+import { toCalendarDateStr, isoAInstanteAsuncion } from "@/lib/fechas/calendario";
 
 // ── Tipos de salida (estructura esperada por el Dashboard en page.tsx) ────────
 
@@ -84,6 +84,8 @@ export interface VentaRaw {
   monto_iva: number;
   total: number;
   tipo_venta: string;
+  /** Estado de la venta (p. ej. "anulada"). Necesario para excluir anuladas del dashboard. */
+  estado: string;
   moneda: string;
   tipo_cambio?: number;
   fecha: string;
@@ -124,6 +126,15 @@ export interface SuscripcionDashRow {
 /** True si la factura está anulada (cualquier capitalización). */
 export function esFacturaAnulada(estado: string | null | undefined): boolean {
   return String(estado ?? "").trim().toLowerCase() === "anulado";
+}
+
+/**
+ * True si la VENTA (POS) está anulada. NULL/vacío = vigente. Mismo criterio que
+ * los reportes de ventas (`estado IS DISTINCT FROM 'anulada'`): una anulada no
+ * es venta y no debe sumar en el dashboard.
+ */
+export function esVentaAnulada(estado: string | null | undefined): boolean {
+  return String(estado ?? "").trim().toLowerCase() === "anulada";
 }
 
 /** Liquidada por nota de crédito SET (sin saldo cobrable vía módulo Pagos). */
@@ -464,9 +475,12 @@ export async function getDashboardData(): Promise<DashboardData> {
         monto_iva: Number(r.monto_iva) ?? 0,
         total: Number(r.total) ?? 0,
         tipo_venta: (r.tipo_venta as string) ?? "CONTADO",
+        estado: (r.estado as string) ?? "",
         moneda: (r.moneda as string) ?? "GS",
         tipo_cambio: Number(r.tipo_cambio) ?? 1,
-        fecha: toCalendarDateStr(r.fecha as string) || toIsoTimestampStr(r.fecha as string),
+        // Fecha en hora de Asunción (UTC-3) para agrupar por día/mes igual que los
+        // reportes; antes se tomaba la fecha UTC y corría las ventas nocturnas al día siguiente.
+        fecha: isoAInstanteAsuncion(r.fecha as string) || toCalendarDateStr(r.fecha as string),
       };
     });
 

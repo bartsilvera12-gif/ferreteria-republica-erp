@@ -14,6 +14,7 @@ import type { Usuario } from "@/lib/usuarios/types";
 import {
   esFacturaAnulada,
   esFacturaCorregidaNc,
+  esVentaAnulada,
   buildMontoNcAprobadaPorFacturaId,
   montoFacturaNetoValorComercial,
   getDashboardData,
@@ -1538,7 +1539,7 @@ const DashFinanciero = memo(function DashFinanciero({
               variant="light"
               label="Ventas mensuales"
               value={ventas
-                .filter((v) => enMesCalendarioActual(toCalendarDateStr(v.fecha)))
+                .filter((v) => !esVentaAnulada(v.estado) && enMesCalendarioActual(toCalendarDateStr(v.fecha)))
                 .reduce((s, v) => {
                   const t = Number(v.total);
                   return s + (Number.isFinite(t) ? t : 0);
@@ -1754,20 +1755,23 @@ const DashVentas = memo(function DashVentas({
 }) {
   const { desde, hasta } = useMemo(() => getRango(periodo), [periodo]);
 
+  // Excluye ventas anuladas (una anulada no es venta). Mismo criterio que los reportes.
+  const ventasVigentes = useMemo(() => ventas.filter(v => !esVentaAnulada(v.estado)), [ventas]);
+
   const ventasFilt = useMemo(() =>
-    ventas.filter(v => enRango(v.fecha, desde, hasta)),
-    [ventas, desde, hasta]
+    ventasVigentes.filter(v => enRango(v.fecha, desde, hasta)),
+    [ventasVigentes, desde, hasta]
   );
 
   const ventasHoy = useMemo(() => {
     const { desde: d, hasta: h } = getRango("hoy");
-    return ventas.filter(v => enRango(v.fecha, d, h));
-  }, [ventas]);
+    return ventasVigentes.filter(v => enRango(v.fecha, d, h));
+  }, [ventasVigentes]);
 
   const ventasMes = useMemo(() => {
     const { desde: d, hasta: h } = getRango("mes");
-    return ventas.filter(v => enRango(v.fecha, d, h));
-  }, [ventas]);
+    return ventasVigentes.filter(v => enRango(v.fecha, d, h));
+  }, [ventasVigentes]);
 
   const totalHoy   = ventasHoy.reduce((s, v) => s + v.total, 0);
   const totalMes   = ventasMes.reduce((s, v) => s + v.total, 0);

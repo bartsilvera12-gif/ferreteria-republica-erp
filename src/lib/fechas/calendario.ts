@@ -17,6 +17,31 @@ export function toCalendarDateStr(v: string | null | undefined): string {
   return `${y}-${mo}-${da}`;
 }
 
+/**
+ * Convierte un instante (timestamptz ISO, p. ej. "2026-08-31T23:30:00+00:00")
+ * a la hora de pared de Asunción (Paraguay, UTC-3 fijo, sin DST desde 2024) como
+ * "YYYY-MM-DDTHH:mm:ss" SIN sufijo de zona. Así los primeros 10 caracteres son la
+ * FECHA CALENDARIO de Asunción (para agrupar por día/mes) y `new Date(...)` en un
+ * navegador de Paraguay devuelve la hora local correcta. Si `v` ya es date-only
+ * (YYYY-MM-DD) se devuelve sin corrimiento. Evita el bug de agrupar por fecha UTC
+ * (una venta de las 22:00 hora PY caía al día siguiente).
+ */
+export function isoAInstanteAsuncion(v: string | null | undefined): string {
+  if (v == null || v === "") return "";
+  const s = String(v).trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s; // date-only: sin hora, sin corrimiento
+  const d = new Date(s);
+  if (isNaN(d.getTime())) return "";
+  const asun = new Date(d.getTime() - 3 * 60 * 60 * 1000); // UTC-3
+  const y = asun.getUTCFullYear();
+  const mo = String(asun.getUTCMonth() + 1).padStart(2, "0");
+  const da = String(asun.getUTCDate()).padStart(2, "0");
+  const hh = String(asun.getUTCHours()).padStart(2, "0");
+  const mi = String(asun.getUTCMinutes()).padStart(2, "0");
+  const ss = String(asun.getUTCSeconds()).padStart(2, "0");
+  return `${y}-${mo}-${da}T${hh}:${mi}:${ss}`;
+}
+
 /** Hoy en zona local del navegador/servidor. */
 export function hoyYmdLocal(d: Date = new Date()): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;

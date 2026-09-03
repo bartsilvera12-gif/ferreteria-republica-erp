@@ -20,6 +20,7 @@ import {
 import {
   esFacturaAnulada,
   esFacturaCorregidaNc,
+  esVentaAnulada,
   buildMontoNcAprobadaPorFacturaId,
   montoFacturaNetoValorComercial,
   type ClienteRaw,
@@ -198,8 +199,10 @@ export default function MobileDashboard({
         return s + (Number.isFinite(saldo) && saldo > 0 ? saldo : 0);
       }, 0);
 
-    // Ventas en período
-    const ventasPeriodo = ventas.filter((v) => enRangoCalendario(v.fecha, desde, hasta));
+    // Ventas en período (excluye anuladas — mismo criterio que los reportes)
+    const ventasPeriodo = ventas.filter(
+      (v) => !esVentaAnulada(v.estado) && enRangoCalendario(v.fecha, desde, hasta),
+    );
     const totalVentas = ventasPeriodo.reduce((s, v) => s + (Number(v.total) || 0), 0);
 
     // Gastos en período
@@ -344,7 +347,7 @@ export default function MobileDashboard({
   // Últimas ventas (top 5 más recientes en el período)
   const ultimasVentas = useMemo(() => {
     return ventas
-      .filter((v) => enRangoCalendario(v.fecha, desde, hasta))
+      .filter((v) => !esVentaAnulada(v.estado) && enRangoCalendario(v.fecha, desde, hasta))
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
       .slice(0, 5);
   }, [ventas, desde, hasta]);
