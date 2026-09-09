@@ -18,9 +18,20 @@ function isSitioHost(host: string | null): boolean {
 /**
  * Paths que NO se reescriben a /sitio/* aunque el host sea del sitio publico.
  * El sitio puede hacer fetch a /api/sitio/* desde su mismo dominio sin CORS.
+ *
+ * /robots.txt y /sitemap.xml: SEO del sitio publico. Deben servirse desde la
+ * RAIZ del dominio (Google los busca ahi). Sin este passthrough caerian en el
+ * `else` de abajo -> 302 al home, y Google nunca los encontraria. Se sirven
+ * como archivos estaticos desde /public (public/robots.txt, public/sitemap.xml).
+ * Solo aplica al host del sitio publico; la rama del ERP no se ve afectada.
  */
 function isPassthroughPath(pathname: string): boolean {
-  return pathname.startsWith("/api/") || pathname.startsWith("/_next/");
+  return (
+    pathname.startsWith("/api/") ||
+    pathname.startsWith("/_next/") ||
+    pathname === "/robots.txt" ||
+    pathname === "/sitemap.xml"
+  );
 }
 
 /**

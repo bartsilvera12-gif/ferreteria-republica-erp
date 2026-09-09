@@ -1,0 +1,23 @@
+# robots.txt — Ferretería República (sitio público)
+# https://ferreteriarepublica.com.py/
+
+User-agent: *
+Allow: /
+
+# Rutas privadas / administrativas del ERP — no promover para indexación.
+# (En el dominio público estas rutas ya redirigen al home; se listan por claridad.)
+Disallow: /admin
+Disallow: /ventas
+Disallow: /inventario
+Disallow: /caja
+Disallow: /compras
+Disallow: /facturas
+Disallow: /clientes
+Disallow: /usuarios
+Disallow: /login
+
+# NOTA: /api/ NO se bloquea. El catálogo del sitio público consume
+# /api/sitio/productos y /api/sitio/categorias vía JavaScript; bloquearlas
+# impediría que Google renderice e indexe los productos.
+
+Sitemap: https://ferreteriarepublica.com.py/sitemap.xml
