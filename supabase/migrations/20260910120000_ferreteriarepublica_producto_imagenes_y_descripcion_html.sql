@@ -28,7 +28,9 @@ RETURNS trigger AS $$ BEGIN NEW.updated_at = now(); RETURN NEW; END; $$ LANGUAGE
 
 -- ── 4) Tabla (solo columnas; los constraints se agregan/garantizan aparte) ──
 CREATE TABLE IF NOT EXISTS ferreteriarepublica.producto_imagenes (
-  id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  -- schema explícito extensions.* (misma convención real que productos.id;
+  -- no depende del search_path).
+  id           uuid PRIMARY KEY DEFAULT extensions.gen_random_uuid(),
   empresa_id   uuid NOT NULL,
   producto_id  uuid NOT NULL,
   imagen_path  text,
@@ -83,17 +85,23 @@ CREATE TRIGGER producto_imagenes_updated_at
   BEFORE UPDATE ON ferreteriarepublica.producto_imagenes
   FOR EACH ROW EXECUTE FUNCTION ferreteriarepublica.set_producto_imagenes_updated_at();
 
--- ── 5) PRIVILEGIO MÍNIMO ─────────────────────────────────────────────────────
--- Verificado en el código: la tabla se accede EXCLUSIVAMENTE server-side vía el
--- pg Pool (rol postgres). Ningún componente cliente / Supabase JS hace
--- from("producto_imagenes"). Por lo tanto authenticated/anon NO necesitan acceso
--- directo. Como el schema tiene ALTER DEFAULT PRIVILEGES que otorga DML a
--- authenticated en tablas nuevas, hacemos REVOKE explícito. RLS queda habilitado
--- como defensa adicional. postgres (pg Pool) es superusuario; service_role para
--- storage/APIs.
+-- ── 5) PRIVILEGIO MÍNIMO (endurecido) ───────────────────────────────────────
+-- Auditoría del código: `producto_imagenes` se accede EXCLUSIVAMENTE server-side
+-- vía el pg Pool (rol postgres, superusuario/owner). NO existe ningún
+-- supabase.from("producto_imagenes"); service_role solo toca Storage y la tabla
+-- `productos`, nunca esta tabla. Por lo tanto:
+--   anon / authenticated / authenticator / PUBLIC : SIN acceso directo.
+--   service_role : SOLO SELECT (margen de lectura conservador; hoy no la lee).
+--   postgres (owner / pg Pool) : acceso administrativo normal.
+-- Los REVOKE van DESPUÉS de crear la tabla, para deshacer lo que el schema pudo
+-- otorgar automáticamente (ALTER DEFAULT PRIVILEGES da DML a authenticated y ALL
+-- a service_role en tablas nuevas). RLS queda habilitado como defensa adicional.
+REVOKE ALL ON ferreteriarepublica.producto_imagenes FROM PUBLIC;
 REVOKE ALL ON ferreteriarepublica.producto_imagenes FROM anon;
 REVOKE ALL ON ferreteriarepublica.producto_imagenes FROM authenticated;
-GRANT ALL ON ferreteriarepublica.producto_imagenes TO service_role;
+REVOKE ALL ON ferreteriarepublica.producto_imagenes FROM authenticator;
+REVOKE ALL ON ferreteriarepublica.producto_imagenes FROM service_role;
+GRANT SELECT ON ferreteriarepublica.producto_imagenes TO service_role;
 
 -- ── 6) RLS + políticas (cada una idempotente, patrón puede_acceder_empresa) ──
 ALTER TABLE ferreteriarepublica.producto_imagenes ENABLE ROW LEVEL SECURITY;
