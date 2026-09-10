@@ -20,7 +20,11 @@ import { PRODUCTOS_IMAGENES_BUCKET } from "@/lib/inventario/imagen-storage";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-const IMG_CACHE = "public, s-maxage=86400, stale-while-revalidate=604800";
+// Este endpoint es un ALIAS de la imagen PRINCIPAL ACTUAL, que puede cambiar
+// (el usuario puede elegir otra principal). Por eso el cache es CORTO. La URL
+// estable e inmutable por identidad es /imagen-producto/<producto>/<imagen-id>
+// (esa sí con cache largo). El JSON-LD y og:image usan las URLs específicas.
+const IMG_CACHE = "public, s-maxage=300, stale-while-revalidate=60";
 
 function typeFromPath(path: string): string {
   const ext = path.split(".").pop()?.toLowerCase();
@@ -77,7 +81,7 @@ export async function GET(
       status: 302,
       headers: {
         location: producto.imagen_url,
-        "cache-control": "public, s-maxage=3600",
+        "cache-control": "public, s-maxage=300", // alias mutable → cache corto
       },
     });
   }

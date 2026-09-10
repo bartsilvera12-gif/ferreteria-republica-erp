@@ -9,7 +9,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { isSitioHost, SITIO_ORIGIN } from "@/app/_sitio/host";
 import { parseSlugId, slugify } from "@/app/_sitio/slug";
-import { getProductoPublico } from "@/app/_sitio/producto-read";
+import { getProductoPublico, getGaleriaPublica } from "@/app/_sitio/producto-read";
 import { renderProductoHtml, render404Html } from "@/app/_sitio/render-html";
 
 export const runtime = "nodejs";
@@ -63,8 +63,17 @@ export async function GET(
     );
   }
 
+  // Galería (opcional). Si falla, se renderiza con la imagen principal legacy
+  // como fallback — un problema de galería no debe romper la ficha.
+  let galeria;
+  try {
+    galeria = await getGaleriaPublica(producto.id);
+  } catch {
+    galeria = undefined;
+  }
+
   return htmlResponse(
-    renderProductoHtml(producto),
+    renderProductoHtml(producto, galeria),
     200,
     "public, s-maxage=600, stale-while-revalidate=300"
   );

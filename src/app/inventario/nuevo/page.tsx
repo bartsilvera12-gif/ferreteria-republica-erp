@@ -5,6 +5,8 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import SelectFromList from "@/components/inventario/SelectFromList";
+import RichTextEditor from "@/components/inventario/RichTextEditor";
+import NuevoProductoImagenes from "@/components/inventario/NuevoProductoImagenes";
 import { productoExiste, saveProducto } from "@/lib/inventario/storage";
 import type { MetodoValuacion } from "@/lib/inventario/types";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
@@ -29,6 +31,18 @@ export default function NuevoProductoPage() {
   const router = useRouter();
   const [errorDuplicado, setErrorDuplicado] = useState<string | null>(null);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
+
+  // Rich text (descripcion_html); descripcion plana la deriva el server.
+  const [descripcionHtml, setDescripcionHtml] = useState("");
+  // Imágenes seleccionadas (se suben tras crear el producto).
+  const [imagenesPendientes, setImagenesPendientes] = useState<File[]>([]);
+  // Estado de subida de imágenes tras crear (para reintentar solo las fallidas).
+  const [postCreacion, setPostCreacion] = useState<null | {
+    id: string;
+    pendientes: File[];
+    subidas: number;
+    total: number;
+  }>(null);
 
   const [form, setForm] = useState({
     nombre: "",
@@ -129,41 +143,8 @@ export default function NuevoProductoPage() {
     return () => { cancel = true; };
   }, []);
 
-  // Imagen pendiente de subir (se sube luego de crear el producto, con su ID).
-  const [imagenFile, setImagenFile] = useState<File | null>(null);
-  const [imagenPreview, setImagenPreview] = useState<string | null>(null);
-  const [imagenError, setImagenError] = useState<string | null>(null);
-
-  const ALLOWED_MIME = ["image/jpeg", "image/png", "image/webp"];
-  const MAX_IMG_BYTES = 5 * 1024 * 1024;
-
-  function handleImagenChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setImagenError(null);
-    const f = e.target.files?.[0] ?? null;
-    if (!f) {
-      setImagenFile(null);
-      setImagenPreview(null);
-      return;
-    }
-    if (!ALLOWED_MIME.includes(f.type)) {
-      setImagenError("Formato no permitido. Usá JPG, PNG o WebP.");
-      e.target.value = "";
-      return;
-    }
-    if (f.size > MAX_IMG_BYTES) {
-      setImagenError("Imagen demasiado grande (máx. 5 MB).");
-      e.target.value = "";
-      return;
-    }
-    setImagenFile(f);
-    setImagenPreview(URL.createObjectURL(f));
-  }
-
-  function quitarImagen() {
-    setImagenFile(null);
-    setImagenPreview(null);
-    setImagenError(null);
-  }
+  // Las imágenes (múltiples) se manejan con imagenesPendientes + NuevoProductoImagenes
+  // y se suben tras crear el producto (ver handleSubmit).
 
   // Patrones de SKU según el tipo elegido (para "Generar SKU" y el dropdown).
   useEffect(() => {
@@ -290,6 +271,39 @@ export default function NuevoProductoPage() {
     }
   }
 
+  // Sube cada imagen a la API de galería (POST /imagenes). Devuelve las fallidas.
+  async function subirImagenes(productoId: string, files: File[]): Promise<File[]> {
+    const fallidas: File[] = [];
+    for (const f of files) {
+      try {
+        const fd = new FormData();
+        fd.append("file", f);
+        const up = await fetch(`/api/productos/${productoId}/imagenes`, {
+          method: "POST",
+          body: fd,
+          credentials: "include",
+        });
+        if (!up.ok) fallidas.push(f);
+      } catch {
+        fallidas.push(f);
+      }
+    }
+    return fallidas;
+  }
+
+  async function reintentarImagenes() {
+    if (!postCreacion) return;
+    setSubmitting(true);
+    const fallidas = await subirImagenes(postCreacion.id, postCreacion.pendientes);
+    const subidas = postCreacion.total - fallidas.length;
+    if (fallidas.length === 0) {
+      router.push(`/inventario/${postCreacion.id}/editar`);
+      return;
+    }
+    setPostCreacion({ ...postCreacion, pendientes: fallidas, subidas });
+    setSubmitting(false);
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     e.stopPropagation();
@@ -331,7 +345,7 @@ export default function NuevoProductoPage() {
       try {
         guardado = await saveProducto({
           nombre: form.nombre.trim().toUpperCase(),
-          descripcion: form.descripcion.trim() || null,
+          descripcion_html: descripcionHtml,
           marca: form.marca.trim() || null,
           observaciones: form.observaciones.trim() || null,
           sku: form.sku.trim().toUpperCase(),
@@ -375,29 +389,21 @@ export default function NuevoProductoPage() {
         return;
       }
 
-      // Subir imagen (post-creacion, con producto_id real)
-      if (imagenFile) {
-        try {
-          const fd = new FormData();
-          fd.append("file", imagenFile);
-          const up = await fetch(`/api/productos/${guardado.id}/imagen`, {
-            method: "POST",
-            body: fd,
-            credentials: "include",
+      // Subir imágenes (post-creación, con producto_id real). El producto YA está
+      // creado: nunca se re-crea. Si alguna falla, se ofrece reintentar solo las
+      // pendientes. Primera imagen = principal por defecto (la crea el backend).
+      if (imagenesPendientes.length > 0) {
+        const fallidas = await subirImagenes(guardado.id, imagenesPendientes);
+        if (fallidas.length > 0) {
+          const subidas = imagenesPendientes.length - fallidas.length;
+          setPostCreacion({
+            id: guardado.id,
+            pendientes: fallidas,
+            subidas,
+            total: imagenesPendientes.length,
           });
-          const upJson = await up.json();
-          if (!up.ok || !upJson?.success) {
-            // Producto creado, imagen falló. No perder el producto: ir a editar con aviso.
-            const msg = upJson?.error ?? "No se pudo subir la imagen.";
-            alert(`Producto creado correctamente, pero la imagen no pudo subirse: ${msg}\n\nPodés intentar subirla nuevamente desde la edición del producto.`);
-            router.push(`/inventario/${guardado.id}/editar`);
-            return;
-          }
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : "Error de red";
-          alert(`Producto creado correctamente, pero la imagen no pudo subirse: ${msg}\n\nPodés intentar subirla nuevamente desde la edición del producto.`);
-          router.push(`/inventario/${guardado.id}/editar`);
-          return;
+          setSubmitting(false);
+          return; // se muestra el panel de reintento; NO se re-crea el producto
         }
       }
 
@@ -491,6 +497,48 @@ export default function NuevoProductoPage() {
   const showStock = tipoGastro === "reventa";
   const showPrecioVenta = tipoGastro !== "materia";
 
+  // Panel post-creación: el producto YA se creó; solo faltan imágenes. NUNCA se
+  // re-crea el producto (evita duplicados por reenvío).
+  if (postCreacion) {
+    return (
+      <div className="mx-auto max-w-lg space-y-4 rounded-2xl border border-slate-200 bg-white p-6">
+        <h2 className="text-lg font-bold text-slate-900">Producto creado correctamente</h2>
+        <p className="text-sm text-slate-700">
+          {postCreacion.subidas} de {postCreacion.total} imágenes se cargaron.
+          {postCreacion.pendientes.length > 0
+            ? ` Quedan ${postCreacion.pendientes.length} por reintentar.`
+            : ""}
+        </p>
+        <div className="flex flex-wrap gap-3">
+          {postCreacion.pendientes.length > 0 && (
+            <button
+              type="button"
+              disabled={submitting}
+              onClick={reintentarImagenes}
+              className="rounded-lg bg-[#E97932] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40"
+            >
+              {submitting ? "Reintentando…" : `Reintentar imagen pendiente${postCreacion.pendientes.length > 1 ? "es" : ""}`}
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => router.push(`/inventario/${postCreacion.id}/editar`)}
+            className="rounded-lg bg-[#021F5F] px-4 py-2 text-sm font-semibold text-white"
+          >
+            Continuar a edición
+          </button>
+          <button
+            type="button"
+            onClick={() => router.push("/inventario")}
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700"
+          >
+            Ir al listado
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-8">
 
@@ -544,21 +592,20 @@ export default function NuevoProductoPage() {
           {/* Descripción */}
           <div>
             <label className={labelClass}>
-              Descripción
+              Especificaciones / Descripción del producto
               {tipoGastro === "menu" && <span className="text-xs font-normal text-amber-700 ml-2">(visible al cliente)</span>}
             </label>
-            <textarea
-              name="descripcion"
-              value={form.descripcion}
-              onChange={handleChange}
-              placeholder={
-                tipoGastro === "menu"
-                  ? "Ej: Pan, carne, huevo, doble queso, lechuga, tomate, mayonesa."
-                  : "Descripción opcional del producto"
-              }
-              rows={tipoGastro === "menu" ? 3 : 2}
-              className={inputClass}
+            <RichTextEditor
+              value={descripcionHtml}
+              onChange={setDescripcionHtml}
+              placeholder="Negrita, títulos, viñetas… Se muestra en la ficha pública del producto."
             />
+          </div>
+
+          {/* Imágenes: se seleccionan ahora y se suben tras crear el producto */}
+          <div>
+            <label className={labelClass}>Imágenes del producto</label>
+            <NuevoProductoImagenes files={imagenesPendientes} onChange={setImagenesPendientes} />
           </div>
 
           {/* Marca */}
@@ -669,51 +716,6 @@ export default function NuevoProductoPage() {
             <p className="mt-1.5 text-xs text-gray-400">
               Código escaneable para lector o etiqueta (EAN-13). Debe ser único. <span className="italic">(opcional)</span>
             </p>
-          </div>
-
-          {/* Imagen del producto */}
-          <div>
-            <label className={labelClass}>Imagen del producto</label>
-            <div className="flex items-start gap-4">
-              <div className="w-28 h-28 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center overflow-hidden shrink-0">
-                {imagenPreview ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={imagenPreview} alt="Vista previa" className="w-full h-full object-cover" />
-                ) : (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" className="w-8 h-8 text-slate-300">
-                    <path fillRule="evenodd" d="M1 5.25A2.25 2.25 0 0 1 3.25 3h13.5A2.25 2.25 0 0 1 19 5.25v9.5A2.25 2.25 0 0 1 16.75 17H3.25A2.25 2.25 0 0 1 1 14.75v-9.5Zm1.5 5.81v3.69c0 .414.336.75.75.75h13.5a.75.75 0 0 0 .75-.75v-2.69l-2.22-2.219a.75.75 0 0 0-1.06 0l-1.91 1.909.47.47a.75.75 0 1 1-1.06 1.06L6.53 8.091a.75.75 0 0 0-1.06 0L2.5 11.06ZM12 6.5a1 1 0 1 1 2 0 1 1 0 0 1-2 0Z" clipRule="evenodd" />
-                  </svg>
-                )}
-              </div>
-              <div className="flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <label className="bg-[#0EA5E9] hover:bg-[#0284C7] text-white text-sm px-4 py-2 rounded-lg cursor-pointer transition-colors">
-                    {imagenFile ? "Cambiar imagen" : "Seleccionar imagen"}
-                    <input
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      className="hidden"
-                      onChange={handleImagenChange}
-                    />
-                  </label>
-                  {imagenFile && (
-                    <button
-                      type="button"
-                      onClick={quitarImagen}
-                      className="text-sm text-red-600 hover:text-red-800 px-3 py-2 rounded-lg border border-slate-200 hover:bg-red-50"
-                    >
-                      Quitar
-                    </button>
-                  )}
-                </div>
-                <p className="mt-1.5 text-xs text-slate-400">
-                  JPG, PNG o WebP — máx. 5 MB. Se asociará al producto al guardarlo.
-                </p>
-                {imagenError && (
-                  <p className="mt-1.5 text-xs text-red-600">{imagenError}</p>
-                )}
-              </div>
-            </div>
           </div>
 
           {/* Costo (+ Markup + Precio en productos comerciales) — bloque reactivo */}

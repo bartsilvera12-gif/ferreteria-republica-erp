@@ -5,12 +5,15 @@ import { API_ERRORS } from "@/lib/api/errors";
 import {
   ALLOWED_IMAGE_MIME,
   MAX_IMAGE_BYTES,
-  PRODUCTOS_IMAGENES_BUCKET,
-  buildProductoImagenPath,
-  ensureProductosImagenesBucket,
-  pathBelongsToEmpresa,
   signProductoImagen,
 } from "@/lib/inventario/imagen-storage";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import {
+  reemplazarPrincipal,
+  borrarPrincipalLegacy,
+  GaleriaValidacionError,
+  type GaleriaCtx,
+} from "@/lib/inventario/galeria-service";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 
 /**
@@ -75,7 +78,7 @@ export async function POST(
     const prod = await fetchProducto(supabase, empresaId, productoId);
     if (!prod) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
 
-    // 2) Archivo
+    // 2) Archivo (validación de status codes fina; el service revalida)
     const form = await request.formData();
     const file = form.get("file");
     if (!(file instanceof File)) {
@@ -95,49 +98,27 @@ export async function POST(
       );
     }
 
-    // 3) Bucket idempotente
+    // 3) SEMÁNTICA LEGACY = "reemplazar imagen principal" usando la MISMA lógica
+    // de galería (una sola fuente de verdad). Usa path único {imagen_id}.{ext}
+    // (nunca sobrescribe principal.{ext}); conserva las secundarias existentes;
+    // sincroniza productos.imagen_path/imagen_url; borra el objeto de la anterior
+    // principal tras el COMMIT.
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    const gctx: GaleriaCtx = { empresaId, schema, supabase };
     try {
-      await ensureProductosImagenesBucket(supabase);
-    } catch (bucketErr) {
-      console.error("[/api/productos/[id]/imagen POST] ensureBucket", bucketErr instanceof Error ? bucketErr.message : bucketErr);
-      // Continuar: si el bucket ya existe en DB pero el ensure falla por permisos, el upload podría andar igual.
-    }
-
-    // 4) Borrar imagen anterior si pertenece a la empresa
-    if (prod.imagen_path && pathBelongsToEmpresa(prod.imagen_path, empresaId)) {
-      await supabase.storage.from(PRODUCTOS_IMAGENES_BUCKET).remove([prod.imagen_path]);
-    }
-
-    // 5) Upload nuevo
-    const path = buildProductoImagenPath(empresaId, productoId, file.type);
-    const buf = Buffer.from(await file.arrayBuffer());
-    const up = await supabase.storage
-      .from(PRODUCTOS_IMAGENES_BUCKET)
-      .upload(path, buf, { contentType: file.type, upsert: true });
-    if (up.error) {
-      console.error("[/api/productos/[id]/imagen POST] upload", { empresaId, productoId, message: up.error.message });
+      const row = await reemplazarPrincipal(gctx, productoId, file);
+      const signed = row.imagen_path
+        ? await signProductoImagen(supabase, row.imagen_path, 3600)
+        : row.imagen_url;
       return NextResponse.json(
-        errorResponse(`No se pudo subir la imagen: ${up.error.message}`),
-        { status: 500 }
+        successResponse({ imagen_path: row.imagen_path, imagen_url: signed })
       );
+    } catch (e) {
+      if (e instanceof GaleriaValidacionError) {
+        return NextResponse.json(errorResponse(e.message), { status: 400 });
+      }
+      throw e;
     }
-
-    // 6) Persistir imagen_path via PostgREST
-    const upd = await supabase
-      .from("productos")
-      .update({ imagen_path: path, imagen_url: null })
-      .eq("empresa_id", empresaId)
-      .eq("id", productoId)
-      .select("id, imagen_path")
-      .maybeSingle();
-    if (upd.error) {
-      console.error("[/api/productos/[id]/imagen POST] update", upd.error.message);
-      return NextResponse.json(errorResponse("No se pudo asociar la imagen al producto."), { status: 500 });
-    }
-
-    // 7) Signed URL para preview
-    const signed = await signProductoImagen(supabase, path, 3600);
-    return NextResponse.json(successResponse({ imagen_path: path, imagen_url: signed }));
   } catch (err) {
     console.error("[/api/productos/[id]/imagen POST] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo subir la imagen."), { status: 500 });
@@ -158,15 +139,11 @@ export async function DELETE(
     const prod = await fetchProducto(supabase, empresaId, productoId);
     if (!prod) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
 
-    if (prod.imagen_path && pathBelongsToEmpresa(prod.imagen_path, empresaId)) {
-      await supabase.storage.from(PRODUCTOS_IMAGENES_BUCKET).remove([prod.imagen_path]);
-    }
-
-    await supabase
-      .from("productos")
-      .update({ imagen_path: null, imagen_url: null })
-      .eq("empresa_id", empresaId)
-      .eq("id", productoId);
+    // SEMÁNTICA LEGACY: borra la principal; si hay secundarias, promueve la
+    // primera por orden; sincroniza el espejo legacy. Coherente con la galería.
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    const gctx: GaleriaCtx = { empresaId, schema, supabase };
+    await borrarPrincipalLegacy(gctx, productoId);
 
     return NextResponse.json(successResponse({ imagen_path: null, imagen_url: null }));
   } catch (err) {

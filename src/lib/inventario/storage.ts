@@ -49,6 +49,7 @@ interface ProductoRow {
   factor_compra_receta?: string | number | null;
   tiempo_prep_minutos?: number | null;
   descripcion?: string | null;
+  descripcion_html?: string | null;
   modo_receta?: string | null;
 }
 
@@ -112,6 +113,7 @@ function rowToProducto(row: ProductoRow): Producto {
     factor_compra_receta: row.factor_compra_receta != null ? Number(row.factor_compra_receta) : 1,
     tiempo_prep_minutos: row.tiempo_prep_minutos != null ? Number(row.tiempo_prep_minutos) : 0,
     descripcion: row.descripcion ?? null,
+    descripcion_html: row.descripcion_html ?? null,
     modo_receta: row.modo_receta ?? "preparado_al_vender",
   };
 }
@@ -302,6 +304,7 @@ export async function saveProducto(
         ? datos.tiempo_prep_minutos
         : 0,
     descripcion: datos.descripcion ?? null,
+    descripcion_html: datos.descripcion_html ?? null,
   };
 
   const res = await fetch("/api/productos", {
@@ -387,6 +390,7 @@ export async function updateProducto(
   if (typeof datos.tiempo_prep_minutos === "number" && datos.tiempo_prep_minutos >= 0)
     body.tiempo_prep_minutos = datos.tiempo_prep_minutos;
   if (datos.descripcion !== undefined) body.descripcion = datos.descripcion;
+  if (datos.descripcion_html !== undefined) body.descripcion_html = datos.descripcion_html;
   if (datos.modo_receta !== undefined) body.modo_receta = datos.modo_receta;
 
   const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {

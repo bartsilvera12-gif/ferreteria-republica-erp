@@ -55,8 +55,12 @@ export interface Producto {
   factor_compra_receta?: number;
   /** Tiempo estimado de preparación en minutos (para Kanban cocina). */
   tiempo_prep_minutos?: number;
-  /** Descripción detallada (visible en Menú y edición). */
+  /** Descripción detallada, TEXTO PLANO derivado de descripcion_html. Se usa en
+   *  búsqueda, meta description y JSON-LD. No editar a mano: se regenera al guardar. */
   descripcion?: string | null;
+  /** Especificaciones en HTML SANITIZADO (rich text). Fuente de edición principal.
+   *  La página pública lo renderiza; descripcion es su versión texto plano. */
+  descripcion_html?: string | null;
   /** Activo (false = inactivo, oculto de pedidos, edición en solo lectura). */
   activo?: boolean;
   /** Marca del producto (para agrupar/filtrar). */

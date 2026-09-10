@@ -10,6 +10,8 @@
  * imprime en el HTML (se usa server-side para el proxy de imagen).
  */
 import { createServiceRoleClient } from "@/lib/supabase/service-admin";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
+import { listGaleriaPg, type GaleriaImagenRow } from "@/lib/inventario/server/galeria-pg";
 
 /** Empresa proveedora del sitio público (Ferretería República). */
 export const SITIO_EMPRESA_ID =
@@ -20,6 +22,7 @@ export type ProductoPublico = {
   nombre: string;
   sku: string | null;
   descripcion: string | null;
+  descripcion_html?: string | null; // solo se lee en la ficha (no en listados)
   precio_venta: number | string | null;
   stock_actual: number | string | null;
   unidad_medida: string | null;
@@ -35,6 +38,7 @@ export type ProductoPublico = {
   updated_at: string | null;
 };
 
+// Select de LISTADOS/categoría: NO incluye descripcion_html (puede ser grande).
 const PUBLIC_SELECT = `
   id, nombre, sku, descripcion, precio_venta, stock_actual, unidad_medida,
   codigo_barras, imagen_url, imagen_path, categoria_principal_id, updated_at,
@@ -42,12 +46,15 @@ const PUBLIC_SELECT = `
   categoria:categoria_principal_id ( id, nombre )
 `;
 
+// Select de DETALLE (ficha individual): incluye descripcion_html.
+const PRODUCT_DETAIL_SELECT = `${PUBLIC_SELECT}, descripcion_html`;
+
 /** Producto público por id exacto. null si no existe o no pasa los filtros. */
 export async function getProductoPublico(id: string): Promise<ProductoPublico | null> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("productos")
-    .select(PUBLIC_SELECT)
+    .select(PRODUCT_DETAIL_SELECT)
     .eq("empresa_id", SITIO_EMPRESA_ID)
     .eq("es_vendible", true)
     .eq("visible_web", true)
@@ -57,6 +64,16 @@ export async function getProductoPublico(id: string): Promise<ProductoPublico | 
   // error transitorio NUNCA debe volverse 404 (desindexaría productos reales).
   if (error) throw new Error(`getProductoPublico: ${error.message}`);
   return (data as unknown as ProductoPublico) ?? null;
+}
+
+/**
+ * Galería pública de un producto (ordenada: principal primero). Se usa SOLO en la
+ * ficha individual, nunca en listados/catálogo. Devuelve las filas crudas; el
+ * render construye las URLs estables /imagen-producto/<producto>/<imagen>.
+ */
+export async function getGaleriaPublica(productoId: string): Promise<GaleriaImagenRow[]> {
+  const schema = await fetchDataSchemaForEmpresaId(SITIO_EMPRESA_ID);
+  return listGaleriaPg(schema, SITIO_EMPRESA_ID, productoId);
 }
 
 export type CategoriaPublica = {
@@ -141,12 +158,12 @@ export type SitemapCategoriaRow = { id: string; nombre: string };
  * Categorías activas de la empresa con al menos 1 producto REALMENTE público
  * (empresa correcta + es_vendible=true + visible_web=true).
  *
- * Se usa `!inner` en el embed para que PostgREST haga un INNER JOIN: la categoría
- * solo aparece si tiene ≥1 producto que pasa los filtros, y el array embebido solo
- * contiene esos productos. El embed anida (no aplana), así que la categoría NO se
- * duplica aunque tenga varios productos que matcheen. El filtro JS `length > 0`
- * queda como defensa adicional. Antes el embed no filtraba, así que una categoría
- * con solo productos ocultos/no vendibles entraba al sitemap.
+ * `!inner` → INNER JOIN: la categoría solo aparece si tiene ≥1 producto que pasa
+ * TODOS los filtros. El embed anida (no aplana): la categoría NO se duplica.
+ * Filtros del producto embebido: empresa_id (defensa explícita, además del schema
+ * por tenant) + es_vendible + visible_web. `limit(1, { referencedTable })` limita
+ * el embed a 1 producto por categoría: solo verificamos EXISTENCIA, sin transferir
+ * arrays gigantes de miles de ids. El `length > 0` en JS es defensa adicional.
  */
 export async function listarCategoriasSitemap(): Promise<SitemapCategoriaRow[]> {
   const supabase = createServiceRoleClient();
@@ -155,8 +172,10 @@ export async function listarCategoriasSitemap(): Promise<SitemapCategoriaRow[]> 
     .select("id, nombre, productos:productos!categoria_principal_id!inner ( id )")
     .eq("empresa_id", SITIO_EMPRESA_ID)
     .eq("activo", true)
+    .eq("productos.empresa_id", SITIO_EMPRESA_ID)
     .eq("productos.es_vendible", true)
     .eq("productos.visible_web", true)
+    .limit(1, { referencedTable: "productos" })
     .order("nombre", { ascending: true });
   if (error) throw new Error(`listarCategoriasSitemap: ${error.message}`);
   return ((data ?? []) as Array<{ id: string; nombre: string; productos?: unknown[] }>)

@@ -10,6 +10,8 @@
 import { SITIO_ORIGIN } from "./host";
 import { gtinSchema, productoPath, categoriaPath } from "./slug";
 import type { ProductoPublico, CategoriaPublica } from "./producto-read";
+import type { GaleriaImagenRow } from "@/lib/inventario/server/galeria-pg";
+import { sanitizeRichHtml } from "@/lib/sanitize/rich-text";
 
 const WA_NUMERO = (process.env.SITIO_WHATSAPP || "595994707092").replace(/[^0-9]/g, "");
 const OG_FALLBACK = `${SITIO_ORIGIN}/assets/hero-atencion2.png`;
@@ -88,6 +90,19 @@ export function imagenEstable(p: ProductoPublico): string | null {
   return null;
 }
 
+/**
+ * URLs ESTABLES de las imágenes de la galería (principal primero). Cada imagen
+ * usa /imagen-producto/<producto>/<imagen>. Si no hay galería, cae a la imagen
+ * principal legacy (imagenEstable). Devuelve [] si no hay ninguna.
+ */
+export function galeriaImagenesUrls(p: ProductoPublico, galeria?: GaleriaImagenRow[]): string[] {
+  if (galeria && galeria.length > 0) {
+    return galeria.map((g) => `${SITIO_ORIGIN}/imagen-producto/${p.id}/${g.id}`);
+  }
+  const single = imagenEstable(p);
+  return single ? [single] : [];
+}
+
 // ── shell común ─────────────────────────────────────────────────────────────────
 
 const BASE_CSS = `
@@ -107,9 +122,18 @@ main{padding:8px 0 40px}
 .card{background:#fff;border:1px solid #E7ECF3;border-radius:18px;overflow:hidden}
 .pgrid{display:grid;grid-template-columns:minmax(0,440px) minmax(0,1fr);gap:28px;align-items:start}
 @media(max-width:760px){.pgrid{grid-template-columns:1fr}}
-.pimg{aspect-ratio:1/1;background:#0a1f50;display:flex;align-items:center;justify-content:center;overflow:hidden}
+.pimg{aspect-ratio:1/1;background:#0a1f50;display:flex;align-items:center;justify-content:center;overflow:hidden;border-radius:14px}
 .pimg img{width:100%;height:100%;object-fit:cover}
 .pimg .ph{color:#8ea3c9;font-size:14px}
+.thumbs{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.thumbs a{display:block;width:64px;height:64px;border-radius:10px;overflow:hidden;border:2px solid #E7ECF3;background:#0a1f50}
+.thumbs a.active{border-color:#E97932}
+.thumbs img{width:100%;height:100%;object-fit:cover;display:block}
+.specs{margin:22px 0 4px}
+.specs h2{font-size:18px;margin:0 0 8px}
+.specs p{margin:0 0 8px;line-height:1.6}
+.specs ul,.specs ol{margin:0 0 10px;padding-left:20px;line-height:1.6}
+.specs a{color:#0f5ec0}
 h1{font-size:26px;line-height:1.2;margin:0 0 10px;letter-spacing:-.01em}
 .cat-tag{display:inline-block;font-size:12px;font-weight:700;color:#021F5F;background:#eaf0fb;border-radius:999px;padding:5px 12px;text-decoration:none}
 .price{font-size:30px;font-weight:800;color:#021F5F;margin:16px 0 4px}
@@ -199,14 +223,18 @@ ${footer()}
 
 // ── página de PRODUCTO ──────────────────────────────────────────────────────────
 
-export function renderProductoHtml(p: ProductoPublico): string {
+export function renderProductoHtml(p: ProductoPublico, galeria?: GaleriaImagenRow[]): string {
   const canonical = `${SITIO_ORIGIN}${productoPath(p.nombre, p.id)}`;
   const precio = precioEfectivo(p);
   const base = Number(p.precio_venta) || 0;
   const enOferta = precio < base;
   const disponible = estaDisponible(p);
-  const img = imagenEstable(p);
-  const ogImg = img || OG_FALLBACK;
+  // Galería: principal primero. og/twitter usan SOLO la principal; JSON-LD usa el array.
+  const imagenes = galeriaImagenesUrls(p, galeria);
+  const principal = imagenes[0] || null;
+  const ogImg = principal || OG_FALLBACK;
+  // Especificaciones rich text: SIEMPRE sanitizar antes de inyectar como HTML.
+  const specsHtml = p.descripcion_html ? sanitizeRichHtml(p.descripcion_html) : "";
   const gtin = gtinSchema(p.codigo_barras);
   const catNombre = p.categoria?.nombre || null;
   const catHref = p.categoria ? `${SITIO_ORIGIN}${categoriaPath(p.categoria.nombre, p.categoria.id)}` : null;
@@ -236,7 +264,7 @@ export function renderProductoHtml(p: ProductoPublico): string {
       itemCondition: "https://schema.org/NewCondition",
     },
   };
-  if (img) productLd.image = [img];
+  if (imagenes.length) productLd.image = imagenes; // array: principal primero
   if (p.sku) productLd.sku = p.sku;
   if (gtin) productLd[gtin.prop] = gtin.value; // gtin8/gtin12/gtin13/gtin14
   if (catNombre) productLd.category = catNombre;
@@ -299,11 +327,23 @@ export function renderProductoHtml(p: ProductoPublico): string {
 <main>
 <div class="card" style="padding:22px">
   <div class="pgrid">
-    <div class="pimg">${
-      img
-        ? `<img src="${esc(img)}" alt="${esc(p.nombre)}" width="440" height="440" decoding="async">`
-        : `<span class="ph">Sin imagen</span>`
-    }</div>
+    <div>
+      <div class="pimg">${
+        principal
+          ? `<img id="main-img" src="${esc(principal)}" alt="${esc(p.nombre)}" width="440" height="440" decoding="async">`
+          : `<span class="ph">Sin imagen</span>`
+      }</div>
+      ${
+        imagenes.length > 1
+          ? `<div class="thumbs">${imagenes
+              .map(
+                (u, i) =>
+                  `<a href="${esc(u)}" data-full="${esc(u)}"${i === 0 ? ' class="active"' : ""}><img src="${esc(u)}" alt="${esc(p.nombre)} ${i + 1}" loading="lazy" decoding="async" width="64" height="64"></a>`
+              )
+              .join("")}</div>`
+          : ""
+      }
+    </div>
     <div>
       ${catNombre && catHref ? `<a class="cat-tag" href="${esc(catHref)}">${esc(catNombre)}</a>` : ""}
       <h1>${esc(p.nombre)}</h1>
@@ -313,7 +353,13 @@ export function renderProductoHtml(p: ProductoPublico): string {
       <div class="avail ${disponible ? "in" : "out"}">${
         disponible ? "● En stock" : "● Sin stock — consultá disponibilidad"
       }</div>
-      ${descReal ? `<p class="desc">${esc(descReal)}</p>` : ""}
+      ${
+        specsHtml
+          ? `<section class="specs"><h2>Especificaciones</h2>${specsHtml}</section>`
+          : descReal
+            ? `<p class="desc">${esc(descReal)}</p>`
+            : ""
+      }
       <div class="meta">${metaLines.join("")}</div>
       <div class="ctas">
         <a class="cta" href="${esc(waHref)}" rel="nofollow">Consultar por WhatsApp</a>
@@ -322,7 +368,27 @@ export function renderProductoHtml(p: ProductoPublico): string {
     </div>
   </div>
 </div>
-</main>`;
+</main>${
+    imagenes.length > 1
+      ? `
+<script>
+(function(){
+  var thumbs = document.querySelectorAll('.thumbs a');
+  var main = document.getElementById('main-img');
+  if(!main) return;
+  thumbs.forEach(function(a){
+    a.addEventListener('click', function(e){
+      if(e.metaKey||e.ctrlKey||e.shiftKey||e.altKey||(typeof e.button==='number'&&e.button!==0)) return;
+      e.preventDefault();
+      main.setAttribute('src', a.getAttribute('data-full'));
+      thumbs.forEach(function(x){ x.classList.remove('active'); });
+      a.classList.add('active');
+    });
+  });
+})();
+</script>`
+      : ""
+  }`;
 
   return shell(headHtml, body);
 }
