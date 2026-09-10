@@ -21,3 +21,5 @@ Disallow: /login
 # impediría que Google renderice e indexe los productos.
 
 Sitemap: https://ferreteriarepublica.com.py/sitemap.xml
+Sitemap: https://ferreteriarepublica.com.py/sitemap-productos.xml
+Sitemap: https://ferreteriarepublica.com.py/sitemap-categorias.xml
