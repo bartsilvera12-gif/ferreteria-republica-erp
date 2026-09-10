@@ -143,8 +143,19 @@ export async function DELETE(
     // primera por orden; sincroniza el espejo legacy. Coherente con la galería.
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
     const gctx: GaleriaCtx = { empresaId, schema, supabase };
-    await borrarPrincipalLegacy(gctx, productoId);
+    const { nuevaPrincipal } = await borrarPrincipalLegacy(gctx, productoId);
 
+    // Responder el ESTADO REAL tras la promoción: si quedó una nueva principal,
+    // devolverla (path + url firmada); solo null/null si el producto quedó sin
+    // imágenes. Así el caller no fuerza un estado "sin imagen" incorrecto.
+    if (nuevaPrincipal) {
+      const signed = nuevaPrincipal.imagen_path
+        ? await signProductoImagen(supabase, nuevaPrincipal.imagen_path, 3600)
+        : nuevaPrincipal.imagen_url;
+      return NextResponse.json(
+        successResponse({ imagen_path: nuevaPrincipal.imagen_path, imagen_url: signed })
+      );
+    }
     return NextResponse.json(successResponse({ imagen_path: null, imagen_url: null }));
   } catch (err) {
     console.error("[/api/productos/[id]/imagen DELETE]", err instanceof Error ? err.message : err);

@@ -28,17 +28,17 @@ import {
   listGaleriaPg,
   type GaleriaImagenRow,
 } from "@/lib/inventario/server/galeria-pg";
+import { clampMaxProductImages } from "@/lib/inventario/galeria-config";
 
 export type GaleriaCtx = { empresaId: string; schema: string; supabase: AppSupabaseClient };
 
 export class GaleriaLimiteError extends Error {}
 export class GaleriaValidacionError extends Error {}
 
-/** Máximo de imágenes por producto: MAX_PRODUCT_IMAGES (env), default 8, rango [1,20]. */
+/** Máximo de imágenes por producto: MAX_PRODUCT_IMAGES (env), default 8, rango [1,20].
+ *  Usa la config compartida (galeria-config) para no duplicar el default/techo. */
 export function getMaxProductImages(): number {
-  const raw = Number(process.env.MAX_PRODUCT_IMAGES);
-  if (!Number.isFinite(raw) || raw < 1 || raw > 20) return 8;
-  return Math.floor(raw);
+  return clampMaxProductImages(process.env.MAX_PRODUCT_IMAGES);
 }
 
 /** Valida MIME (jpg/png/webp) y tamaño (5 MB). Lanza GaleriaValidacionError. */
@@ -148,12 +148,26 @@ export async function borrarImagen(
   return true;
 }
 
-/** LEGACY DELETE: borra la principal (promueve la siguiente). */
-export async function borrarPrincipalLegacy(ctx: GaleriaCtx, productoId: string): Promise<boolean> {
+/**
+ * LEGACY DELETE: borra la principal y promueve la siguiente (por orden).
+ * Devuelve el estado REAL posterior:
+ *  - `deleted`: si había una principal para borrar.
+ *  - `nuevaPrincipal`: la principal promovida tras el borrado (o null si el
+ *    producto quedó sin imágenes). El endpoint la usa para responder el estado
+ *    real y no siempre null.
+ */
+export async function borrarPrincipalLegacy(
+  ctx: GaleriaCtx,
+  productoId: string
+): Promise<{ deleted: boolean; nuevaPrincipal: GaleriaImagenRow | null }> {
   const rows = await listGaleriaPg(ctx.schema, ctx.empresaId, productoId);
   const principal = rows.find((r) => r.es_principal);
-  if (!principal) return false;
-  return borrarImagen(ctx, productoId, principal.id);
+  if (!principal) return { deleted: false, nuevaPrincipal: null };
+  await borrarImagen(ctx, productoId, principal.id);
+  // Re-leer: deleteImagenAndPromotePg ya promovió y sincronizó el espejo legacy.
+  const after = await listGaleriaPg(ctx.schema, ctx.empresaId, productoId);
+  const nuevaPrincipal = after.find((r) => r.es_principal) ?? null;
+  return { deleted: true, nuevaPrincipal };
 }
 
 /** Reexport para el proxy público / validaciones. */

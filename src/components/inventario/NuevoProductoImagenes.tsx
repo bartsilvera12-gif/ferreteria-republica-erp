@@ -6,8 +6,12 @@
  * los sube tras crear el producto. Primera imagen = principal por defecto.
  */
 import { useEffect, useState } from "react";
+import { DEFAULT_MAX_PRODUCT_IMAGES } from "@/lib/inventario/galeria-config";
 
-const MAX = 8;
+// Tope VISUAL para la selección previa a crear el producto (aún no hay
+// producto_id ni max del backend). Usa el DEFAULT compartido, no un número
+// suelto. Tras crear el producto, la galería de edición usa el max real del env.
+const MAX = DEFAULT_MAX_PRODUCT_IMAGES;
 const OK_MIME = ["image/jpeg", "image/png", "image/webp"];
 const MAX_BYTES = 5 * 1024 * 1024;
 

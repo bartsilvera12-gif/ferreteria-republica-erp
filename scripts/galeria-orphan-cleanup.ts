@@ -19,6 +19,7 @@ import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-po
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { PRODUCTOS_IMAGENES_BUCKET } from "@/lib/inventario/imagen-storage";
+import { filtrarHuerfanosSeguros } from "@/lib/inventario/galeria-helpers";
 
 function arg(name: string): string | undefined {
   const i = process.argv.indexOf(`--${name}`);
@@ -41,23 +42,29 @@ async function main() {
   const tImg = quoteSchemaTable(schema, "producto_imagenes");
   const tProd = quoteSchemaTable(schema, "productos");
 
-  // 1) Referenciados en BD: producto_imagenes.imagen_path (galería).
-  const { rows } = await pool.query(
-    `SELECT imagen_path FROM ${tImg} WHERE empresa_id=$1::uuid AND producto_id=$2::uuid AND imagen_path IS NOT NULL`,
-    [empresaId, productoId]
-  );
-  const referenciados = new Set(
-    (rows as Array<{ imagen_path: string }>).map((r) => r.imagen_path)
-  );
+  // Referenciados en BD para ese empresa/producto: unión de
+  //   - producto_imagenes.imagen_path (galería), y
+  //   - productos.imagen_path (espejo LEGACY de la principal),
+  // así nunca borramos un objeto aún referenciado por el campo legacy aunque no
+  // esté (todavía) en producto_imagenes. Se ejecuta como función para poder
+  // RE-CONSULTAR (segundo lookup real) justo antes de borrar.
+  const cargarReferenciados = async (): Promise<Set<string>> => {
+    const ref = new Set<string>();
+    const gi = await pool.query(
+      `SELECT imagen_path FROM ${tImg} WHERE empresa_id=$1::uuid AND producto_id=$2::uuid AND imagen_path IS NOT NULL`,
+      [empresaId, productoId]
+    );
+    for (const r of gi.rows as Array<{ imagen_path: string }>) ref.add(r.imagen_path);
+    const leg = await pool.query(
+      `SELECT imagen_path FROM ${tProd} WHERE empresa_id=$1::uuid AND id=$2::uuid AND imagen_path IS NOT NULL`,
+      [empresaId, productoId]
+    );
+    for (const r of leg.rows as Array<{ imagen_path: string }>) ref.add(r.imagen_path);
+    return ref;
+  };
 
-  // 1b) Referenciado LEGACY: productos.imagen_path (espejo de la principal).
-  //     Así nunca borramos principal.{ext} u otro objeto aún referenciado por
-  //     el campo legacy, aunque no esté (todavía) en producto_imagenes.
-  const { rows: legacy } = await pool.query(
-    `SELECT imagen_path FROM ${tProd} WHERE empresa_id=$1::uuid AND id=$2::uuid AND imagen_path IS NOT NULL`,
-    [empresaId, productoId]
-  );
-  for (const r of legacy as Array<{ imagen_path: string }>) referenciados.add(r.imagen_path);
+  // 1) Primer lookup (para calcular huérfanos vs el storage).
+  const referenciados = await cargarReferenciados();
 
   // 2) Objetos en el bucket bajo {empresa}/{producto}/.
   const prefix = `${empresaId}/${productoId}`;
@@ -83,13 +90,25 @@ async function main() {
   }, null, 2));
 
   if (doDelete && huerfanos.length > 0) {
-    // Doble chequeo: nunca borrar algo referenciado (por si cambió entre pasos).
-    const seguros = huerfanos.filter((p) => !referenciados.has(p));
-    const { error: delErr } = await supabase.storage
-      .from(PRODUCTOS_IMAGENES_BUCKET)
-      .remove(seguros);
-    if (delErr) throw new Error(`Fallo al borrar huérfanos: ${delErr.message}`);
-    console.log(`Borrados ${seguros.length} objetos huérfanos.`);
+    // SEGUNDO LOOKUP REAL: re-consultar la BD AHORA (pudo cambiar entre listar el
+    // storage y este borrado: p. ej. una imagen recién subida referencia un path).
+    // Solo se borra lo que era huérfano en el primer paso Y SIGUE sin referencia
+    // en esta segunda lectura fresca.
+    const referenciadosAhora = await cargarReferenciados();
+    const seguros = filtrarHuerfanosSeguros(huerfanos, referenciadosAhora);
+    const descartadosPorReferenciaNueva = huerfanos.length - seguros.length;
+    if (seguros.length > 0) {
+      const { error: delErr } = await supabase.storage
+        .from(PRODUCTOS_IMAGENES_BUCKET)
+        .remove(seguros);
+      if (delErr) throw new Error(`Fallo al borrar huérfanos: ${delErr.message}`);
+    }
+    console.log(JSON.stringify({
+      segundo_lookup: true,
+      referenciados_ahora: referenciadosAhora.size,
+      borrados: seguros.length,
+      descartados_por_referencia_nueva: descartadosPorReferenciaNueva,
+    }, null, 2));
   }
 }
 

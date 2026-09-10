@@ -8,6 +8,7 @@ import { resolveGaleriaCtx, toGaleriaDto } from "@/lib/inventario/galeria-api";
 import { listGaleriaPg } from "@/lib/inventario/server/galeria-pg";
 import {
   agregarImagen,
+  getMaxProductImages,
   GaleriaLimiteError,
   GaleriaValidacionError,
 } from "@/lib/inventario/galeria-service";
@@ -21,7 +22,10 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   if (r.error) return r.error;
   const rows = await listGaleriaPg(r.ctx.schema, r.ctx.empresaId, id);
   const imagenes = await Promise.all(rows.map((row) => toGaleriaDto(r.ctx, row)));
-  return NextResponse.json({ imagenes });
+  // max_images = autoridad real del backend (MAX_PRODUCT_IMAGES). La UI de
+  // edición lo usa en vez de un tope hardcodeado, para no bloquear en 8 si el
+  // env está configurado, p. ej., en 12.
+  return NextResponse.json({ imagenes, max_images: getMaxProductImages() });
 }
 
 export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

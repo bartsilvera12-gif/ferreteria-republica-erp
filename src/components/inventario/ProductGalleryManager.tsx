@@ -3,11 +3,15 @@
 /**
  * Gestor de galería de imágenes de producto (administración).
  * - Lista imágenes (DTO sin imagen_path; usa preview_url firmada).
- * - Arrastrar para reordenar (@dnd-kit/sortable) → PATCH /imagenes/orden.
- * - Marcar principal → PATCH /imagenes/[imagenId] { es_principal:true }.
+ * - LA PRINCIPAL SIEMPRE PRIMERA y FIJA: no se arrastra. Solo se reordenan las
+ *   secundarias (@dnd-kit/sortable) → PATCH /imagenes/orden con el orden completo
+ *   [principal, ...secundarias]. Así la UI optimista y el orden persistido nunca
+ *   se contradicen al recargar.
+ * - Marcar principal → PATCH /imagenes/[imagenId] { es_principal:true } (recarga:
+ *   la nueva principal pasa a la primera posición).
  * - Eliminar → DELETE /imagenes/[imagenId].
- * - Agregar → POST /imagenes (FormData file).
- * La posición NO depende solo del frontend: el backend valida IDs/pertenencia.
+ * - Agregar → POST /imagenes (FormData file). El tope real es max_images del
+ *   backend (MAX_PRODUCT_IMAGES), no un número hardcodeado.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
@@ -26,34 +30,39 @@ import {
   useSortable,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { DEFAULT_MAX_PRODUCT_IMAGES } from "@/lib/inventario/galeria-config";
+import { ordenarConPrincipalPrimero } from "@/lib/inventario/galeria-helpers";
 
 type Imagen = { id: string; orden: number; es_principal: boolean; preview_url: string | null };
 
-const MAX_UI = 8; // tope de UX; el backend (MAX_PRODUCT_IMAGES) es la autoridad real.
-
-function SortableCard({
+/** Tarjeta base (principal fija o secundaria arrastrable comparten estilo). */
+function Card({
   img,
+  drag,
   onPrincipal,
   onDelete,
   busy,
 }: {
   img: Imagen;
+  drag?: { setNodeRef: (el: HTMLElement | null) => void; style: React.CSSProperties; attributes: Record<string, unknown>; listeners: Record<string, unknown> | undefined; isDragging: boolean };
   onPrincipal: (id: string) => void;
   onDelete: (id: string) => void;
   busy: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: img.id });
   return (
     <div
-      ref={setNodeRef}
-      style={{ transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 }}
+      ref={drag?.setNodeRef}
+      style={drag ? drag.style : undefined}
       className="relative rounded-xl border border-gray-200 bg-white p-2"
     >
       <div
-        {...attributes}
-        {...listeners}
-        className="aspect-square w-full cursor-grab overflow-hidden rounded-lg bg-[#0a1f50] active:cursor-grabbing"
-        title="Arrastrar para reordenar"
+        {...(drag?.attributes ?? {})}
+        {...(drag?.listeners ?? {})}
+        className={
+          "aspect-square w-full overflow-hidden rounded-lg bg-[#0a1f50] " +
+          (drag ? "cursor-grab active:cursor-grabbing" : "")
+        }
+        title={drag ? "Arrastrar para reordenar" : "Imagen principal (posición fija)"}
       >
         {img.preview_url ? (
           // eslint-disable-next-line @next/next/no-img-element
@@ -89,8 +98,41 @@ function SortableCard({
   );
 }
 
+/** Tarjeta arrastrable (solo secundarias). */
+function SortableCard({
+  img,
+  onPrincipal,
+  onDelete,
+  busy,
+}: {
+  img: Imagen;
+  onPrincipal: (id: string) => void;
+  onDelete: (id: string) => void;
+  busy: boolean;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: img.id });
+  return (
+    <Card
+      img={img}
+      drag={{
+        setNodeRef,
+        style: { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.6 : 1 },
+        // dnd-kit tipa attributes/listeners con formas específicas; se pasan como
+        // props genéricas al spread del div (el spread JSX las acepta igual).
+        attributes: attributes as unknown as Record<string, unknown>,
+        listeners: listeners as unknown as Record<string, unknown> | undefined,
+        isDragging,
+      }}
+      onPrincipal={onPrincipal}
+      onDelete={onDelete}
+      busy={busy}
+    />
+  );
+}
+
 export default function ProductGalleryManager({ productoId }: { productoId: string }) {
   const [imgs, setImgs] = useState<Imagen[]>([]);
+  const [maxImages, setMaxImages] = useState<number>(DEFAULT_MAX_PRODUCT_IMAGES);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,7 +144,9 @@ export default function ProductGalleryManager({ productoId }: { productoId: stri
     try {
       const r = await fetch(`/api/productos/${productoId}/imagenes`, { credentials: "include" });
       const j = await r.json();
-      setImgs(Array.isArray(j.imagenes) ? j.imagenes : []);
+      // Defensa: normalizar principal-primero aunque el server ya lo garantice.
+      setImgs(ordenarConPrincipalPrimero(Array.isArray(j.imagenes) ? (j.imagenes as Imagen[]) : []));
+      if (typeof j.max_images === "number" && j.max_images > 0) setMaxImages(j.max_images);
     } catch {
       setError("No se pudo cargar la galería.");
     } finally {
@@ -114,22 +158,28 @@ export default function ProductGalleryManager({ productoId }: { productoId: stri
     void load();
   }, [load]);
 
+  const principal = imgs.find((i) => i.es_principal) ?? null;
+  const secundarias = imgs.filter((i) => !principal || i.id !== principal.id);
+
   const onDragEnd = async (e: DragEndEvent) => {
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const oldIndex = imgs.findIndex((i) => i.id === active.id);
-    const newIndex = imgs.findIndex((i) => i.id === over.id);
+    const oldIndex = secundarias.findIndex((i) => i.id === active.id);
+    const newIndex = secundarias.findIndex((i) => i.id === over.id);
     if (oldIndex < 0 || newIndex < 0) return;
-    const next = arrayMove(imgs, oldIndex, newIndex);
-    setImgs(next); // optimista
+    const nextSec = arrayMove(secundarias, oldIndex, newIndex);
+    const nextImgs = principal ? [principal, ...nextSec] : nextSec;
+    setImgs(nextImgs); // optimista, principal sigue primera
     setBusy(true);
     setError(null);
     try {
+      // Orden completo (permutación exacta) con la principal siempre primera.
+      const orden = nextImgs.map((i) => i.id);
       const r = await fetch(`/api/productos/${productoId}/imagenes/orden`, {
         method: "PATCH",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ orden: next.map((i) => i.id) }),
+        body: JSON.stringify({ orden }),
       });
       if (!r.ok) throw new Error();
     } catch {
@@ -151,7 +201,7 @@ export default function ProductGalleryManager({ productoId }: { productoId: stri
         body: JSON.stringify({ es_principal: true }),
       });
       if (!r.ok) throw new Error();
-      await load();
+      await load(); // la nueva principal pasa a la primera posición
     } catch {
       setError("No se pudo marcar como principal.");
     } finally {
@@ -199,13 +249,13 @@ export default function ProductGalleryManager({ productoId }: { productoId: stri
     }
   };
 
-  const canAdd = imgs.length < MAX_UI && !busy;
+  const canAdd = imgs.length < maxImages && !busy;
 
   return (
     <div>
       <div className="mb-2 flex items-center justify-between">
         <span className="text-sm font-semibold text-gray-700">
-          Galería de imágenes <span className="text-gray-400">({imgs.length}/{MAX_UI})</span>
+          Galería de imágenes <span className="text-gray-400">({imgs.length}/{maxImages})</span>
         </span>
         <button
           type="button"
@@ -235,17 +285,20 @@ export default function ProductGalleryManager({ productoId }: { productoId: stri
         </p>
       ) : (
         <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
-          <SortableContext items={imgs.map((i) => i.id)} strategy={rectSortingStrategy}>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
-              {imgs.map((img) => (
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
+            {principal ? (
+              <Card img={principal} onPrincipal={setPrincipal} onDelete={del} busy={busy} />
+            ) : null}
+            <SortableContext items={secundarias.map((i) => i.id)} strategy={rectSortingStrategy}>
+              {secundarias.map((img) => (
                 <SortableCard key={img.id} img={img} onPrincipal={setPrincipal} onDelete={del} busy={busy} />
               ))}
-            </div>
-          </SortableContext>
+            </SortableContext>
+          </div>
         </DndContext>
       )}
       <p className="mt-2 text-xs text-gray-400">
-        Arrastrá para reordenar. JPG, PNG o WebP · máx. 5 MB por imagen.
+        La principal queda fija en primer lugar. Arrastrá las secundarias para reordenar. JPG, PNG o WebP · máx. 5 MB por imagen.
       </p>
     </div>
   );
