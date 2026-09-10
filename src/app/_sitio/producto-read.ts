@@ -137,14 +137,26 @@ export async function* iterarProductosSitemap(
 
 export type SitemapCategoriaRow = { id: string; nombre: string };
 
-/** Categorías activas de la empresa con al menos 1 producto vendible/visible. */
+/**
+ * Categorías activas de la empresa con al menos 1 producto REALMENTE público
+ * (empresa correcta + es_vendible=true + visible_web=true).
+ *
+ * Se usa `!inner` en el embed para que PostgREST haga un INNER JOIN: la categoría
+ * solo aparece si tiene ≥1 producto que pasa los filtros, y el array embebido solo
+ * contiene esos productos. El embed anida (no aplana), así que la categoría NO se
+ * duplica aunque tenga varios productos que matcheen. El filtro JS `length > 0`
+ * queda como defensa adicional. Antes el embed no filtraba, así que una categoría
+ * con solo productos ocultos/no vendibles entraba al sitemap.
+ */
 export async function listarCategoriasSitemap(): Promise<SitemapCategoriaRow[]> {
   const supabase = createServiceRoleClient();
   const { data, error } = await supabase
     .from("categorias_productos")
-    .select("id, nombre, productos:productos!categoria_principal_id ( id )")
+    .select("id, nombre, productos:productos!categoria_principal_id!inner ( id )")
     .eq("empresa_id", SITIO_EMPRESA_ID)
     .eq("activo", true)
+    .eq("productos.es_vendible", true)
+    .eq("productos.visible_web", true)
     .order("nombre", { ascending: true });
   if (error) throw new Error(`listarCategoriasSitemap: ${error.message}`);
   return ((data ?? []) as Array<{ id: string; nombre: string; productos?: unknown[] }>)
