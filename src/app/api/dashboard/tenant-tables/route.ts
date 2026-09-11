@@ -226,40 +226,112 @@ export async function GET(request: NextRequest) {
     const dataSchema = await fetchDataSchemaForEmpresaId(empresaId);
     const usarPg = isLikelyUnexposedTenantChatSchema(dataSchema);
 
-    /** Helper: arma una query con o sin filtro de fecha según `range`. */
-    const buildFacturasQ = () => {
-      const base = supabase.from("facturas").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
+    /**
+     * PostgREST corta cada respuesta en ~1000 filas (db-max-rows). Sin ORDER +
+     * paginación devolvía las 1000 filas MÁS VIEJAS y las ventas/pagos recientes
+     * quedaban afuera (el dashboard mostraba 0 en "Hoy/Mes"). `pageAll` recorre con
+     * .range() hasta traer TODO el rango; el ORDER estable hace la paginación
+     * determinística (sin duplicar ni saltear filas entre páginas).
+     */
+    const pageAll = async (
+      mk: (from: number, to: number) => PromiseLike<unknown>,
+      pageSize = 1000
+    ): Promise<{ data: unknown[]; error: { message: string } | null }> => {
+      const all: unknown[] = [];
+      let from = 0;
+      for (let p = 0; p < 200; p++) {
+        const res = (await mk(from, from + pageSize - 1)) as {
+          data: unknown[] | null;
+          error: { message: string } | null;
+        };
+        if (res.error) return { data: all, error: res.error };
+        const chunk = res.data ?? [];
+        all.push(...chunk);
+        if (chunk.length < pageSize) break;
+        from += pageSize;
+      }
+      return { data: all, error: null };
     };
-    const buildPagosQ = () => {
-      const base = supabase.from("pagos").select("id, factura_id, monto, fecha_pago").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha_pago", range.desde).lt("fecha_pago", diaSiguiente(range.hasta)) : base;
-    };
-    const buildTipificacionesQ = () => {
-      const base = supabase.from("tipificaciones").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
-    };
-    const buildVentasQ = () => {
-      const base = supabase.from("ventas").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
-    };
-    const buildComprasQ = () => {
-      const base = supabase.from("compras").select("*").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
-    };
-    const buildGastosQ = () => {
-      const base = supabase.from("gastos").select("id, monto, fecha").eq("empresa_id", empresaId);
-      return range ? base.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta)) : base;
+
+    /** Tablas con fecha: se paginan completas (ORDER fecha DESC → recientes primero). */
+    const buildFacturasQ = () =>
+      pageAll((from, to) => {
+        let q = supabase.from("facturas").select("*").eq("empresa_id", empresaId);
+        if (range) q = q.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta));
+        return q.order("fecha", { ascending: false }).range(from, to);
+      });
+    const buildPagosQ = () =>
+      pageAll((from, to) => {
+        let q = supabase.from("pagos").select("id, factura_id, monto, fecha_pago").eq("empresa_id", empresaId);
+        if (range) q = q.gte("fecha_pago", range.desde).lt("fecha_pago", diaSiguiente(range.hasta));
+        return q.order("fecha_pago", { ascending: false }).range(from, to);
+      });
+    const buildTipificacionesQ = () =>
+      pageAll((from, to) => {
+        let q = supabase.from("tipificaciones").select("*").eq("empresa_id", empresaId);
+        if (range) q = q.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta));
+        return q.order("fecha", { ascending: false }).range(from, to);
+      });
+    const buildVentasQ = () =>
+      pageAll((from, to) => {
+        let q = supabase.from("ventas").select("*").eq("empresa_id", empresaId);
+        if (range) q = q.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta));
+        return q.order("fecha", { ascending: false }).range(from, to);
+      });
+    const buildComprasQ = () =>
+      pageAll((from, to) => {
+        let q = supabase.from("compras").select("*").eq("empresa_id", empresaId);
+        if (range) q = q.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta));
+        return q.order("fecha", { ascending: false }).range(from, to);
+      });
+    const buildGastosQ = () =>
+      pageAll((from, to) => {
+        let q = supabase.from("gastos").select("id, monto, fecha").eq("empresa_id", empresaId);
+        if (range) q = q.gte("fecha", range.desde).lt("fecha", diaSiguiente(range.hasta));
+        return q.order("fecha", { ascending: false }).range(from, to);
+      });
+
+    /**
+     * ventas_items no tiene columna fecha: se traen los items de las ventas ya
+     * paginadas, en lotes por `venta_id` (chunk) y paginando cada lote — así no se
+     * pasa del corte de PostgREST ni de la longitud de URL con miles de IDs.
+     */
+    const fetchItemsByVentaIds = async (
+      ventaIds: string[]
+    ): Promise<{ data: unknown[]; error: { message: string } | null }> => {
+      const CHUNK = 300;
+      const chunks: string[][] = [];
+      for (let i = 0; i < ventaIds.length; i += CHUNK) chunks.push(ventaIds.slice(i, i + CHUNK));
+      const results = await Promise.all(
+        chunks.map((batch) =>
+          pageAll((from, to) =>
+            supabase
+              .from("ventas_items")
+              .select("*")
+              .eq("empresa_id", empresaId)
+              .in("venta_id", batch)
+              .order("id", { ascending: true })
+              .range(from, to)
+          )
+        )
+      );
+      const all: unknown[] = [];
+      for (const r of results) {
+        if (r.error) return { data: all, error: r.error };
+        all.push(...r.data);
+      }
+      return { data: all, error: null };
     };
 
     /**
-     * ventas_items no tiene columna fecha directa; se filtra por `venta_id` de ventas en rango.
-     * Si hay rango: se ejecuta secuencial después de ventas para conocer los IDs válidos.
-     * Si no hay rango: se ejecuta en paralelo con el resto (comportamiento previo).
+     * ventas_items sin rango: se pagina TODO por empresa (ORDER id).
+     * Con rango: se resuelve después de conocer las ventas (fetchItemsByVentaIds).
      */
     const ventasItemsParalelo = range
       ? Promise.resolve({ data: null as unknown[] | null, error: null as { message: string } | null })
-      : supabase.from("ventas_items").select("*").eq("empresa_id", empresaId);
+      : pageAll((from, to) =>
+          supabase.from("ventas_items").select("*").eq("empresa_id", empresaId).order("id", { ascending: true }).range(from, to)
+        );
 
     const [
       clientesQ,
@@ -340,11 +412,7 @@ export async function GET(request: NextRequest) {
       if (ventaIds.length === 0) {
         ventasItemsRows = [];
       } else {
-        const itemsRes = await supabase
-          .from("ventas_items")
-          .select("*")
-          .eq("empresa_id", empresaId)
-          .in("venta_id", ventaIds);
+        const itemsRes = await fetchItemsByVentaIds(ventaIds);
         ventasItemsRows = pickRows("ventas_items", itemsRes, queryErrors);
         if ((ventasItemsRows.length === 0 && queryErrors.ventas_items) || (usarPg && ventasItemsRows.length === 0)) {
           ventasItemsRows = await fallbackVentasItemsPg(dataSchema, empresaId, ventaIds);
