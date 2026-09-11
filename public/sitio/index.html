@@ -786,7 +786,7 @@
         <sc-if value="{{ catalogHasResults }}" hint-placeholder-val="{{ true }}">
           <div class="catalog-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:24px;">
             <sc-for list="{{ catalogProducts }}" as="p" hint-placeholder-count="8">
-              <div onClick="{{ p.open }}" class="cat-prod" style="cursor:pointer;background:#fff;border:1px solid #ECF0F5;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(2,18,54,.05);">
+              <a href="{{ p.url }}" onClick="{{ p.open }}" class="cat-prod" style="cursor:pointer;background:#fff;border:1px solid #ECF0F5;border-radius:20px;overflow:hidden;display:flex;flex-direction:column;box-shadow:0 1px 3px rgba(2,18,54,.05);text-decoration:none;color:inherit;">
                 <!-- Imagen cuadrada con gradient sutil + badge minimal -->
                 <div style="position:relative;aspect-ratio:1/1;overflow:hidden;background:linear-gradient(135deg,#0a1f50 0%,#021F5F 100%);">
                   <div class="cat-prod-img" style="position:absolute;inset:0;background-image:url('{{ p.img }}');background-size:cover;background-position:center;"></div>
@@ -816,7 +816,7 @@
                     </span>
                   </div>
                 </div>
-              </div>
+              </a>
             </sc-for>
           </div>
         </sc-if>
@@ -1559,6 +1559,23 @@ class Component extends DCLogic {
   //   { id, name, cat, attr, price, badge, img, desc }
   // Mapea desde el shape de /api/sitio/productos cargado en state.dbProducts.
   // Mapea productos (destacados o ofertas) al shape esperado por el rendering.
+  // slugify IDÉNTICO al del servidor (src/app/_sitio/slug.ts) para que el href
+  // de la card apunte al canónico exacto y no dispare un 301 al hacer click.
+  _slugify(s) {
+    return (String(s || '')
+      .normalize('NFD')
+      .replace(/\p{Diacritic}/gu, '')
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, '-')
+      .replace(/-{2,}/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 80)
+      .replace(/-+$/g, '')) || 'item';
+  }
+  _prodUrl(p) {
+    return '/producto/' + this._slugify(p.name) + '-' + p.id;
+  }
+
   // Calcula precio efectivo + porcentaje de descuento si el producto esta en oferta.
   _mapProd(p, now) {
     const catNombre = (p.categoria && p.categoria.nombre) || 'Sin categoría';
@@ -1857,10 +1874,18 @@ class Component extends DCLogic {
       const b = (badgeMap[p.badge] || badgeMap['Stock']);
       return {
         ...p,
+        url: this._prodUrl(p),
         priceLabel: fmt(p.price),
         hasOld: !!p.old, oldLabel: p.old ? fmt(p.old) : '',
         badgeBg: b.bg, badgeFg: b.fg, badgeText: b.text,
-        open: () => this.openDetail(p.id)
+        // Progressive enhancement: la card es un <a href="/producto/...">.
+        // Click plano -> modal (preventDefault). Ctrl/Cmd/Shift/medio -> deja
+        // que el navegador abra la ficha en pestaña nueva. Sin JS -> navega.
+        open: (e) => {
+          if (e && (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || (typeof e.button === 'number' && e.button !== 0))) return;
+          if (e && e.preventDefault) e.preventDefault();
+          this.openDetail(p.id);
+        }
       };
     });
     const catalogHasResults = catalogProducts.length > 0;

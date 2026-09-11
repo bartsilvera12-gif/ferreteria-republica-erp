@@ -23,6 +23,12 @@ function isSitioHost(host: string | null): boolean {
  * RAIZ del dominio (Google los busca ahi). Sin este passthrough caerian en el
  * `else` de abajo -> 302 al home, y Google nunca los encontraria. Se sirven
  * como archivos estaticos desde /public (public/robots.txt, public/sitemap.xml).
+ *
+ * /producto/*, /categoria/*, /imagen-producto/*, /sitemap-productos.xml y
+ * /sitemap-categorias.xml: rutas SEO server-side (Route Handlers en src/app/*).
+ * Sin este passthrough caerian en el 302 al home. Cada handler valida el host y
+ * responde 404 fuera del sitio publico.
+ *
  * Solo aplica al host del sitio publico; la rama del ERP no se ve afectada.
  */
 function isPassthroughPath(pathname: string): boolean {
@@ -30,7 +36,12 @@ function isPassthroughPath(pathname: string): boolean {
     pathname.startsWith("/api/") ||
     pathname.startsWith("/_next/") ||
     pathname === "/robots.txt" ||
-    pathname === "/sitemap.xml"
+    pathname === "/sitemap.xml" ||
+    pathname === "/sitemap-productos.xml" ||
+    pathname === "/sitemap-categorias.xml" ||
+    pathname.startsWith("/producto/") ||
+    pathname.startsWith("/categoria/") ||
+    pathname.startsWith("/imagen-producto/")
   );
 }
 

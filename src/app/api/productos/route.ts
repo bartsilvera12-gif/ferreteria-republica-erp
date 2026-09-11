@@ -4,6 +4,7 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
 import { applyTokenSearch } from "@/lib/productos/token-search";
+import { resolveDescripcionFields } from "@/lib/sanitize/rich-text";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 
 /**
@@ -16,7 +17,7 @@ const PRODUCTO_COLS =
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "es_vendible, es_insumo, controla_stock, destacado, visible_web, oferta_semana_destacada, valorizado, unidad_compra, unidad_receta, " +
-  "factor_compra_receta, tiempo_prep_minutos, descripcion, observaciones, marca, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
+  "factor_compra_receta, tiempo_prep_minutos, descripcion, descripcion_html, observaciones, marca, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta, " +
   "discount_type, discount_value, discount_starts_at, discount_ends_at";
 
 function toNumber(v: unknown): unknown {
@@ -265,8 +266,10 @@ export async function POST(request: NextRequest) {
     if (unidadReceta !== undefined) insertPayload.unidad_receta = unidadReceta;
     if (factorCompraReceta !== undefined) insertPayload.factor_compra_receta = factorCompraReceta;
     if (tiempoPrepMinutos !== undefined) insertPayload.tiempo_prep_minutos = tiempoPrepMinutos;
-    const descripcion = typeof body.descripcion === "string" ? body.descripcion.trim() || null : (body.descripcion === null ? null : undefined);
-    if (descripcion !== undefined) insertPayload.descripcion = descripcion;
+    // Rich text / compat legacy (misma regla A/B/C que el PATCH).
+    const desc = resolveDescripcionFields(body);
+    if (desc.descripcion !== undefined) insertPayload.descripcion = desc.descripcion;
+    if (desc.descripcion_html !== undefined) insertPayload.descripcion_html = desc.descripcion_html;
     const observaciones = typeof body.observaciones === "string" ? body.observaciones.trim() || null : (body.observaciones === null ? null : undefined);
     if (observaciones !== undefined) insertPayload.observaciones = observaciones;
     const marca = typeof body.marca === "string" ? body.marca.trim() || null : (body.marca === null ? null : undefined);

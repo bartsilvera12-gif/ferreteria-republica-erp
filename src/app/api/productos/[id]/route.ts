@@ -6,6 +6,7 @@ import { deleteProductoPg, ProductoConHistorialError } from "@/lib/inventario/se
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { normalizeUpperText, normalizeUpperCodigoBarras } from "@/lib/text/normalize";
+import { resolveDescripcionFields } from "@/lib/sanitize/rich-text";
 import type { AppSupabaseClient } from "@/lib/supabase/schema";
 
 const PRODUCTO_COLS =
@@ -14,7 +15,7 @@ const PRODUCTO_COLS =
   "codigo_barras, codigo_barras_interno, imagen_path, imagen_url, " +
   "categoria_principal_id, ubicacion_principal_id, proveedor_principal_id, " +
   "es_vendible, es_insumo, controla_stock, destacado, visible_web, oferta_semana_destacada, discount_type, discount_value, discount_starts_at, discount_ends_at, valorizado, unidad_compra, unidad_receta, " +
-  "factor_compra_receta, tiempo_prep_minutos, descripcion, observaciones, marca, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta";
+  "factor_compra_receta, tiempo_prep_minutos, descripcion, descripcion_html, observaciones, marca, precio_mayorista, cantidad_minima_mayorista, precio_distribuidor, modo_receta";
 
 function toNumber(v: unknown): unknown {
   return typeof v === "string" ? Number(v) : v;
@@ -184,8 +185,13 @@ export async function PATCH(
       patch.factor_compra_receta = body.factor_compra_receta;
     if (typeof body.tiempo_prep_minutos === "number" && body.tiempo_prep_minutos >= 0)
       patch.tiempo_prep_minutos = Math.floor(body.tiempo_prep_minutos);
-    if (body.descripcion !== undefined)
-      patch.descripcion = body.descripcion == null ? null : String(body.descripcion).trim() || null;
+    // Rich text / compat legacy (regla A/B/C en resolveDescripcionFields):
+    //  A) descripcion_html → sanitiza + deriva descripcion.
+    //  B) solo descripcion (legacy) → actualiza descripcion y pone descripcion_html=null.
+    //  C) ninguno → no toca nada.
+    const desc = resolveDescripcionFields(body);
+    if (desc.descripcion !== undefined) patch.descripcion = desc.descripcion;
+    if (desc.descripcion_html !== undefined) patch.descripcion_html = desc.descripcion_html;
     if (body.activo !== undefined) patch.activo = body.activo === true;
     if (body.observaciones !== undefined)
       patch.observaciones = body.observaciones == null ? null : String(body.observaciones).trim() || null;

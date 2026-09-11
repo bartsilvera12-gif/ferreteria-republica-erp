@@ -8,7 +8,9 @@ import PresentacionesEditor from "@/components/inventario/PresentacionesEditor";
 import { getProducto, productoExiste, updateProducto } from "@/lib/inventario/storage";
 import ProyeccionProductoCard from "@/components/inventario/ProyeccionProductoCard";
 import type { MetodoValuacion } from "@/lib/inventario/types";
-import ProductImageUploader from "@/components/inventario/ProductImageUploader";
+import RichTextEditor from "@/components/inventario/RichTextEditor";
+import ProductGalleryManager from "@/components/inventario/ProductGalleryManager";
+import { plainTextToSafeHtml } from "@/lib/sanitize/rich-text";
 import SelectFromList from "@/components/inventario/SelectFromList";
 import ProveedoresCostos from "@/components/inventario/ProveedoresCostos";
 import { ShoppingBag, Boxes, ClipboardList, type LucideIcon } from "lucide-react";
@@ -38,8 +40,8 @@ export default function EditarProductoPage() {
   const [errorDuplicado, setErrorDuplicado] = useState<string | null>(null);
   const [errorGeneral, setErrorGeneral] = useState<string | null>(null);
 
-  // descripcion live separately because form se inicializa al cargar
-  const [descripcion, setDescripcion] = useState("");
+  // Rich text (descripcion_html); descripcion plana se DERIVA server-side al guardar.
+  const [descripcionHtml, setDescripcionHtml] = useState("");
   const [marca, setMarca] = useState("");
   const [observaciones, setObservaciones] = useState("");
   const [activo, setActivo] = useState(true);
@@ -68,8 +70,6 @@ export default function EditarProductoPage() {
   });
   /** Stock con el que se cargó la ficha, para saber si el usuario lo cambió. */
   const [stockOriginal, setStockOriginal] = useState<string>("");
-  const [imagenPath, setImagenPath] = useState<string | null>(null);
-  const [imagenUrl, setImagenUrl] = useState<string | null>(null);
   const [codigoOriginal, setCodigoOriginal] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [generandoCodigo, setGenerandoCodigo] = useState(false);
@@ -234,8 +234,7 @@ export default function EditarProductoPage() {
       });
       setStockOriginal(String(p.stock_actual));
       setCodigoOriginal(p.codigo_barras ?? null);
-      setImagenPath(p.imagen_path ?? null);
-      setImagenUrl(p.imagen_url ?? null);
+      // La imagen principal ahora la gestiona ProductGalleryManager (galería).
       setCategoriaId(p.categoria_principal_id ?? null);
       setUbicacionId(p.ubicacion_principal_id ?? null);
       setProveedorId(p.proveedor_principal_id ?? null);
@@ -261,7 +260,9 @@ export default function EditarProductoPage() {
       setDiscountStartsAt(toLocalInput(p.discount_starts_at));
       setDiscountEndsAt(toLocalInput(p.discount_ends_at));
       setModoReceta(p.modo_receta === "produccion_previa" ? "produccion_previa" : "preparado_al_vender");
-      setDescripcion(p.descripcion ?? "");
+      // Legacy: si no hay descripcion_html, se inicializa (solo en memoria) desde
+      // el texto plano existente. No se persiste hasta guardar.
+      setDescripcionHtml(p.descripcion_html || plainTextToSafeHtml(p.descripcion ?? ""));
       setMarca(p.marca ?? "");
       setObservaciones(p.observaciones ?? "");
       setActivo(p.activo !== false);
@@ -414,7 +415,7 @@ export default function EditarProductoPage() {
         unidad_receta: unidadReceta.trim() || null,
         factor_compra_receta: Math.max(parseFloat(factorCompraReceta) || 1, 0.0001),
         tiempo_prep_minutos: Math.max(parseInt(tiempoPrepMinutos) || 0, 0),
-        descripcion: descripcion.trim() || null,
+        descripcion_html: descripcionHtml,
         marca: marca.trim() || null,
         observaciones: observaciones.trim() || null,
         // Modo de receta solo aplica a Menú con receta; en otros tipos se mantiene el default.
@@ -610,19 +611,13 @@ export default function EditarProductoPage() {
 
           <div>
             <label className={labelClass}>
-              Descripción
+              Especificaciones / Descripción del producto
               {tipoGastro === "menu" && <span className="text-xs font-normal text-amber-700 ml-2">(visible al cliente)</span>}
             </label>
-            <textarea
-              value={descripcion}
-              onChange={(e) => setDescripcion(e.target.value)}
-              placeholder={
-                tipoGastro === "menu"
-                  ? "Ej: Pan, carne, huevo, doble queso, lechuga, tomate, mayonesa."
-                  : "Descripción opcional del producto"
-              }
-              rows={tipoGastro === "menu" ? 3 : 2}
-              className={inputClass}
+            <RichTextEditor
+              value={descripcionHtml}
+              onChange={setDescripcionHtml}
+              placeholder="Negrita, títulos, viñetas… Se muestra en la ficha pública del producto."
             />
           </div>
 
@@ -742,18 +737,10 @@ export default function EditarProductoPage() {
             </p>
           </div>
 
-          {/* Imagen del producto */}
+          {/* Galería de imágenes del producto (múltiples, ordenables) */}
           <div>
-            <label className={labelClass}>Imagen del producto</label>
-            <ProductImageUploader
-              productoId={id}
-              initialUrl={imagenUrl}
-              initialPath={imagenPath}
-              onChange={(info) => {
-                setImagenPath(info.imagen_path);
-                setImagenUrl(info.imagen_url);
-              }}
-            />
+            <label className={labelClass}>Imágenes del producto</label>
+            <ProductGalleryManager productoId={id} />
           </div>
 
           {/* Clasificación, Proveedor, Ubicación */}

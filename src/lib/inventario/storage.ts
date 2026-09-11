@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-client";
+import { buildCreateProductoBody } from "./producto-body";
 import type {
   Producto,
   MovimientoInventario,
@@ -49,6 +50,7 @@ interface ProductoRow {
   factor_compra_receta?: string | number | null;
   tiempo_prep_minutos?: number | null;
   descripcion?: string | null;
+  descripcion_html?: string | null;
   modo_receta?: string | null;
 }
 
@@ -112,6 +114,7 @@ function rowToProducto(row: ProductoRow): Producto {
     factor_compra_receta: row.factor_compra_receta != null ? Number(row.factor_compra_receta) : 1,
     tiempo_prep_minutos: row.tiempo_prep_minutos != null ? Number(row.tiempo_prep_minutos) : 0,
     descripcion: row.descripcion ?? null,
+    descripcion_html: row.descripcion_html ?? null,
     modo_receta: row.modo_receta ?? "preparado_al_vender",
   };
 }
@@ -255,54 +258,9 @@ export type NuevoProductoData = Omit<Producto, "id">;
 export async function saveProducto(
   datos: NuevoProductoData
 ): Promise<Producto | null> {
-  const body = {
-    nombre: datos.nombre,
-    sku: datos.sku,
-    costo_promedio: datos.costo_promedio,
-    precio_venta: datos.precio_venta,
-    precio_mayorista: datos.precio_mayorista ?? null,
-    cantidad_minima_mayorista: datos.cantidad_minima_mayorista ?? null,
-    precio_distribuidor: datos.precio_distribuidor ?? null,
-    stock_actual: datos.stock_actual ?? 0,
-    stock_minimo: datos.stock_minimo ?? 0,
-    unidad_medida: datos.unidad_medida || "Unidad",
-    metodo_valuacion: datos.metodo_valuacion,
-    codigo_barras:
-      datos.codigo_barras !== undefined && datos.codigo_barras !== null && datos.codigo_barras !== ""
-        ? datos.codigo_barras
-        : null,
-    codigo_barras_interno: datos.codigo_barras_interno === true,
-    categoria_principal_id: datos.categoria_principal_id ?? null,
-    ubicacion_principal_id: datos.ubicacion_principal_id ?? null,
-    proveedor_principal_id: datos.proveedor_principal_id ?? null,
-    es_vendible: typeof datos.es_vendible === "boolean" ? datos.es_vendible : true,
-    es_insumo: typeof datos.es_insumo === "boolean" ? datos.es_insumo : false,
-    controla_stock: typeof datos.controla_stock === "boolean" ? datos.controla_stock : true,
-    destacado: typeof datos.destacado === "boolean" ? datos.destacado : false,
-    visible_web: typeof datos.visible_web === "boolean" ? datos.visible_web : true,
-    discount_type:
-      datos.discount_type === "percentage" || datos.discount_type === "fixed"
-        ? datos.discount_type
-        : null,
-    discount_value:
-      typeof datos.discount_value === "number" && datos.discount_value >= 0
-        ? datos.discount_value
-        : 0,
-    discount_starts_at: datos.discount_starts_at ?? null,
-    discount_ends_at: datos.discount_ends_at ?? null,
-    valorizado: typeof datos.valorizado === "boolean" ? datos.valorizado : true,
-    unidad_compra: datos.unidad_compra ?? null,
-    unidad_receta: datos.unidad_receta ?? null,
-    factor_compra_receta:
-      typeof datos.factor_compra_receta === "number" && datos.factor_compra_receta > 0
-        ? datos.factor_compra_receta
-        : 1,
-    tiempo_prep_minutos:
-      typeof datos.tiempo_prep_minutos === "number" && datos.tiempo_prep_minutos >= 0
-        ? datos.tiempo_prep_minutos
-        : 0,
-    descripcion: datos.descripcion ?? null,
-  };
+  // El body se arma en un helper PURO y testeable. `descripcion_html` se incluye
+  // SOLO si el caller lo proporcionó (evita romper la compat legacy).
+  const body = buildCreateProductoBody(datos);
 
   const res = await fetch("/api/productos", {
     method: "POST",
@@ -387,6 +345,7 @@ export async function updateProducto(
   if (typeof datos.tiempo_prep_minutos === "number" && datos.tiempo_prep_minutos >= 0)
     body.tiempo_prep_minutos = datos.tiempo_prep_minutos;
   if (datos.descripcion !== undefined) body.descripcion = datos.descripcion;
+  if (datos.descripcion_html !== undefined) body.descripcion_html = datos.descripcion_html;
   if (datos.modo_receta !== undefined) body.modo_receta = datos.modo_receta;
 
   const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
