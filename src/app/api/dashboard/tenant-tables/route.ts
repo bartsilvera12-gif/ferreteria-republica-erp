@@ -353,7 +353,17 @@ export async function GET(request: NextRequest) {
       buildFacturasQ(),
       buildPagosQ(),
       buildTipificacionesQ(),
-      supabase.from("productos").select("*").eq("empresa_id", empresaId).eq("activo", true),
+      // PERF: traer SOLO las columnas que consume el dashboard (data.ts → ProductoRaw).
+      // Con catálogos grandes (esta ferretería tiene ~17k productos) `select("*")`
+      // (~40 columnas) inflaba el payload ~4x. Estas 9 columnas core bastan y NO
+      // cambian ningún KPI (el mapeo cliente solo lee estas). Mismas filas, menos bytes.
+      supabase
+        .from("productos")
+        .select(
+          "id, nombre, sku, costo_promedio, precio_venta, stock_actual, stock_minimo, unidad_medida, metodo_valuacion"
+        )
+        .eq("empresa_id", empresaId)
+        .eq("activo", true),
       buildVentasQ(),
       ventasItemsParalelo,
       buildComprasQ(),
@@ -384,7 +394,7 @@ export async function GET(request: NextRequest) {
 
     // Productos / compras alimentan DashInventario. Si el supabase.from
     // tira Invalid schema (PGRST106) — caso erp_* no expuesto — caemos a PG directo.
-    let productosRows = pickRows("productos", productosQ, queryErrors);
+    let productosRows: unknown[] = pickRows("productos", productosQ, queryErrors);
     if ((productosRows.length === 0 && queryErrors.productos) || (usarPg && productosRows.length === 0)) {
       productosRows = await fallbackProductosPg(dataSchema, empresaId);
       if (productosRows.length > 0) delete queryErrors.productos;
