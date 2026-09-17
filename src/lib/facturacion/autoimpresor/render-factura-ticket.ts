@@ -12,6 +12,7 @@
 import type { LiquidacionIva } from "./emitir-factura";
 import { EMPRESA_DOC } from "@/lib/documentos/membrete";
 import { asciiTicket } from "@/lib/text/ascii-ticket";
+import { isoAInstanteAsuncion } from "@/lib/fechas/calendario";
 
 export interface FacturaTicketData {
   borrador: boolean;
@@ -62,28 +63,17 @@ function gs(v: number): string {
 }
 
 function fechaHora(iso: string): string {
-  try {
-    // Fecha/hora en horario de PARAGUAY (America/Asuncion, UTC-3). Antes se usaba
-    // new Date(iso).getHours()/getDate()..., que devuelven la hora en el timezone
-    // DEL SERVIDOR: en producción el contenedor corre en UTC, así que la factura
-    // imprimía +3h (p. ej. 14:57 PY salía 17:57). Se formatea con la zona de
-    // Asunción, sin depender del timezone del proceso (misma técnica que el PDF
-    // en comprobante-venta-pdf.ts). El instante guardado no cambia.
-    const parts = new Intl.DateTimeFormat("es-PY", {
-      timeZone: "America/Asuncion",
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-      hour12: false,
-    }).formatToParts(new Date(iso));
-    const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
-    const hh = get("hour") === "24" ? "00" : get("hour"); // medianoche: "24" -> "00"
-    return `${get("day")}/${get("month")}/${get("year")} ${hh}:${get("minute")}`;
-  } catch {
-    return iso;
-  }
+  // Usa la conversión CANÓNICA del sistema, la misma que muestra el detalle
+  // digital de la venta: `isoAInstanteAsuncion` (Paraguay = UTC-3 permanente,
+  // sin horario de verano desde 2024). NO se formatea con
+  // Intl("America/Asuncion") porque la base de zonas horarias del runtime del
+  // servidor está desactualizada (conserva el DST viejo y devuelve UTC-4 en
+  // meses como septiembre → 1h de menos). El instante guardado no cambia; solo
+  // se muestra la hora de pared de Asunción, idéntica al detalle digital.
+  const asun = isoAInstanteAsuncion(iso); // "YYYY-MM-DDTHH:mm:ss" (o "" si inválido)
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(asun);
+  if (!m) return String(iso ?? "");
+  return `${m[3]}/${m[2]}/${m[1]} ${m[4]}:${m[5]}`;
 }
 
 function fechaCorta(iso: string | null): string {
