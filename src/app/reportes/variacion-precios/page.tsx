@@ -11,7 +11,7 @@ import { TrendingUp, Loader2, Search } from "lucide-react";
 
 interface Row {
   producto_id: string; producto_nombre: string; fecha: string; numero_control: string;
-  proveedor_nombre: string; usuario_nombre: string | null;
+  proveedor_nombre: string; usuario_nombre: string | null; origen: "manual" | "compras";
   costo_ant: number; costo_act: number; costo_var_monto: number; costo_var_pct: number | null;
   precio_ant: number; precio_act: number; precio_var_monto: number; precio_var_pct: number | null;
 }
@@ -93,6 +93,7 @@ export default function ReporteVariacionPreciosPage() {
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50 text-[11px] uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-3 font-semibold">Producto</th>
+                  <th className="px-3 py-3 font-semibold">Origen</th>
                   <th className="px-3 py-3 font-semibold">Fecha</th>
                   <th className="px-3 py-3 text-right font-semibold">Costo ant.</th>
                   <th className="px-3 py-3 text-right font-semibold">Costo act.</th>
@@ -108,7 +109,12 @@ export default function ReporteVariacionPreciosPage() {
                   <tr key={i} className="hover:bg-[#4FAEB2]/[0.03]">
                     <td className="px-5 py-2.5">
                       <span className="font-medium text-slate-800">{r.producto_nombre}</span>
-                      <div className="text-[11px] text-slate-400">{r.proveedor_nombre} · {r.numero_control}</div>
+                      <div className="text-[11px] text-slate-400">{r.origen === "manual" ? "Edición manual" : `${r.proveedor_nombre} · ${r.numero_control}`}</div>
+                    </td>
+                    <td className="px-3 py-2.5">
+                      <span className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold ${r.origen === "manual" ? "bg-amber-50 text-amber-700" : "bg-sky-50 text-sky-700"}`}>
+                        {r.origen === "manual" ? "Manual" : "Compras"}
+                      </span>
                     </td>
                     <td className="px-3 py-2.5 whitespace-nowrap text-slate-600">{fh(r.fecha)}</td>
                     <td className="px-3 py-2.5 text-right tabular-nums text-slate-500">{gs(r.costo_ant)}</td>
