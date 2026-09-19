@@ -23,6 +23,7 @@ interface VentaRow {
   vendedor?: string | null;
   numero_factura?: string | null;
   cliente_nombre?: string | null;
+  estado?: string | null;
 }
 
 interface VentaItemRow {
@@ -85,7 +86,7 @@ export async function GET(request: NextRequest) {
     const ventasQ = await pool.query(
       `SELECT v.id::text AS id, v.empresa_id::text AS empresa_id, v.numero_control, v.moneda,
               v.tipo_cambio, v.subtotal, v.monto_iva, v.total, v.tipo_venta, v.plazo_dias,
-              v.metodo_pago, v.fecha, v.cliente_id::text AS cliente_id,
+              v.metodo_pago, v.fecha, v.estado, v.cliente_id::text AS cliente_id,
               v.genera_nota_remision, v.nota_remision_numero, v.usuario_nombre,
               (SELECT COALESCE(NULLIF(TRIM(u2.nombre), ''), NULLIF(split_part(pc2.armado_por_email, '@', 1), ''))
                  FROM ${tPc} pc2
@@ -158,6 +159,7 @@ export async function GET(request: NextRequest) {
         vendedor: r.vendedor ?? null,
         numero_factura: r.numero_factura ?? null,
         cliente_nombre: r.cliente_nombre ?? null,
+        estado: r.estado ?? null,
       };
     });
 
