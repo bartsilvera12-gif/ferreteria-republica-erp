@@ -9,7 +9,7 @@ import { saveOrdenCompra, type OrdenItemPayload } from "@/lib/ordenes-compra/sto
 import { uploadComprobante } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { TipoIva, TipoPago, Moneda } from "@/lib/compras/types";
-import { parseCantidad, pasoCantidad, minimoCantidad, clampCantidad, permiteDecimales } from "@/lib/productos/unidades";
+import { parseCantidad, minimoCantidad, clampCantidad, permiteDecimales } from "@/lib/productos/unidades";
 
 /** Miniatura con fallback si no hay imagen o falla. */
 function ProductoThumb({ url, alt }: { url?: string | null; alt: string }) {
@@ -418,7 +418,7 @@ export default function NuevaOrdenCompraPage() {
                           <input
                             type="number"
                             min={minimoCantidad(l.unidad_medida)}
-                            step={pasoCantidad(l.unidad_medida)}
+                            step={permiteDecimales(l.unidad_medida) ? "any" : 1}
                             inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
                             value={l.cantidad}
                             onChange={(e) => {
