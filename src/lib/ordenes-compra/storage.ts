@@ -179,6 +179,8 @@ export interface RecepcionItemPayload {
   orden_item_id: string;
   cantidad_recibida: number;
   observacion?: string | null;
+  /** Precio de venta a aplicar al recibir (pisa el de la orden si viene). */
+  precio_venta?: number | null;
 }
 
 export interface ConfirmarRecepcionPayload {
