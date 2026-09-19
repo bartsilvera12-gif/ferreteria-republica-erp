@@ -8,7 +8,7 @@ import { getOrdenCompra, confirmarRecepcionOrdenCompra, type ExcedenteDetalle } 
 import { uploadComprobante } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { OrdenCompra } from "@/lib/ordenes-compra/types";
-import { parseCantidad, pasoCantidad, permiteDecimales } from "@/lib/productos/unidades";
+import { parseCantidad, permiteDecimales } from "@/lib/productos/unidades";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
 function fmtGs(v: number) {
@@ -280,7 +280,7 @@ export default function DesdeOrdenRecepcionPage() {
                         <input
                           type="number"
                           min={0}
-                          step={pasoCantidad(l.unidad_medida)}
+                          step={permiteDecimales(l.unidad_medida) ? "any" : 1}
                           inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
                           disabled={!r.llego}
                           value={r.cantidad}

@@ -12,7 +12,7 @@ import type { Proveedor } from "@/lib/proveedores/types";
 import type { MetodoValuacion } from "@/lib/inventario/types";
 import ProductoBuscadorInline from "@/components/inventario/ProductoBuscadorInline";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
-import { parseCantidad, pasoCantidad, permiteDecimales } from "@/lib/productos/unidades";
+import { parseCantidad, permiteDecimales } from "@/lib/productos/unidades";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -659,7 +659,7 @@ export default function NuevaCompraPage() {
                             <input
                               type="number"
                               min={0}
-                              step={pasoCantidad(l.unidad_medida)}
+                              step={permiteDecimales(l.unidad_medida) ? "any" : 1}
                               inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
                               value={l.cantidad || ""}
                               onChange={(e) => {

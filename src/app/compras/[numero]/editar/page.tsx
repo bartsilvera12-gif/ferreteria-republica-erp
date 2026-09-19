@@ -19,7 +19,7 @@ import ConfirmModal from "@/components/ui/ConfirmModal";
 import ProductoBuscadorInline from "@/components/inventario/ProductoBuscadorInline";
 import { getCompras, editarCompra, uploadComprobante, type EditarCompraLineaPayload } from "@/lib/compras/storage";
 import type { Compra, TipoIva } from "@/lib/compras/types";
-import { parseCantidad, pasoCantidad, permiteDecimales, formatCantidad } from "@/lib/productos/unidades";
+import { parseCantidad, permiteDecimales, formatCantidad } from "@/lib/productos/unidades";
 
 function fmtGs(v: number) { return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`; }
 
@@ -261,7 +261,7 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
                             <input
                               type="number"
                               min={0}
-                              step={pasoCantidad(l.unidad_medida)}
+                              step={permiteDecimales(l.unidad_medida) ? "any" : 1}
                               inputMode={permiteDecimales(l.unidad_medida) ? "decimal" : "numeric"}
                               value={l.cantidad || ""}
                               onChange={(e) => { const n = parseCantidad(e.target.value, l.unidad_medida); setLinea(l.key, { cantidad: n ?? 0 }); }}
