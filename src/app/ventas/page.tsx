@@ -88,13 +88,6 @@ function ResumenProductos({ v }: { v: Venta }) {
   );
 }
 
-/** Determina qué mostrar en la celda IVA cuando hay múltiples ítems. */
-function ivaResumen(v: Venta): string {
-  const tipos = [...new Set(v.items.map((i) => i.tipo_iva))];
-  if (tipos.length === 1) return ivaLabel[tipos[0]];
-  return "Mixto";
-}
-
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export default function VentasPage() {
@@ -300,11 +293,9 @@ export default function VentasPage() {
           <table className="w-full min-w-[760px] lg:min-w-0 text-left text-sm">
             <thead>
               <tr className="bg-slate-50 text-slate-600 text-sm font-semibold">
-                <th className="py-3 pr-4 font-medium">Factura</th>
+                <th className="py-3 pr-4 font-medium">Nº venta</th>
+                <th className="py-3 pr-4 font-medium">Cliente</th>
                 <th className="py-3 pr-4 font-medium">Productos</th>
-                <th className="hidden py-3 pr-4 text-center font-medium lg:table-cell">Ítems</th>
-                <th className="py-3 pr-4 font-medium text-right hidden lg:table-cell">Cant. total</th>
-                <th className="py-3 pr-4 font-medium hidden lg:table-cell">IVA</th>
                 <th className="py-3 pr-4 font-medium text-right">Total</th>
                 <th className="hidden py-3 pr-4 font-medium lg:table-cell">Tipo</th>
                 <th className="hidden py-3 pr-4 font-medium lg:table-cell">Pago</th>
@@ -316,7 +307,7 @@ export default function VentasPage() {
             <tbody>
               {filtradas.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="py-12 text-center text-gray-400">
+                  <td colSpan={9} className="py-12 text-center text-gray-400">
                     {todas.length === 0
                       ? "No hay ventas registradas"
                       : "Ninguna venta coincide con los filtros"}
@@ -324,31 +315,19 @@ export default function VentasPage() {
                 </tr>
               ) : (
                 paginadas.map((v) => {
-                  const cantTotal = v.items.reduce((s, i) => s + i.cantidad, 0);
                   return (
                     <tr key={v.id} onClick={() => setDetalle(v)} className="border-b border-slate-200 last:border-0 hover:bg-[#4FAEB2]/[0.04] transition-colors cursor-pointer">
-                      <td className="py-4 pr-4 font-mono text-xs align-middle">
-                        {v.numero_factura ? (
-                          <span className="text-gray-700">{v.numero_factura}</span>
-                        ) : (
-                          <span className="text-gray-400" title={v.numero_control}>{v.numero_control} <span className="text-[10px]">(s/factura)</span></span>
+                      <td className="py-4 pr-4 align-middle">
+                        <div className="font-mono text-xs font-semibold text-gray-800">{v.numero_control}</div>
+                        {v.numero_factura && (
+                          <div className="font-mono text-[11px] text-gray-500">Fact. {v.numero_factura}</div>
                         )}
+                      </td>
+                      <td className="py-4 pr-4 align-middle text-sm text-gray-700">
+                        {v.cliente_nombre?.trim() || (v.cliente_id ? "—" : "Consumidor Final")}
                       </td>
                       <td className="py-4 pr-4 align-middle">
                         <ResumenProductos v={v} />
-                      </td>
-                      <td className="hidden py-4 pr-4 text-center align-middle lg:table-cell">
-                        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-gray-100 text-xs font-semibold text-gray-600">
-                          {v.items.length}
-                        </span>
-                      </td>
-                      <td className="py-4 pr-4 text-right tabular-nums text-gray-700 align-middle hidden lg:table-cell">
-                        {cantTotal}
-                      </td>
-                      <td className="py-4 pr-4 align-middle hidden lg:table-cell">
-                        <span className="px-2 py-1 rounded-full text-xs font-semibold bg-indigo-50 text-indigo-700">
-                          {ivaResumen(v)}
-                        </span>
                       </td>
                       <td className="py-4 pr-4 text-right tabular-nums font-semibold text-gray-800 align-middle">
                         {formatGs(v.total)}
