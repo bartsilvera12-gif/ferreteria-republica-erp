@@ -23,6 +23,7 @@ import {
   X,
   Pencil,
   Trash2,
+  Eye,
   EyeOff,
   RotateCcw,
 } from "lucide-react";
@@ -482,11 +483,11 @@ export default function InventarioPage() {
                         <div className="flex items-center justify-center gap-1">
                           <Link
                             href={`/inventario/${p.id}/editar`}
-                            title="Editar producto"
-                            aria-label={`Editar ${p.nombre}`}
+                            title={p.activo === false ? "Ver producto (inactivo, solo lectura)" : "Editar producto"}
+                            aria-label={`${p.activo === false ? "Ver" : "Editar"} ${p.nombre}`}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-[#4FAEB2]/10 hover:text-[#4FAEB2]"
                           >
-                            <Pencil className="h-4 w-4" />
+                            {p.activo === false ? <Eye className="h-4 w-4" /> : <Pencil className="h-4 w-4" />}
                           </Link>
                           <button
                             type="button"

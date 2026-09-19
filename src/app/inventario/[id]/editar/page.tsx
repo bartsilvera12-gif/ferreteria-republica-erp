@@ -354,6 +354,10 @@ export default function EditarProductoPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     e.stopPropagation();
+    // Producto inactivo: solo lectura. No se permite guardar (backstop, además
+    // de que el botón "Guardar cambios" no se renderiza y el fieldset está
+    // deshabilitado). Para modificarlo hay que reactivarlo primero.
+    if (!activo) return;
     console.log("[inventario/editar] handleSubmit start", { id });
     if (submitting) return;
     setErrorDuplicado(null);
@@ -585,7 +589,14 @@ export default function EditarProductoPage() {
               </button>
             </div>
           )}
-          <fieldset disabled={!activo} className="space-y-6 min-w-0 disabled:opacity-70">
+          {/* Inactivo = solo lectura: `disabled` bloquea los inputs nativos y
+              `pointer-events-none` bloquea los componentes no-nativos que el
+              fieldset no cubre (rich text, galería, presentaciones), que además
+              persisten por su cuenta. Se reactiva con el botón de arriba. */}
+          <fieldset
+            disabled={!activo}
+            className={`space-y-6 min-w-0 disabled:opacity-70${!activo ? " pointer-events-none select-none" : ""}`}
+          >
           {errorGeneral && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3">
               <p className="text-sm text-red-700">{errorGeneral}</p>
