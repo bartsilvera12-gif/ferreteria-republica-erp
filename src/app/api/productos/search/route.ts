@@ -87,9 +87,9 @@ export async function GET(request: NextRequest) {
     }
 
     if (q.length > 0) {
-      // Cada palabra debe aparecer en nombre/sku/codigo_barras (AND entre
+      // Cada palabra debe aparecer en nombre/sku/codigo_barras/marca (AND entre
       // tokens, OR entre columnas) → matching orden-independiente.
-      query = applyTokenSearch(query, q, ["nombre", "sku", "codigo_barras"]);
+      query = applyTokenSearch(query, q, ["nombre", "sku", "codigo_barras", "marca"]);
     }
 
     query = query.order("nombre").limit(limit);

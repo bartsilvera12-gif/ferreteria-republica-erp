@@ -335,7 +335,7 @@ export default function InventarioPage() {
                 type="text"
                 value={searchDraft}
                 onChange={(e) => setSearchDraft(e.target.value)}
-                placeholder="Buscar por nombre o SKU..."
+                placeholder="Buscar por nombre, SKU o marca..."
                 className="h-10 w-full rounded-lg border-2 border-slate-200 bg-white pl-9 pr-9 text-sm outline-none transition-all focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20"
               />
               {searchDraft && (
