@@ -388,6 +388,11 @@ export interface RecepcionItemInput {
   /** Cantidad recibida EN ESTA recepción (no acumulada). */
   cantidadRecibidaAhora: number;
   observacion?: string | null;
+  /**
+   * Precio de venta a aplicar al recibir (puede diferir del que quedó guardado
+   * en la orden). Si viene, pisa el de la orden; si no, se usa el de la orden.
+   */
+  precioVenta?: number | null;
 }
 
 export interface ConfirmarRecepcionParams {
@@ -481,18 +486,24 @@ export async function confirmarRecepcionOrdenCompra(
       const fila = filaPorId.get(it.ordenItemId)!;
       const totalLinea = num(fila.costo_unitario) * it.cantidadRecibidaAhora;
       const { subtotal, monto_iva } = desglosarIva(totalLinea, fila.iva_tipo);
+      // Precio de venta: el enviado en la recepción pisa al de la orden; si no
+      // vino, se usa el de la orden. El margen se recalcula contra el costo real.
+      const costo = num(fila.costo_unitario);
+      const precioVenta = it.precioVenta != null ? num(it.precioVenta) : num(fila.precio_venta);
+      const margenVenta =
+        precioVenta > 0 && costo > 0 ? ((precioVenta - costo) / precioVenta) * 100 : null;
       return {
         producto_id: fila.producto_id,
         producto_nombre: fila.producto_nombre,
         cantidad: it.cantidadRecibidaAhora,
         costo_unitario_original: num(fila.costo_unitario_original),
-        costo_unitario: num(fila.costo_unitario),
+        costo_unitario: costo,
         iva_tipo: fila.iva_tipo,
         subtotal: Math.round(subtotal),
         monto_iva: Math.round(monto_iva),
         total: Math.round(totalLinea),
-        precio_venta: num(fila.precio_venta),
-        margen_venta: fila.margen_venta != null ? num(fila.margen_venta) : null,
+        precio_venta: precioVenta,
+        margen_venta: margenVenta,
         orden_compra_item_id: fila.id,
       };
     });

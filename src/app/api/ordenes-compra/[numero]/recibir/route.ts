@@ -57,10 +57,12 @@ export async function POST(
       if (!Number.isFinite(cantidad) || cantidad < 0) {
         return NextResponse.json(errorResponse("Cantidad recibida inválida."), { status: 400 });
       }
+      const precioVentaRaw = Number(it.precio_venta);
       items.push({
         ordenItemId,
         cantidadRecibidaAhora: cantidad,
         observacion: it.observacion != null && String(it.observacion).trim() !== "" ? String(it.observacion).trim().slice(0, 500) : null,
+        precioVenta: Number.isFinite(precioVentaRaw) && precioVentaRaw >= 0 ? precioVentaRaw : null,
       });
     }
 

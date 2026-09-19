@@ -7,12 +7,19 @@ import { Loader2 } from "lucide-react";
 import { getOrdenCompra, confirmarRecepcionOrdenCompra, type ExcedenteDetalle } from "@/lib/ordenes-compra/storage";
 import { uploadComprobante } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import MontoInput from "@/components/ui/MontoInput";
 import type { OrdenCompra } from "@/lib/ordenes-compra/types";
 import { parseCantidad, permiteDecimales } from "@/lib/productos/unidades";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 
 function fmtGs(v: number) {
   return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`;
+}
+// Mismos umbrales que Compra directa (compras/nueva).
+function margenColor(m: number) {
+  if (m >= 40) return "text-green-600";
+  if (m >= 20) return "text-yellow-600";
+  return "text-red-600";
 }
 function fmtFecha(iso: string | null | undefined) {
   if (!iso) return "—";
@@ -31,7 +38,11 @@ interface RecepcionLinea {
   llego: boolean;
   cantidad: string;      // texto del input "cantidad recibida ahora"
   observacion: string;
+  precio_venta: number;  // precio de venta a aplicar (prefijado con el de la orden)
 }
+
+/** Costo/precio de venta de la última compra recibida, por producto_id. */
+interface UltimoPrecioInfo { costo: number; precio_venta: number; fecha: string }
 
 export default function DesdeOrdenRecepcionPage() {
   const params = useParams<{ numero: string }>();
@@ -41,6 +52,7 @@ export default function DesdeOrdenRecepcionPage() {
   const [lineas, setLineas] = useState<OrdenCompra[]>([]);
   const [cargando, setCargando] = useState(true);
   const [recepcion, setRecepcion] = useState<Record<string, RecepcionLinea>>({});
+  const [preciosInfo, setPreciosInfo] = useState<Record<string, UltimoPrecioInfo>>({});
 
   const [numeroFactura, setNumeroFactura] = useState("");
   const [nroTimbrado, setNroTimbrado] = useState("");
@@ -67,9 +79,29 @@ export default function DesdeOrdenRecepcionPage() {
         llego: linea.cantidad_pendiente > 0,
         cantidad: linea.cantidad_pendiente > 0 ? String(linea.cantidad_pendiente) : "0",
         observacion: "",
+        precio_venta: linea.precio_venta,
       };
     }
     setRecepcion(init);
+    // Control de precios (#19): costo y precio de venta de la última compra
+    // recibida por producto, para comparar al recibir (mismo endpoint que Compra
+    // directa). Best-effort: si falla, la recepción sigue sin la comparación.
+    const ids = Array.from(new Set(l.map((x) => x.producto_id))).filter(Boolean);
+    if (ids.length > 0) {
+      try {
+        const r = await fetchWithSupabaseSession(
+          `/api/compras/ultimo-precio?ids=${encodeURIComponent(ids.join(","))}`,
+          { cache: "no-store" }
+        );
+        const j = await r.json();
+        const items = (j?.data?.items ?? {}) as Record<string, { costo?: number; precio_venta?: number; fecha?: string }>;
+        const map: Record<string, UltimoPrecioInfo> = {};
+        for (const [pid, info] of Object.entries(items)) {
+          map[pid] = { costo: Number(info.costo) || 0, precio_venta: Number(info.precio_venta) || 0, fecha: String(info.fecha ?? "") };
+        }
+        setPreciosInfo(map);
+      } catch { /* control de precios best-effort */ }
+    }
     // La OC ya trae la condición de pago acordada al pedirla: la arrastramos en
     // vez de asumir "contado" y obligar a recargarla a mano.
     const oc = l[0];
@@ -145,7 +177,7 @@ export default function DesdeOrdenRecepcionPage() {
       .map((l) => {
         const r = recepcion[l.id];
         const cantidad = r?.llego ? (parseCantidad(r.cantidad, l.unidad_medida) ?? 0) : 0;
-        return { orden_item_id: l.id, cantidad_recibida: cantidad, observacion: r?.observacion || null };
+        return { orden_item_id: l.id, cantidad_recibida: cantidad, observacion: r?.observacion || null, precio_venta: r?.precio_venta ?? l.precio_venta };
       })
       .filter((it) => it.cantidad_recibida > 0);
 
@@ -239,18 +271,18 @@ export default function DesdeOrdenRecepcionPage() {
 
       {/* Tabla de recepción producto por producto */}
       <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full min-w-[980px] text-sm">
+        <table className="w-full min-w-[1140px] text-sm">
           <thead className="border-b-2 border-[#4FAEB2]/40 bg-[#E5F4F4]">
             <tr>
-              {["Llegó", "Producto", "Pedida", "Ya recibida", "Pendiente", "Recibida ahora", "Precio", "Subtotal recibido", "Observación"].map((h, i) => (
-                <th key={h} className={`px-3 py-3 text-xs font-bold uppercase tracking-wide text-[#3F8E91] ${i <= 1 ? "text-left" : i === 8 ? "text-left" : "text-right"}`}>{h}</th>
+              {["Llegó", "Producto", "Pedida", "Ya recibida", "Pendiente", "Recibida ahora", "Costo unit.", "Precio venta", "Subtotal recibido", "Observación"].map((h, i, arr) => (
+                <th key={h} className={`px-3 py-3 text-xs font-bold uppercase tracking-wide text-[#3F8E91] ${i <= 1 || i === arr.length - 1 ? "text-left" : "text-right"}`}>{h}</th>
               ))}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
             {lineas.map((l) => {
               const yaCompleta = l.cantidad_pendiente <= 0;
-              const r = recepcion[l.id] ?? { llego: false, cantidad: "0", observacion: "" };
+              const r = recepcion[l.id] ?? { llego: false, cantidad: "0", observacion: "", precio_venta: l.precio_venta };
               const cantidadAhora = r.llego ? (parseCantidad(r.cantidad, l.unidad_medida) ?? 0) : 0;
               const excede = cantidadAhora > l.cantidad_pendiente;
               return (
@@ -298,7 +330,54 @@ export default function DesdeOrdenRecepcionPage() {
                     )}
                     {excede && <p className="mt-0.5 text-[10px] font-semibold text-amber-600">Excede lo pendiente</p>}
                   </td>
-                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">{fmtGs(l.costo_unitario)}</td>
+                  <td className="px-3 py-2.5 text-right tabular-nums text-slate-600">
+                    {fmtGs(l.costo_unitario)}
+                    {(() => {
+                      const uc = preciosInfo[l.producto_id]?.costo ?? 0;
+                      if (!(uc > 0)) return null;
+                      const d = ((l.costo_unitario - uc) / uc) * 100;
+                      return (
+                        <div className="mt-0.5 text-[10px] leading-tight text-slate-400">
+                          Últ.: {fmtGs(uc)}
+                          {Math.abs(d) >= 0.05 && (
+                            <span className={`ml-1 font-semibold ${d > 0 ? "text-red-600" : "text-emerald-600"}`}>{d > 0 ? "+" : ""}{d.toFixed(1)}%</span>
+                          )}
+                        </div>
+                      );
+                    })()}
+                  </td>
+                  <td className="px-3 py-2.5 text-right">
+                    {yaCompleta ? (
+                      <span className="tabular-nums text-slate-600">{fmtGs(r.precio_venta)}</span>
+                    ) : (
+                      <>
+                        <MontoInput value={r.precio_venta}
+                          onChange={(n) => setLinea(l.id, { precio_venta: Math.max(0, n) })}
+                          decimals={false}
+                          className="w-28 rounded-lg border border-slate-200 px-2 py-1.5 text-right text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30" />
+                        {(() => {
+                          const m = r.precio_venta > 0 && l.costo_unitario > 0
+                            ? ((r.precio_venta - l.costo_unitario) / r.precio_venta) * 100 : null;
+                          return m !== null ? (
+                            <div className={`mt-0.5 text-[10px] ${margenColor(m)}`}>Margen {m.toFixed(1)}%</div>
+                          ) : null;
+                        })()}
+                        {(() => {
+                          const up = preciosInfo[l.producto_id]?.precio_venta ?? 0;
+                          if (!(up > 0)) return null;
+                          return (
+                            <div className="mt-0.5 text-[10px] leading-tight text-slate-400">
+                              Últ.: {fmtGs(up)}
+                              {up !== r.precio_venta && (
+                                <button type="button" onClick={() => setLinea(l.id, { precio_venta: up })}
+                                  className="ml-1 font-semibold text-[#0EA5E9] hover:underline">usar</button>
+                              )}
+                            </div>
+                          );
+                        })()}
+                      </>
+                    )}
+                  </td>
                   <td className="px-3 py-2.5 text-right tabular-nums font-semibold text-slate-900">
                     {fmtGs(cantidadAhora * l.costo_unitario)}
                   </td>
