@@ -89,4 +89,11 @@ export interface Venta {
 
   /** Nombre del cliente (para mostrar/buscar en el historial). */
   cliente_nombre?: string | null;
+
+  /**
+   * Estado de la venta: 'completada' (normal), 'anulada', o los estados de
+   * devolución ('parcialmente_devuelta' / 'devuelta_total'). Una venta anulada
+   * no cuenta como venta válida (excluida de caja/dashboard/reportes).
+   */
+  estado?: string | null;
 }
