@@ -37,7 +37,10 @@ export type MotivoBloqueoAnulacion =
   | "venta_no_encontrada"
   | "venta_ya_anulada"
   | "venta_con_devoluciones"
-  | "cxc_con_cobros";
+  | "cxc_con_cobros"
+  | "producto_inexistente"
+  | "nc_config_incompleta"
+  | "nc_timbrado_agotado";
 
 export class AnularVentaBloqueadaError extends Error {
   motivo: MotivoBloqueoAnulacion;
@@ -70,6 +73,14 @@ function str(v: unknown): string | null {
   return v == null ? null : String(v);
 }
 
+/** Formatea EST-PUN-NNNNNNN (mismo criterio que emitir-factura). */
+function formatNumeroFiscal(est: string, punto: string, seq: number): string {
+  const e = String(est).replace(/\D/g, "").padStart(3, "0").slice(-3);
+  const p = String(punto).replace(/\D/g, "").padStart(3, "0").slice(-3);
+  const n = String(seq).padStart(7, "0");
+  return `${e}-${p}-${n}`;
+}
+
 function pool() {
   const p = getChatPostgresPool();
   if (!p) throw new Error("Pool de base de datos no disponible.");
@@ -93,6 +104,7 @@ export async function anularVenta(
   const tMI = quoteSchemaTable(schema, "movimientos_inventario");
   const tFA = quoteSchemaTable(schema, "factura_autoimpresor");
   const tNC = quoteSchemaTable(schema, "nota_credito_autoimpresor");
+  const tCfg = quoteSchemaTable(schema, "empresa_autoimpresor_config");
   const tCxC = quoteSchemaTable(schema, "cuentas_por_cobrar");
 
   const motivoLimpio = motivo == null ? null : String(motivo).trim().slice(0, 500) || null;
@@ -173,7 +185,14 @@ export async function anularVenta(
         `SELECT id FROM ${tP} WHERE id = $1::uuid AND empresa_id = $2::uuid FOR UPDATE`,
         [productoId, empresaId]
       );
-      if (!pQ.rows[0]) continue; // producto borrado: no se puede reintegrar
+      if (!pQ.rows[0]) {
+        // Producto borrado: no se puede reintegrar su stock de forma consistente.
+        // Se bloquea toda la anulación (ROLLBACK) en vez de revertir a medias.
+        throw new AnularVentaBloqueadaError(
+          "producto_inexistente",
+          `No se puede anular: el producto "${str(m.producto_nombre) ?? productoId}" de la venta ya no existe y no se puede reintegrar su stock.`
+        );
+      }
       await client.query(
         `UPDATE ${tP} SET stock_actual = stock_actual + $3, updated_at = now()
           WHERE id = $1::uuid AND empresa_id = $2::uuid`,
@@ -213,6 +232,44 @@ export async function anularVenta(
       if (yaNC.rows[0]) {
         notaCreditoId = String(yaNC.rows[0].id);
       } else {
+        // La nota de crédito lleva su PROPIA numeración/timbrado (nc_*), no la de
+        // la factura. Se toma el correlativo con lock sobre la config y se
+        // incrementa nc_numero_actual atómicamente (igual que emitir-factura).
+        const cfgQ = await client.query(
+          `SELECT nc_timbrado_numero, nc_timbrado_inicio_vigencia, nc_timbrado_fin_vigencia,
+                  nc_establecimiento_codigo, nc_punto_expedicion_codigo,
+                  nc_numero_inicial, nc_numero_final, nc_numero_actual
+             FROM ${tCfg} WHERE empresa_id = $1::uuid FOR UPDATE`,
+          [empresaId]
+        );
+        const cfg = cfgQ.rows[0];
+        if (!cfg) {
+          throw new AnularVentaBloqueadaError(
+            "nc_config_incompleta",
+            "No hay configuración de autoimpresor para emitir la nota de crédito."
+          );
+        }
+        const ncTimbrado = str(cfg.nc_timbrado_numero);
+        const ncEst = str(cfg.nc_establecimiento_codigo);
+        const ncPunto = str(cfg.nc_punto_expedicion_codigo);
+        const ncInicial = cfg.nc_numero_inicial == null ? null : num(cfg.nc_numero_inicial);
+        const ncFinal = cfg.nc_numero_final == null ? null : num(cfg.nc_numero_final);
+        const ncActual = cfg.nc_numero_actual == null ? null : num(cfg.nc_numero_actual);
+        if (!ncTimbrado || !ncEst || !ncPunto || ncInicial == null || ncFinal == null || ncActual == null) {
+          throw new AnularVentaBloqueadaError(
+            "nc_config_incompleta",
+            "Falta la configuración de timbrado de nota de crédito (nc_*) para anular una venta facturada."
+          );
+        }
+        if (ncActual < ncInicial || ncActual > ncFinal) {
+          throw new AnularVentaBloqueadaError(
+            "nc_timbrado_agotado",
+            "El timbrado de nota de crédito se agotó o su número actual está fuera de rango."
+          );
+        }
+        const ncSeq = ncActual;
+        const ncNumeroCompleto = formatNumeroFiscal(ncEst, ncPunto, ncSeq);
+
         const insNC = await client.query(
           `INSERT INTO ${tNC} (
              empresa_id, factura_autoimpresor_id, venta_id, numero_secuencia, numero_completo,
@@ -230,9 +287,10 @@ export async function anularVenta(
              $22::uuid,$23
            ) RETURNING id::text`,
           [
-            empresaId, String(fa.id), ventaId, num(fa.numero_secuencia), str(fa.numero_completo),
-            str(fa.establecimiento_codigo), str(fa.punto_expedicion_codigo), str(fa.timbrado_numero),
-            fa.timbrado_inicio_vigencia ?? null, fa.timbrado_fin_vigencia ?? null,
+            empresaId, String(fa.id), ventaId, ncSeq, ncNumeroCompleto,
+            ncEst, ncPunto, ncTimbrado,
+            cfg.nc_timbrado_inicio_vigencia ?? null, cfg.nc_timbrado_fin_vigencia ?? null,
+            // Referencia a la factura original que se reversa (documento de origen).
             str(fa.numero_completo), str(fa.timbrado_numero), fa.emitida_at ?? null, motivoLimpio,
             str(fa.condicion) ?? "contado", num(fa.gravado_10), num(fa.iva_10), num(fa.gravado_5),
             num(fa.iva_5), num(fa.exentas), num(fa.total),
@@ -240,6 +298,13 @@ export async function anularVenta(
           ]
         );
         notaCreditoId = String(insNC.rows[0].id);
+
+        // Consumir el número: incremento del correlativo de NC.
+        await client.query(
+          `UPDATE ${tCfg} SET nc_numero_actual = $2::integer, updated_at = now()
+            WHERE empresa_id = $1::uuid`,
+          [empresaId, ncSeq + 1]
+        );
       }
     }
 
