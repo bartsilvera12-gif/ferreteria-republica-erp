@@ -24,6 +24,7 @@ export async function GET(request: NextRequest) {
     const pool = getChatPostgresPool();
     if (!pool) throw new Error("Pool no disponible.");
     const tC = quoteSchemaTable(schema, "compras");
+    const tH = quoteSchemaTable(schema, "producto_precio_historial");
 
     const sp = request.nextUrl.searchParams;
     const hoy = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Asuncion" }).format(new Date());
@@ -35,9 +36,12 @@ export async function GET(request: NextRequest) {
     let provCond = "";
     if (proveedor) { args.push(`%${proveedor}%`); provCond = `AND s.proveedor_nombre ILIKE $${args.length}`; }
 
-    // LAG sobre TODO el historial del producto; luego se filtra el rango pedido.
+    // COMPRAS: LAG sobre el historial del producto (origen='compras').
+    // MANUAL: filas ya guardadas en producto_precio_historial (origen='manual').
+    // Se combinan con UNION ALL y se filtra el rango pedido. El filtro por
+    // proveedor solo matchea las de compras (las manuales tienen proveedor NULL).
     const { rows } = await pool.query(
-      `WITH s AS (
+      `WITH compras_var AS (
          SELECT producto_id, producto_nombre, fecha, numero_control, proveedor_nombre, usuario_nombre,
                 costo_unitario AS costo_act,
                 LAG(costo_unitario) OVER (PARTITION BY producto_id ORDER BY fecha, id) AS costo_ant,
@@ -45,11 +49,21 @@ export async function GET(request: NextRequest) {
                 LAG(precio_venta) OVER (PARTITION BY producto_id ORDER BY fecha, id) AS precio_ant
            FROM ${tC}
           WHERE empresa_id = $1::uuid
+       ),
+       s AS (
+         SELECT producto_id, producto_nombre, fecha, numero_control, proveedor_nombre, usuario_nombre,
+                costo_ant, costo_act, precio_ant, precio_act, 'compras'::text AS origen
+           FROM compras_var
+          WHERE costo_ant IS NOT NULL
+            AND (costo_act <> costo_ant OR COALESCE(precio_act,0) <> COALESCE(precio_ant,0))
+         UNION ALL
+         SELECT producto_id, producto_nombre, fecha, NULL::text AS numero_control, NULL::text AS proveedor_nombre,
+                usuario_nombre, costo_ant, costo_act, precio_ant, precio_act, origen
+           FROM ${tH}
+          WHERE empresa_id = $1::uuid AND origen = 'manual'
        )
        SELECT * FROM s
-        WHERE costo_ant IS NOT NULL
-          AND (s.fecha ${PY})::date BETWEEN $2::date AND $3::date
-          AND (costo_act <> costo_ant OR COALESCE(precio_act,0) <> COALESCE(precio_ant,0))
+        WHERE (s.fecha ${PY})::date BETWEEN $2::date AND $3::date
           ${provCond}
         ORDER BY s.fecha DESC
         LIMIT 5000`,
@@ -66,6 +80,7 @@ export async function GET(request: NextRequest) {
         numero_control: String(r.numero_control ?? ""),
         proveedor_nombre: (r.proveedor_nombre as string | null) ?? "—",
         usuario_nombre: (r.usuario_nombre as string | null) ?? null,
+        origen: r.origen === "manual" ? "manual" : "compras",
         costo_ant: costoAnt, costo_act: costoAct,
         costo_var_monto: costoAct - costoAnt,
         costo_var_pct: costoAnt > 0 ? ((costoAct - costoAnt) / costoAnt) * 100 : null,
