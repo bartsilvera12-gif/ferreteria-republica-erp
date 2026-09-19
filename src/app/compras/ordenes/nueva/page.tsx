@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Search, Trash2, Loader2, Plus, ImageIcon } from "lucide-react";
 import ProveedorPicker from "@/components/proveedores/ProveedorPicker";
+import MontoInput from "@/components/ui/MontoInput";
 import { saveOrdenCompra, type OrdenItemPayload } from "@/lib/ordenes-compra/storage";
 import { uploadComprobante } from "@/lib/compras/storage";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -203,7 +204,8 @@ export default function NuevaOrdenCompraPage() {
         producto_id: l.producto_id,
         producto_nombre: l.producto_nombre,
         cantidad: l.cantidad,
-        costo_unitario: Math.round(costoPyg),
+        // Conserva hasta 2 decimales en el costo (no se redondea a entero).
+        costo_unitario: Math.round(costoPyg * 100) / 100,
         costo_unitario_original: l.costo_input,
         iva_tipo: l.iva_tipo,
         subtotal: Math.round(subtotal),
@@ -437,8 +439,8 @@ export default function NuevaOrdenCompraPage() {
                         </div>
                       </td>
                       <td className="px-3 py-3 text-right">
-                        <input type="number" min={0} value={l.costo_input}
-                          onChange={(e) => updateLinea(l.producto_id, { costo_input: Math.max(0, Number(e.target.value) || 0) })}
+                        <MontoInput value={l.costo_input}
+                          onChange={(n) => updateLinea(l.producto_id, { costo_input: Math.max(0, n) })}
                           className="h-8 w-28 rounded-md border border-slate-200 px-2 text-right text-sm tabular-nums" />
                       </td>
                       <td className="px-3 py-3">
