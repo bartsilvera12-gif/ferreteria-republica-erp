@@ -27,6 +27,7 @@ import {
   User,
   Package,
   ImageIcon,
+  AlertTriangle,
 } from "lucide-react";
 import {
   pasoCantidad,
@@ -154,6 +155,8 @@ export default function NuevoPedidoPage() {
   const [searchOpen, setSearchOpen] = useState(false);
   // Índice resaltado en el dropdown de búsqueda (navegación con flechas).
   const [hlIdx, setHlIdx] = useState(0);
+  // Aviso informativo (modal) al elegir un producto sin stock. NO bloquea la carga.
+  const [sinStockAviso, setSinStockAviso] = useState<{ nombre: string; sku: string } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchBoxRef = useRef<HTMLDivElement>(null);
   const resultsRef = useRef<HTMLUListElement>(null);
@@ -281,6 +284,9 @@ export default function NuevoPedidoPage() {
   // limpia la búsqueda para seguir cargando el siguiente sin fricción.
   async function selectFromSearch(p: ProductoHit) {
     await addToCart(p);
+    // Aviso inmediato al vendedor (mismo criterio "Sin stock" del buscador).
+    // Informativo: el producto ya quedó agregado, no se bloquea la carga.
+    if ((p.stock_actual ?? 0) <= 0) setSinStockAviso({ nombre: p.nombre, sku: p.sku });
     setQ("");
     setHits([]);
     setSearchOpen(false);
@@ -866,6 +872,39 @@ export default function NuevoPedidoPage() {
             setClienteTelSel((c as { telefono?: string | null }).telefono ?? null);
           }}
         />
+      )}
+
+      {/* Aviso informativo: producto sin stock elegido por el vendedor.
+          No bloquea la carga; solo avisa antes de enviar el pedido a Caja. */}
+      {sinStockAviso && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          onClick={() => setSinStockAviso(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center gap-2 text-red-600">
+              <AlertTriangle className="h-5 w-5 shrink-0" aria-hidden />
+              <h2 className="text-base font-semibold">Producto sin stock</h2>
+            </div>
+            <p className="mt-3 text-sm text-slate-600">
+              <span className="font-semibold">{sinStockAviso.nombre}</span>
+              {sinStockAviso.sku ? <span className="text-slate-400"> · {sinStockAviso.sku}</span> : null}
+              {" "}no tiene stock disponible. Podés agregarlo igual; este aviso es solo informativo.
+            </p>
+            <div className="mt-5 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setSinStockAviso(null)}
+                className="inline-flex h-9 items-center rounded-lg border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Entendido
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
