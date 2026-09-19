@@ -392,8 +392,11 @@ export default function VentasPage() {
                               Devolver
                             </button>
                           )}
-                          {/* Excluyentes: con cliente la venta se factura; sin cliente solo lleva ticket interno. */}
-                          {v.cliente_id ? (
+                          {/* Con factura emitida (o con cliente) se ofrece reimprimir la factura;
+                              las ventas sin nombre igual se facturan como "Consumidor Final", así
+                              que su factura debe poder reimprimirse. La reimpresión es idempotente
+                              (no consume numeración). Sin factura ni cliente: solo ticket interno. */}
+                          {(v.numero_factura || v.cliente_id) ? (
                             <a
                               href={`/api/ventas/${v.id}/factura`}
                               target="_blank"
