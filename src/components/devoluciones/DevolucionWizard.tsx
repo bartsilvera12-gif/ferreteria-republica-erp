@@ -12,7 +12,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X, Loader2, Plus, Minus, Check } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { productoMatchesQuery } from "@/lib/productos/token-search";
+import { getClientesPaginado, clienteNombre } from "@/lib/clientes/storage";
 import type {
   CondicionProducto, MetodoReembolso, ResolucionDevolucion, VentaDevolvible,
 } from "@/lib/devoluciones/types";
@@ -70,31 +70,30 @@ export default function DevolucionWizard({ ventaId, onClose, onDone }: Props) {
   useEffect(() => { void cargar(); }, [cargar]);
 
   // Autocomplete de clientes (solo se usa si hay que elegir a quién acreditar).
+  // Búsqueda SERVER-SIDE: la base tiene miles de clientes, no se puede traer
+  // entera (el endpoint legacy topa a 1000 filas) y filtrar en memoria, o los
+  // clientes fuera de esas 1000 nunca aparecerían.
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
     const term = q.trim();
     if (term.length < 2) { setHits([]); setBuscando(false); return; }
     setBuscando(true);
+    let cancelado = false;
     timer.current = setTimeout(async () => {
       try {
-        const r = await fetchWithSupabaseSession("/api/clientes", { cache: "no-store" });
-        const j = await r.json();
-        const s = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
-        const todos = (Array.isArray(j?.data) ? j.data : []) as Record<string, unknown>[];
+        const { clientes } = await getClientesPaginado({ page: 1, pageSize: 15, q: term });
+        if (cancelado) return;
         setHits(
-          todos
-            .map((c): ClienteHit => ({
-              id: String(c.id),
-              nombre: s(c.empresa) || s(c.nombre_contacto) || s(c.nombre) || "Cliente",
-              ruc: s(c.ruc) || s(c.documento),
-            }))
-            .filter((c) => productoMatchesQuery(term, c.nombre, c.ruc))
-            .slice(0, 15)
+          clientes.map((c): ClienteHit => ({
+            id: c.id,
+            nombre: clienteNombre(c) || "Cliente",
+            ruc: c.ruc?.trim() || c.documento?.trim() || null,
+          }))
         );
-      } catch { setHits([]); }
-      finally { setBuscando(false); }
-    }, 220);
-    return () => { if (timer.current) clearTimeout(timer.current); };
+      } catch { if (!cancelado) setHits([]); }
+      finally { if (!cancelado) setBuscando(false); }
+    }, 250);
+    return () => { cancelado = true; if (timer.current) clearTimeout(timer.current); };
   }, [q]);
 
   const lineas = useMemo(() => venta?.lineas ?? [], [venta]);
