@@ -3,6 +3,8 @@ import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import AppShell from "../components/AppShell";
 import { ThemeProvider } from "../components/ThemeProvider";
 import AuthGuard from "../components/AuthGuard";
+import ServiceWorkerRegister from "../components/ServiceWorkerRegister";
+import OfflinePrecache from "../components/OfflinePrecache";
 import "./globals.css";
 
 const plusJakarta = Plus_Jakarta_Sans({
@@ -19,12 +21,15 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Ferretería República",
   description: "Sistema de gestión Zentra — Ferretería República",
+  applicationName: "Ferretería República",
+  appleWebApp: { capable: true, statusBarStyle: "default", title: "Ferretería" },
 };
 
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
   viewportFit: "cover",
+  themeColor: "#0B3A3D",
 };
 
 export default function RootLayout({
@@ -40,6 +45,8 @@ export default function RootLayout({
             <AppShell>{children}</AppShell>
           </AuthGuard>
         </ThemeProvider>
+        <ServiceWorkerRegister />
+        <OfflinePrecache />
       </body>
     </html>
   );

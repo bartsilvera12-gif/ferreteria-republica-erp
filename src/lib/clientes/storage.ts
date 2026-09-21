@@ -214,6 +214,34 @@ export async function getClientesPaginado(opts: {
   incluirPlanActivo?: boolean;
 }): Promise<ClientesPagina> {
   if (typeof window === "undefined") return { clientes: [], total: 0, page: 1, pageSize: opts.pageSize };
+
+  // Fallback offline: si el listado paginado no responde (sin conexión), usar el
+  // listado plano cacheado (/api/clientes) y paginar/filtrar en el cliente.
+  const fallbackLocal = async (): Promise<ClientesPagina> => {
+    const vacio = { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
+    try {
+      const res = await fetchWithSupabaseSession("/api/clientes", { cache: "no-store" });
+      if (!res.ok) return vacio;
+      const json = (await res.json()) as { success?: boolean; data?: unknown };
+      const raw = json?.data;
+      const rows = (Array.isArray(raw) ? raw : (raw as { clientes?: unknown })?.clientes) as SupabaseRow[] | undefined;
+      if (!Array.isArray(rows)) return vacio;
+      let clientes = rows.map((row) => rowToCliente(row));
+      if (opts.q?.trim()) {
+        const q = opts.q.trim().toLowerCase();
+        clientes = clientes.filter((c) => {
+          const o = c as unknown as Record<string, unknown>;
+          return [o.nombre_contacto, o.razon_social, o.nombre, o.codigo, o.ruc, o.documento, o.telefono]
+            .filter(Boolean).map(String).join(" ").toLowerCase().includes(q);
+        });
+      }
+      const start = (opts.page - 1) * opts.pageSize;
+      return { clientes: clientes.slice(start, start + opts.pageSize), total: clientes.length, page: opts.page, pageSize: opts.pageSize };
+    } catch {
+      return vacio;
+    }
+  };
+
   try {
     const p = new URLSearchParams();
     p.set("page", String(opts.page));
@@ -225,19 +253,18 @@ export async function getClientesPaginado(opts: {
     if (opts.tipo) p.set("tipo", opts.tipo);
     if (opts.tipoServicio) p.set("tipo_servicio", opts.tipoServicio);
     const res = await fetchWithSupabaseSession(`/api/clientes?${p.toString()}`, { cache: "no-store" });
-    if (!res.ok) return { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
+    if (!res.ok) return await fallbackLocal();
     const json = (await res.json()) as { success: boolean; data?: { clientes?: unknown; total?: number } };
     const d = json.data;
-    if (!json.success || !d || !Array.isArray(d.clientes)) return { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
+    if (!json.success || !d || !Array.isArray(d.clientes)) return await fallbackLocal();
     const clientes = (d.clientes as (SupabaseRow & { plan_activo?: string })[]).map((row) => {
       const c = rowToCliente(row);
       if (row.plan_activo) c.plan_activo = row.plan_activo;
       return c;
     });
     return { clientes, total: Number(d.total) || clientes.length, page: opts.page, pageSize: opts.pageSize };
-  } catch (e) {
-    console.error("[clientes] getClientesPaginado:", e);
-    return { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
+  } catch {
+    return await fallbackLocal();
   }
 }
 

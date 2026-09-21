@@ -1,5 +1,6 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-client";
+import { productoMatchesQuery } from "@/lib/productos/token-search";
 import { buildCreateProductoBody } from "./producto-body";
 import type {
   Producto,
@@ -185,22 +186,33 @@ export async function getProductosPaginated(
   if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
   if (opts.categoria) params.set("categoria", opts.categoria);
   if (opts.incluirInactivos) params.set("incluir_inactivos", "1");
+
+  // Fallback offline: si el listado paginado no responde (sin conexión), usar el
+  // catálogo completo cacheado (/api/productos) y paginar/filtrar en el cliente.
+  const fallbackLocal = async (): Promise<ProductosPaginadosResult> => {
+    const todos = await getProductos();
+    if (todos.length === 0) return { productos: [], total: 0 };
+    let filtrados = todos;
+    if (opts.q && opts.q.trim()) {
+      const q = opts.q.trim();
+      filtrados = filtrados.filter((p) => productoMatchesQuery(q, p.nombre, p.sku));
+    }
+    return { productos: filtrados.slice(offset, offset + pageSize), total: filtrados.length };
+  };
+
   try {
     const r = await fetch(`/api/productos?${params.toString()}`, {
       credentials: "include",
       cache: "no-store",
     });
+    if (!r.ok) return await fallbackLocal();
     const j = await r.json().catch(() => ({}));
-    if (!r.ok || !j?.success) {
-      console.error("[inventario] getProductosPaginated:", (j as { error?: string })?.error ?? r.status);
-      return { productos: [], total: 0 };
-    }
+    if (!j?.success) return await fallbackLocal();
     const data = j.data as { productos?: ProductoRow[]; total?: number };
     const list = (data.productos ?? []) as ProductoRow[];
     return { productos: list.map(rowToProducto), total: Number(data.total) || 0 };
-  } catch (err) {
-    console.error("[inventario] getProductosPaginated:", err instanceof Error ? err.message : err);
-    return { productos: [], total: 0 };
+  } catch {
+    return await fallbackLocal();
   }
 }
 
