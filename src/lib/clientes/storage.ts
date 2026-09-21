@@ -1,6 +1,7 @@
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { getCurrentUser } from "@/lib/auth";
 import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-client";
+import { idbGet, idbSet } from "@/lib/offline/idb";
 import type { Cliente, EstadoCliente, NotaCliente, PerfilTributarioCliente } from "./types";
 
 // ─── Tipo de fila Supabase ────────────────────────────────────────────────────
@@ -202,6 +203,50 @@ export interface ClientesPagina {
   pageSize: number;
 }
 
+const OFFLINE_CLIENTES_KEY = "offline.clientes.v1";
+
+/** Descarga TODOS los clientes paginando y los guarda en IndexedDB. Best-effort. */
+export async function warmClientesOffline(): Promise<number> {
+  try {
+    const pageSize = 500;
+    let page = 1;
+    let total = Infinity;
+    const acc: Cliente[] = [];
+    for (let i = 0; i < 400 && acc.length < total; i++) {
+      const res = await fetchWithSupabaseSession(`/api/clientes?page=${page}&page_size=${pageSize}`, { cache: "no-store" });
+      if (!res.ok) break;
+      const json = (await res.json()) as { success?: boolean; data?: { clientes?: unknown; total?: number } };
+      const d = json?.data;
+      const rows = d?.clientes as SupabaseRow[] | undefined;
+      if (!json?.success || !Array.isArray(rows)) break;
+      if (d && Number.isFinite(d.total)) total = Number(d.total);
+      acc.push(...rows.map((row) => rowToCliente(row)));
+      if (rows.length < pageSize) break;
+      page++;
+    }
+    if (acc.length > 0) await idbSet(OFFLINE_CLIENTES_KEY, acc);
+    return acc.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Todos los clientes para offline: IndexedDB si está; si no, el plano (cap 1000). */
+async function getClientesLocalFull(): Promise<Cliente[]> {
+  const idb = await idbGet<Cliente[]>(OFFLINE_CLIENTES_KEY);
+  if (Array.isArray(idb) && idb.length > 0) return idb;
+  try {
+    const res = await fetchWithSupabaseSession("/api/clientes", { cache: "no-store" });
+    if (!res.ok) return [];
+    const json = (await res.json()) as { success?: boolean; data?: unknown };
+    const raw = json?.data;
+    const rows = (Array.isArray(raw) ? raw : (raw as { clientes?: unknown })?.clientes) as SupabaseRow[] | undefined;
+    return Array.isArray(rows) ? rows.map((row) => rowToCliente(row)) : [];
+  } catch {
+    return [];
+  }
+}
+
 /** Listado paginado + filtros/búsqueda server-side (para la pantalla de Clientes). */
 export async function getClientesPaginado(opts: {
   page: number;
@@ -220,13 +265,8 @@ export async function getClientesPaginado(opts: {
   const fallbackLocal = async (): Promise<ClientesPagina> => {
     const vacio = { clientes: [], total: 0, page: opts.page, pageSize: opts.pageSize };
     try {
-      const res = await fetchWithSupabaseSession("/api/clientes", { cache: "no-store" });
-      if (!res.ok) return vacio;
-      const json = (await res.json()) as { success?: boolean; data?: unknown };
-      const raw = json?.data;
-      const rows = (Array.isArray(raw) ? raw : (raw as { clientes?: unknown })?.clientes) as SupabaseRow[] | undefined;
-      if (!Array.isArray(rows)) return vacio;
-      let clientes = rows.map((row) => rowToCliente(row));
+      let clientes = await getClientesLocalFull();
+      if (clientes.length === 0) return vacio;
       if (opts.q?.trim()) {
         const q = opts.q.trim().toLowerCase();
         clientes = clientes.filter((c) => {

@@ -4,6 +4,8 @@ import { useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { warmProductosOffline } from "@/lib/inventario/storage";
+import { warmClientesOffline } from "@/lib/clientes/storage";
 
 /**
  * Precarga las PANTALLAS clave y sus DATOS para uso offline, apenas hay internet
@@ -16,9 +18,10 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
  */
 
 const ROUTES = ["/", "/inventario", "/clientes"];
+// Datos de referencia livianos (URL estable). El catálogo completo y los
+// clientes se bajan aparte a IndexedDB (warm*Offline), porque son grandes y
+// PostgREST capa en 1000 filas.
 const DATA = [
-  "/api/productos",
-  "/api/clientes",
   "/api/inventario/categorias",
   "/api/inventario/ubicaciones",
   "/api/caja/estado",
@@ -58,11 +61,15 @@ export default function OfflinePrecache() {
         try { await fetch(r, { credentials: "include" }); } catch { /* nop */ }
       }
 
-      // 3) Datos de consulta.
+      // 3) Datos de referencia livianos.
       for (const url of DATA) {
         if (cancelled || !navigator.onLine) break;
         try { await fetchWithSupabaseSession(url, { cache: "no-store" }); } catch { /* nop */ }
       }
+
+      // 4) Catálogo completo y clientes → IndexedDB (paginado, offline real).
+      if (!cancelled && navigator.onLine) { try { await warmProductosOffline(); } catch { /* nop */ } }
+      if (!cancelled && navigator.onLine) { try { await warmClientesOffline(); } catch { /* nop */ } }
     }
 
     const start = () => {

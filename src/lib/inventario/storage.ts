@@ -1,6 +1,7 @@
 import { getCurrentUser } from "@/lib/auth";
 import { getBrowserSupabaseForEmpresaData } from "@/lib/supabase/browser-data-client";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
+import { idbGet, idbSet } from "@/lib/offline/idb";
 import { buildCreateProductoBody } from "./producto-body";
 import type {
   Producto,
@@ -156,6 +157,47 @@ export async function getProductos(): Promise<Producto[]> {
   }
 }
 
+const OFFLINE_PRODUCTOS_KEY = "offline.productos.v1";
+
+/**
+ * Descarga el catálogo COMPLETO paginando (PostgREST capa en 1000 filas) y lo
+ * guarda en IndexedDB para consulta offline. Best-effort. Devuelve cuántos.
+ */
+export async function warmProductosOffline(): Promise<number> {
+  try {
+    const pageSize = 500;
+    let offset = 0;
+    let total = Infinity;
+    const acc: Producto[] = [];
+    for (let i = 0; i < 400 && offset < total; i++) {
+      const r = await fetch(`/api/productos?limit=${pageSize}&offset=${offset}`, {
+        credentials: "include",
+        cache: "no-store",
+      });
+      if (!r.ok) break;
+      const j = await r.json().catch(() => ({}));
+      if (!j?.success) break;
+      const data = j.data as { productos?: ProductoRow[]; total?: number };
+      const rows = (data.productos ?? []) as ProductoRow[];
+      if (Number.isFinite(data.total)) total = Number(data.total);
+      acc.push(...rows.map(rowToProducto));
+      if (rows.length < pageSize) break;
+      offset += pageSize;
+    }
+    if (acc.length > 0) await idbSet(OFFLINE_PRODUCTOS_KEY, acc);
+    return acc.length;
+  } catch {
+    return 0;
+  }
+}
+
+/** Catálogo completo para offline: IndexedDB si está; si no, el plano (cap 1000). */
+async function getProductosLocalFull(): Promise<Producto[]> {
+  const idb = await idbGet<Producto[]>(OFFLINE_PRODUCTOS_KEY);
+  if (Array.isArray(idb) && idb.length > 0) return idb;
+  return getProductos();
+}
+
 export interface ProductosPaginadosOpts {
   page?: number;
   pageSize?: number;
@@ -190,7 +232,7 @@ export async function getProductosPaginated(
   // Fallback offline: si el listado paginado no responde (sin conexión), usar el
   // catálogo completo cacheado (/api/productos) y paginar/filtrar en el cliente.
   const fallbackLocal = async (): Promise<ProductosPaginadosResult> => {
-    const todos = await getProductos();
+    const todos = await getProductosLocalFull();
     if (todos.length === 0) return { productos: [], total: 0 };
     let filtrados = todos;
     if (opts.q && opts.q.trim()) {
