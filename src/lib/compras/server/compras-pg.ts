@@ -856,3 +856,141 @@ export async function editarCompraConMovimiento(
     client.release();
   }
 }
+
+// ── Eliminación de compra registrada (Fase 3) ────────────────────────────────
+
+/** Bloqueos al eliminar una compra registrada. */
+export class CompraEliminacionBloqueadaError extends Error {
+  motivo: "no_encontrada" | "derivada_orden";
+  constructor(motivo: "no_encontrada" | "derivada_orden", message: string) {
+    super(message);
+    this.name = "CompraEliminacionBloqueadaError";
+    this.motivo = motivo;
+  }
+}
+
+export interface EliminarCompraResult {
+  numero_control: string;
+  lineas_eliminadas: number;
+  unidades_revertidas: number;
+  productos_afectados: number;
+}
+
+/**
+ * Elimina una compra registrada REVIRTIENDO su impacto, sin reescribir la
+ * historia: por cada línea descuenta su stock y deja un movimiento NUEVO
+ * SALIDA con origen 'edicion_compra' (el movimiento original de la compra queda
+ * intacto). Luego borra las filas y recompone el `costo_promedio` de cada
+ * producto al costo de la última compra que quede (si no queda ninguna, se deja
+ * como estaba). `precio_venta` no se toca (lo administra el usuario).
+ *
+ * Solo compras DIRECTAS: si provienen de una orden de compra se bloquea, porque
+ * borrarlas dejaría la orden marcada como recibida con una referencia colgada.
+ * Todo es atómico (una sola transacción) y registra auditoría 'eliminar'.
+ */
+export async function eliminarCompraConReversa(
+  schemaRaw: string,
+  empresaId: string,
+  numeroControl: string,
+  usuario: { id: string | null; nombre: string | null }
+): Promise<EliminarCompraResult> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tC = quoteSchemaTable(schema, "compras");
+  const tM = quoteSchemaTable(schema, "movimientos_inventario");
+  const tP = quoteSchemaTable(schema, "productos");
+  const ref = `Eliminación de compra ${numeroControl}`;
+
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: actuales } = await client.query<CompraRow>(
+      `SELECT ${COLS} FROM ${tC}
+        WHERE empresa_id = $1::uuid AND numero_control = $2 FOR UPDATE`,
+      [empresaId, numeroControl]
+    );
+    if (actuales.length === 0)
+      throw new CompraEliminacionBloqueadaError("no_encontrada", "Compra no encontrada.");
+    if (actuales.some((r) => r.orden_compra_numero))
+      throw new CompraEliminacionBloqueadaError(
+        "derivada_orden",
+        "Esta compra proviene de una orden de compra y no se puede eliminar acá."
+      );
+
+    const antes = snapshotCompra(actuales); // snapshot ANTES de revertir (auditoría)
+
+    // ── 1) Revertir stock por línea + movimiento SALIDA 'edicion_compra' ──
+    let unidades = 0;
+    const productos = new Set<string>();
+    for (const r of actuales) {
+      productos.add(r.producto_id);
+      const cant = Number(r.cantidad) || 0;
+      if (cant === 0) continue;
+      await client.query(
+        `UPDATE ${tP} SET stock_actual = stock_actual - $1::numeric, updated_at = now()
+          WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+        [cant, r.producto_id, empresaId]
+      );
+      await client.query(
+        `INSERT INTO ${tM} (
+           empresa_id, producto_id, producto_nombre, producto_sku,
+           tipo, cantidad, costo_unitario, origen, referencia, fecha, created_by, usuario_nombre
+         )
+         SELECT $1::uuid, $2::uuid, $3, COALESCE(p.sku, ''),
+                'SALIDA', $4::numeric, $5::numeric, 'edicion_compra', $6, now(), $7::uuid, $8
+         FROM ${tP} p WHERE p.id = $2::uuid`,
+        [empresaId, r.producto_id, r.producto_nombre, cant, Number(r.costo_unitario) || 0, ref, usuario.id, usuario.nombre]
+      );
+      unidades += cant;
+    }
+
+    // ── 2) Borrar las filas de la compra ──
+    await client.query(
+      `DELETE FROM ${tC} WHERE empresa_id = $1::uuid AND numero_control = $2`,
+      [empresaId, numeroControl]
+    );
+
+    // ── 3) Recomponer costo_promedio a la última compra que quede por producto ──
+    // Si el subselect es vacío (ya no quedan compras del producto) no actualiza:
+    // el costo_promedio se deja como estaba.
+    for (const productoId of productos) {
+      await client.query(
+        `UPDATE ${tP} p SET costo_promedio = c.costo_unitario, updated_at = now()
+           FROM (
+             SELECT costo_unitario FROM ${tC}
+              WHERE empresa_id = $1::uuid AND producto_id = $2::uuid
+              ORDER BY fecha DESC, created_at DESC
+              LIMIT 1
+           ) c
+          WHERE p.id = $2::uuid AND p.empresa_id = $1::uuid`,
+        [empresaId, productoId]
+      );
+    }
+
+    // ── 4) Auditoría (atómica: dentro de la misma transacción) ──
+    await registrarCompraAuditoria(client, schema, {
+      empresaId,
+      tipo: "compra",
+      documento: numeroControl,
+      accion: "eliminar",
+      usuario,
+      detalle: {
+        antes,
+        resumen: { lineas_eliminadas: actuales.length, unidades_revertidas: unidades },
+      },
+    });
+
+    await client.query("COMMIT");
+    return {
+      numero_control: numeroControl,
+      lineas_eliminadas: actuales.length,
+      unidades_revertidas: unidades,
+      productos_afectados: productos.size,
+    };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
