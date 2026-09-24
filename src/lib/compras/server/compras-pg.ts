@@ -658,14 +658,59 @@ export interface EditarCompraResult {
 }
 
 /**
+ * Recalcula el estado de las OC afectadas tras ajustar `cantidad_recibida` por
+ * la edición/eliminación de una compra derivada. Deja el estado consistente
+ * (pendiente / recibida_parcial / recibida_total) y sincroniza `recibida_at` y
+ * `compra_numero_control` a la última compra que quede ligada a la OC.
+ * `cantidad_recibida` de cada línea ya debe estar actualizada al llamar.
+ */
+async function recomputarEstadoOrdenes(
+  client: import("pg").PoolClient,
+  schema: string,
+  empresaId: string,
+  numerosOc: Iterable<string>
+): Promise<void> {
+  const tOC = quoteSchemaTable(schema, "ordenes_compra");
+  const tC = quoteSchemaTable(schema, "compras");
+  for (const numeroOc of numerosOc) {
+    if (!numeroOc) continue;
+    const { rows: uc } = await client.query<{ numero_control: string }>(
+      `SELECT numero_control FROM ${tC}
+        WHERE empresa_id = $1::uuid AND orden_compra_numero = $2
+        ORDER BY fecha DESC, created_at DESC LIMIT 1`,
+      [empresaId, numeroOc]
+    );
+    const ultNC = uc[0]?.numero_control ?? null;
+    await client.query(
+      `WITH agg AS (
+         SELECT bool_and(cantidad_recibida >= cantidad) AS completa,
+                bool_or(cantidad_recibida > 0) AS algo
+           FROM ${tOC} WHERE empresa_id = $1::uuid AND numero_oc = $2
+       )
+       UPDATE ${tOC} oc SET
+         estado = CASE WHEN (SELECT completa FROM agg) THEN 'recibida_total'
+                       WHEN (SELECT algo FROM agg) THEN 'recibida_parcial'
+                       ELSE 'pendiente' END,
+         recibida_at = CASE WHEN (SELECT completa FROM agg) THEN COALESCE(oc.recibida_at, now()) ELSE NULL END,
+         compra_numero_control = CASE WHEN (SELECT algo FROM agg) THEN $3 ELSE NULL END,
+         updated_at = now()
+       WHERE oc.empresa_id = $1::uuid AND oc.numero_oc = $2 AND oc.estado <> 'cancelada'`,
+      [empresaId, numeroOc, ultNC]
+    );
+  }
+}
+
+/**
  * Corrige una compra ya registrada SIN reescribir la historia: por cada línea
  * cuya cantidad cambia, aplica la diferencia al stock y deja un movimiento
  * NUEVO con origen 'edicion_compra' (el movimiento de la compra original queda
  * intacto). Los datos de la factura (número, timbrado, fecha, observación) se
  * actualizan en todas las filas del `numero_control`.
  *
- * Bloquea compras derivadas de una orden de compra: editar esas descuadraría
- * la cantidad recibida de la OC.
+ * Compras derivadas de una orden de compra: se permiten corregir (cantidades y
+ * costos), sincronizando `cantidad_recibida` y el estado de la OC. No se permite
+ * agregar productos nuevos (no hay línea de orden a la cual asociarlos) ni
+ * cambiar el proveedor (rompería el vínculo con la orden).
  */
 export async function editarCompraConMovimiento(
   schemaRaw: string,
@@ -680,6 +725,7 @@ export async function editarCompraConMovimiento(
   const tC = quoteSchemaTable(schema, "compras");
   const tM = quoteSchemaTable(schema, "movimientos_inventario");
   const tP = quoteSchemaTable(schema, "productos");
+  const tOC = quoteSchemaTable(schema, "ordenes_compra");
   const ref = `Edición de compra ${numeroControl}`;
 
   const client = await pool().connect();
@@ -714,15 +760,31 @@ export async function editarCompraConMovimiento(
       [empresaId, numeroControl]
     );
     if (actuales.length === 0) throw new Error("Compra no encontrada.");
-    if (actuales.some((r) => r.orden_compra_numero)) {
-      throw new Error("Esta compra proviene de una orden de compra y no se puede editar acá. Ajustá la orden de compra.");
+
+    // Compras derivadas de una orden de compra: se corrigen sincronizando la OC.
+    const numerosOc = new Set(
+      actuales.map((r) => r.orden_compra_numero).filter((x): x is string => !!x)
+    );
+    const esDerivadaOC = numerosOc.size > 0;
+    if (esDerivadaOC && lineas.some((l) => !l.id)) {
+      throw new Error("No se pueden agregar productos nuevos a una compra que proviene de una orden de compra.");
+    }
+    // Lockear las líneas de las OC afectadas (serializa con recepciones concurrentes).
+    if (esDerivadaOC) {
+      await client.query(
+        `SELECT id FROM ${tOC}
+          WHERE empresa_id = $1::uuid AND numero_oc = ANY($2::text[]) FOR UPDATE`,
+        [empresaId, [...numerosOc]]
+      );
     }
 
     const cab = actuales[0]; // cabecera compartida (proveedor, moneda, etc.)
     const antes = snapshotCompra(actuales); // snapshot ANTES de tocar nada (auditoría)
-    // Proveedor final: el nuevo si vino en el header; si no, el de la compra.
-    const provIdFinal = header.proveedor_id ?? cab.proveedor_id;
-    const provNombreFinal = header.proveedor_nombre ?? cab.proveedor_nombre;
+    // Proveedor: en compras derivadas de OC no se cambia (rompería el vínculo con la orden).
+    const provOverrideId = esDerivadaOC ? null : (header.proveedor_id ?? null);
+    const provOverrideNombre = esDerivadaOC ? null : (header.proveedor_nombre ?? null);
+    const provIdFinal = provOverrideId ?? cab.proveedor_id;
+    const provNombreFinal = provOverrideNombre ?? cab.proveedor_nombre;
     const porId = new Map(actuales.map((r) => [r.id, r]));
     let movimientos = 0, unidades = 0, modificadas = 0, agregadas = 0, eliminadas = 0;
 
@@ -737,6 +799,14 @@ export async function editarCompraConMovimiento(
       const cant = Number(actual.cantidad) || 0;
       await ajustar(actual.producto_id, actual.producto_nombre, -cant, Number(actual.costo_unitario) || 0);
       if (cant !== 0) { movimientos++; unidades += cant; }
+      // Compra derivada de OC: descontar lo recibido de la línea de la orden.
+      if (actual.orden_compra_item_id) {
+        await client.query(
+          `UPDATE ${tOC} SET cantidad_recibida = GREATEST(cantidad_recibida - $1::numeric, 0), updated_at = now()
+            WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+          [cant, actual.orden_compra_item_id, empresaId]
+        );
+      }
       await client.query(`DELETE FROM ${tC} WHERE id = $1::uuid AND empresa_id = $2::uuid`, [id, empresaId]);
       eliminadas++;
     }
@@ -757,7 +827,18 @@ export async function editarCompraConMovimiento(
           [l.cantidad, l.costo_unitario_original, l.costo_unitario, l.iva_tipo,
            l.subtotal, l.monto_iva, l.total, l.precio_venta, l.margen_venta, l.id, empresaId]
         );
-        if (delta !== 0) { await ajustar(actual.producto_id, actual.producto_nombre, delta, l.costo_unitario); movimientos++; unidades += Math.abs(delta); }
+        if (delta !== 0) {
+          await ajustar(actual.producto_id, actual.producto_nombre, delta, l.costo_unitario);
+          movimientos++; unidades += Math.abs(delta);
+          // Compra derivada de OC: sincronizar la cantidad recibida de la línea de la orden.
+          if (actual.orden_compra_item_id) {
+            await client.query(
+              `UPDATE ${tOC} SET cantidad_recibida = GREATEST(cantidad_recibida + $1::numeric, 0), updated_at = now()
+                WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+              [delta, actual.orden_compra_item_id, empresaId]
+            );
+          }
+        }
         await client.query(
           `UPDATE ${tP} SET costo_promedio = $1::numeric,
              precio_venta = CASE WHEN $2::numeric > 0 THEN $2::numeric ELSE precio_venta END,
@@ -808,8 +889,11 @@ export async function editarCompraConMovimiento(
          updated_at = now()
        WHERE empresa_id = $7::uuid AND numero_control = $8`,
       [header.numero_factura, header.nro_timbrado, header.fecha_factura, header.observacion,
-       header.proveedor_id ?? null, header.proveedor_nombre ?? null, empresaId, numeroControl]
+       provOverrideId, provOverrideNombre, empresaId, numeroControl]
     );
+
+    // Compra derivada de OC: recalcular estado/recibida_at de las órdenes afectadas.
+    if (esDerivadaOC) await recomputarEstadoOrdenes(client, schema, empresaId, numerosOc);
 
     // Comprobante nuevo (imagen/PDF): reemplaza el de toda la compra.
     if (header.comprobante_storage_path) {
@@ -836,7 +920,10 @@ export async function editarCompraConMovimiento(
       detalle: {
         antes,
         despues: snapshotCompra(finales),
-        resumen: { lineas_actualizadas: modificadas, lineas_agregadas: agregadas, lineas_eliminadas: eliminadas },
+        resumen: {
+          lineas_actualizadas: modificadas, lineas_agregadas: agregadas, lineas_eliminadas: eliminadas,
+          derivada_oc: esDerivadaOC, ordenes: [...numerosOc],
+        },
       },
     });
 
@@ -848,6 +935,170 @@ export async function editarCompraConMovimiento(
       lineas_eliminadas: eliminadas,
       movimientos_generados: movimientos,
       unidades_ajustadas: unidades,
+    };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+// ── Eliminación de compra registrada (Fase 3) ────────────────────────────────
+
+/** Bloqueos al eliminar una compra registrada. */
+export class CompraEliminacionBloqueadaError extends Error {
+  motivo: "no_encontrada" | "derivada_orden";
+  constructor(motivo: "no_encontrada" | "derivada_orden", message: string) {
+    super(message);
+    this.name = "CompraEliminacionBloqueadaError";
+    this.motivo = motivo;
+  }
+}
+
+export interface EliminarCompraResult {
+  numero_control: string;
+  lineas_eliminadas: number;
+  unidades_revertidas: number;
+  productos_afectados: number;
+  ordenes_afectadas: string[];
+}
+
+/**
+ * Elimina una compra registrada REVIRTIENDO su impacto, sin reescribir la
+ * historia: por cada línea descuenta su stock y deja un movimiento NUEVO
+ * SALIDA con origen 'edicion_compra' (el movimiento original de la compra queda
+ * intacto). Luego borra las filas y recompone el `costo_promedio` de cada
+ * producto al costo de la última compra que quede (si no queda ninguna, se deja
+ * como estaba). `precio_venta` no se toca (lo administra el usuario).
+ *
+ * Reversa segura para compras derivadas de una orden de compra: en vez de un
+ * hard-delete que dejaría la orden colgada, descuenta lo recibido de cada línea
+ * de la OC (`cantidad_recibida`) y recalcula su estado (puede volver a
+ * 'recibida_parcial' o 'pendiente'). Todo atómico (una transacción) + auditoría.
+ */
+export async function eliminarCompraConReversa(
+  schemaRaw: string,
+  empresaId: string,
+  numeroControl: string,
+  usuario: { id: string | null; nombre: string | null }
+): Promise<EliminarCompraResult> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const tC = quoteSchemaTable(schema, "compras");
+  const tM = quoteSchemaTable(schema, "movimientos_inventario");
+  const tP = quoteSchemaTable(schema, "productos");
+  const tOC = quoteSchemaTable(schema, "ordenes_compra");
+  const ref = `Eliminación de compra ${numeroControl}`;
+
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+
+    const { rows: actuales } = await client.query<CompraRow>(
+      `SELECT ${COLS} FROM ${tC}
+        WHERE empresa_id = $1::uuid AND numero_control = $2 FOR UPDATE`,
+      [empresaId, numeroControl]
+    );
+    if (actuales.length === 0)
+      throw new CompraEliminacionBloqueadaError("no_encontrada", "Compra no encontrada.");
+
+    // Compras derivadas de OC: reversa segura (sincroniza la orden), no hard-delete.
+    const numerosOc = new Set(
+      actuales.map((r) => r.orden_compra_numero).filter((x): x is string => !!x)
+    );
+    const esDerivadaOC = numerosOc.size > 0;
+    if (esDerivadaOC) {
+      await client.query(
+        `SELECT id FROM ${tOC}
+          WHERE empresa_id = $1::uuid AND numero_oc = ANY($2::text[]) FOR UPDATE`,
+        [empresaId, [...numerosOc]]
+      );
+    }
+
+    const antes = snapshotCompra(actuales); // snapshot ANTES de revertir (auditoría)
+
+    // ── 1) Revertir stock por línea + movimiento SALIDA 'edicion_compra' ──
+    let unidades = 0;
+    const productos = new Set<string>();
+    for (const r of actuales) {
+      productos.add(r.producto_id);
+      const cant = Number(r.cantidad) || 0;
+      // Compra derivada de OC: descontar lo recibido de la línea de la orden.
+      if (r.orden_compra_item_id) {
+        await client.query(
+          `UPDATE ${tOC} SET cantidad_recibida = GREATEST(cantidad_recibida - $1::numeric, 0), updated_at = now()
+            WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+          [cant, r.orden_compra_item_id, empresaId]
+        );
+      }
+      if (cant === 0) continue;
+      await client.query(
+        `UPDATE ${tP} SET stock_actual = stock_actual - $1::numeric, updated_at = now()
+          WHERE id = $2::uuid AND empresa_id = $3::uuid`,
+        [cant, r.producto_id, empresaId]
+      );
+      await client.query(
+        `INSERT INTO ${tM} (
+           empresa_id, producto_id, producto_nombre, producto_sku,
+           tipo, cantidad, costo_unitario, origen, referencia, fecha, created_by, usuario_nombre
+         )
+         SELECT $1::uuid, $2::uuid, $3, COALESCE(p.sku, ''),
+                'SALIDA', $4::numeric, $5::numeric, 'edicion_compra', $6, now(), $7::uuid, $8
+         FROM ${tP} p WHERE p.id = $2::uuid`,
+        [empresaId, r.producto_id, r.producto_nombre, cant, Number(r.costo_unitario) || 0, ref, usuario.id, usuario.nombre]
+      );
+      unidades += cant;
+    }
+
+    // ── 2) Borrar las filas de la compra ──
+    await client.query(
+      `DELETE FROM ${tC} WHERE empresa_id = $1::uuid AND numero_control = $2`,
+      [empresaId, numeroControl]
+    );
+
+    // ── 3) Recomponer costo_promedio a la última compra que quede por producto ──
+    // Si el subselect es vacío (ya no quedan compras del producto) no actualiza:
+    // el costo_promedio se deja como estaba.
+    for (const productoId of productos) {
+      await client.query(
+        `UPDATE ${tP} p SET costo_promedio = c.costo_unitario, updated_at = now()
+           FROM (
+             SELECT costo_unitario FROM ${tC}
+              WHERE empresa_id = $1::uuid AND producto_id = $2::uuid
+              ORDER BY fecha DESC, created_at DESC
+              LIMIT 1
+           ) c
+          WHERE p.id = $2::uuid AND p.empresa_id = $1::uuid`,
+        [empresaId, productoId]
+      );
+    }
+
+    // ── 4) Compra derivada de OC: recalcular estado de las órdenes afectadas ──
+    if (esDerivadaOC) await recomputarEstadoOrdenes(client, schema, empresaId, numerosOc);
+
+    // ── 5) Auditoría (atómica: dentro de la misma transacción) ──
+    await registrarCompraAuditoria(client, schema, {
+      empresaId,
+      tipo: "compra",
+      documento: numeroControl,
+      accion: "eliminar",
+      usuario,
+      detalle: {
+        antes,
+        resumen: {
+          lineas_eliminadas: actuales.length, unidades_revertidas: unidades,
+          derivada_oc: esDerivadaOC, ordenes: [...numerosOc],
+        },
+      },
+    });
+
+    await client.query("COMMIT");
+    return {
+      numero_control: numeroControl,
+      lineas_eliminadas: actuales.length,
+      unidades_revertidas: unidades,
+      productos_afectados: productos.size,
+      ordenes_afectadas: [...numerosOc],
     };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => null);

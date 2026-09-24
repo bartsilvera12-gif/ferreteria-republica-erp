@@ -7,6 +7,8 @@ import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import {
   editarCompraConMovimiento,
+  eliminarCompraConReversa,
+  CompraEliminacionBloqueadaError,
   type EditarCompraLinea,
   type EditarCompraHeader,
 } from "@/lib/compras/server/compras-pg";
@@ -109,5 +111,47 @@ export async function PATCH(
   } catch (err) {
     console.error("[/api/compras/[numero] PATCH] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo editar la compra."), { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/compras/[numero] — elimina una compra registrada revirtiendo su
+ * impacto (stock + costo_promedio) y registra auditoría. Solo admin.
+ * Bloquea compras derivadas de una orden de compra.
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ numero: string }> }
+) {
+  try {
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const authRol = await getAuthWithRol(request);
+    if (!esRolAdminEmpresaOGlobal(authRol?.rol)) {
+      return NextResponse.json(errorResponse("Solo un administrador puede eliminar compras."), { status: 403 });
+    }
+    const empresaId = ctx.auth.empresa_id;
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    const { numero } = await params;
+    const numeroControl = decodeURIComponent(numero);
+
+    try {
+      const out = await eliminarCompraConReversa(schema, empresaId, numeroControl, {
+        id: ctx.auth.usuarioCatalogId ?? null,
+        nombre: ctx.auth.user?.email ?? null,
+      });
+      return NextResponse.json(successResponse(out));
+    } catch (e) {
+      if (e instanceof CompraEliminacionBloqueadaError) {
+        const status = e.motivo === "no_encontrada" ? 404 : 409;
+        return NextResponse.json(errorResponse(e.message), { status });
+      }
+      const msg = e instanceof Error ? e.message : "No se pudo eliminar la compra.";
+      console.error("[/api/compras/[numero] DELETE]", msg);
+      return NextResponse.json(errorResponse(msg), { status: 500 });
+    }
+  } catch (err) {
+    console.error("[/api/compras/[numero] DELETE] outer", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo eliminar la compra."), { status: 500 });
   }
 }

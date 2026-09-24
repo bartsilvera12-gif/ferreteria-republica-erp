@@ -312,3 +312,20 @@ export async function editarCompra(
     return { ok: false, error: e instanceof Error ? e.message : "Error de conexión." };
   }
 }
+
+/** Elimina una compra registrada (revierte stock + costo). Solo admin. */
+export async function eliminarCompra(
+  numeroControl: string
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  try {
+    const r = await fetch(`/api/compras/${encodeURIComponent(numeroControl)}`, {
+      method: "DELETE",
+      credentials: "include",
+    });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j?.success) return { ok: false, error: (j as { error?: string })?.error ?? "No se pudo eliminar la compra." };
+    return { ok: true };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "Error de conexión." };
+  }
+}

@@ -55,7 +55,8 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [bloqueada, setBloqueada] = useState<string | null>(null);
+  /** Si la compra proviene de una orden de compra: guarda el N° de OC (o null). */
+  const [derivadaOC, setDerivadaOC] = useState<string | null>(null);
   const [proveedorId, setProveedorId] = useState("");
   const [proveedorNombre, setProveedorNombre] = useState("");
   const proveedorOriginalId = useRef("");
@@ -80,9 +81,8 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
       if (cancel) return;
       const rows = compras.filter((c) => c.numero_control === numeroControl);
       if (rows.length === 0) { setError("Compra no encontrada."); setCargando(false); return; }
-      if (rows.some((r) => r.orden_compra_numero)) {
-        setBloqueada("Esta compra proviene de una orden de compra. Para corregirla, ajustá la orden de compra correspondiente.");
-      }
+      const filaOC = rows.find((r) => r.orden_compra_numero);
+      if (filaOC) setDerivadaOC(filaOC.orden_compra_numero ?? null);
       const cab = rows[0];
       setProveedorId(cab.proveedor_id);
       setProveedorNombre(cab.proveedor_nombre);
@@ -219,7 +219,7 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">Zentra · Compras</p>
             <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">Editar compra {numeroControl}</h1>
-            {bloqueada ? (
+            {derivadaOC ? (
               <p className="mt-0.5 text-xs text-slate-500">Proveedor: <span className="font-medium text-slate-700">{proveedorNombre}</span></p>
             ) : (
               <div className="mt-2 w-full max-w-sm">
@@ -233,9 +233,13 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
 
       {error && <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700">{error}</div>}
 
-      {bloqueada ? (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">{bloqueada}</div>
-      ) : (
+      {derivadaOC && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Esta compra proviene de la orden de compra <span className="font-semibold">{derivadaOC}</span>. Corregir cantidades ajustará la <span className="font-medium">cantidad recibida</span> y el estado de esa orden. No se pueden agregar productos nuevos ni cambiar el proveedor desde acá.
+        </div>
+      )}
+
+      {(
         <>
           {/* Productos */}
           <section className="overflow-hidden rounded-2xl border-2 border-[#4FAEB2]/20 bg-white shadow-[0_2px_10px_-2px_rgba(79,174,178,0.12)]">
@@ -304,11 +308,13 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
               </table>
             </div>
 
-            {/* Agregar producto */}
-            <div className="border-t border-slate-100 px-5 py-4">
-              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Agregar producto</p>
-              <ProductoBuscadorInline onSelect={agregarProducto} excludeIds={lineas.map((l) => l.producto_id)} />
-            </div>
+            {/* Agregar producto (no disponible en compras derivadas de una orden) */}
+            {!derivadaOC && (
+              <div className="border-t border-slate-100 px-5 py-4">
+                <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Agregar producto</p>
+                <ProductoBuscadorInline onSelect={agregarProducto} excludeIds={lineas.map((l) => l.producto_id)} />
+              </div>
+            )}
 
             {/* Totales */}
             <div className="flex flex-wrap justify-end gap-8 border-t border-slate-100 bg-slate-50/50 px-5 py-3.5 text-sm">

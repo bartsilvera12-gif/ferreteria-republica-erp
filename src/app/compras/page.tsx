@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { getCompras, comprasQueryString } from "@/lib/compras/storage";
+import { getCompras, comprasQueryString, eliminarCompra } from "@/lib/compras/storage";
 import { getOrdenesCompra } from "@/lib/ordenes-compra/storage";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
@@ -93,6 +93,9 @@ const PAGE_SIZE = 25;
 export default function ComprasPage() {
   const [ordenes, setOrdenes] = useState<OrdenCompra[]>([]);
   const [expandidos, setExpandidos] = useState<Set<string>>(new Set());
+  const [esAdmin, setEsAdmin] = useState(false);
+  const [eliminando, setEliminando] = useState<string | null>(null);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   /** Lo que el usuario tipea; se manda al servidor con 350 ms de debounce. */
   const [busqueda, setBusqueda] = useState("");
@@ -139,12 +142,41 @@ export default function ComprasPage() {
       setResultado({ clave, filas: data.compras, total: data.total });
     });
     return () => { cancel = true; };
-  }, [clave, busquedaAplicada, filtroTipoPago, desde, hasta, pagina]);
+  }, [clave, busquedaAplicada, filtroTipoPago, desde, hasta, pagina, refreshTick]);
 
   useEffect(() => {
     let cancel = false;
     getOrdenesCompra().then((data) => { if (!cancel) setOrdenes(data); });
     return () => { cancel = true; };
+  }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/usuarios/me", { credentials: "include" })
+      .then((r) => r.json())
+      .catch(() => null)
+      .then((j) => {
+        const rol = String(j?.usuario?.rol ?? "").toLowerCase();
+        if (!cancel) setEsAdmin(["admin", "administrador", "super_admin"].includes(rol));
+      });
+    return () => { cancel = true; };
+  }, []);
+
+  const eliminar = useCallback(async (numeroControl: string, ordenCompraNumero?: string | null) => {
+    const notaOC = ordenCompraNumero
+      ? `\n\nProviene de la orden ${ordenCompraNumero}: también se descontará la cantidad recibida y se recalculará su estado.`
+      : "";
+    if (!confirm(
+      `¿Eliminar la compra ${numeroControl}?\n\n` +
+      `Se revertirá el stock de sus productos y se recalculará el costo. ` +
+      `Queda registrado en la bitácora. Esta acción no se puede deshacer.` +
+      notaOC
+    )) return;
+    setEliminando(numeroControl);
+    const res = await eliminarCompra(numeroControl);
+    setEliminando(null);
+    if (!res.ok) { alert(res.error); return; }
+    setRefreshTick((t) => t + 1);
   }, []);
 
   /** El servidor ya devuelve solo las compras de la pagina; aca solo se agrupan las filas. */
@@ -406,19 +438,29 @@ export default function ComprasPage() {
                         </td>
                         <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
                         <td className="py-4 text-right">
-                          {/* Editar: solo compras manuales (las de OC se ajustan desde la orden). */}
-                          {!g.orden_compra_numero ? (
+                          {/* Editar/Eliminar. En compras derivadas de una OC, ambos ajustan la orden. */}
+                          <div className="inline-flex items-center gap-2">
                             <Link
                               href={`/compras/${encodeURIComponent(g.numero_control)}/editar`}
                               onClick={(e) => e.stopPropagation()}
                               className="inline-flex items-center gap-1 rounded-lg border border-[#4FAEB2]/30 px-2.5 py-1 text-xs font-semibold text-[#3F8E91] transition-colors hover:border-[#4FAEB2] hover:bg-[#4FAEB2] hover:text-white"
-                              title="Editar compra"
+                              title={g.orden_compra_numero ? "Corregir compra (ajusta la orden de compra)" : "Editar compra"}
                             >
                               <Pencil className="h-3.5 w-3.5" /> Editar
                             </Link>
-                          ) : (
-                            <span className="text-[11px] text-slate-300">—</span>
-                          )}
+                            {esAdmin && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); eliminar(g.numero_control, g.orden_compra_numero); }}
+                                disabled={eliminando === g.numero_control}
+                                className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 transition-colors hover:border-rose-400 hover:bg-rose-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                title={g.orden_compra_numero ? "Eliminar compra (revierte stock/costo y ajusta la orden)" : "Eliminar compra (revierte stock y costo)"}
+                              >
+                                <Trash2 className="h-3.5 w-3.5" />
+                                {eliminando === g.numero_control ? "Eliminando…" : "Eliminar"}
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
 
