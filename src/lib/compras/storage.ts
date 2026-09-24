@@ -282,6 +282,9 @@ export interface EditarCompraPayload {
   nro_timbrado: string | null;
   fecha_factura: string | null;
   observacion: string | null;
+  /** Proveedor (opcional): si viene, reemplaza el proveedor de la compra. */
+  proveedor_id?: string | null;
+  proveedor_nombre?: string | null;
   lineas: EditarCompraLineaPayload[];
   /** ids de líneas existentes a eliminar. */
   eliminar: string[];

@@ -639,6 +639,9 @@ export interface EditarCompraHeader {
   nro_timbrado: string | null;
   fecha_factura: string | null;
   observacion: string | null;
+  /** Proveedor (opcional): si viene, reemplaza el proveedor de toda la compra. */
+  proveedor_id?: string | null;
+  proveedor_nombre?: string | null;
   /** Si viene, se reemplaza el comprobante (imagen/PDF) de toda la compra. */
   comprobante_storage_path?: string | null;
   comprobante_nombre?: string | null;
@@ -717,6 +720,9 @@ export async function editarCompraConMovimiento(
 
     const cab = actuales[0]; // cabecera compartida (proveedor, moneda, etc.)
     const antes = snapshotCompra(actuales); // snapshot ANTES de tocar nada (auditoría)
+    // Proveedor final: el nuevo si vino en el header; si no, el de la compra.
+    const provIdFinal = header.proveedor_id ?? cab.proveedor_id;
+    const provNombreFinal = header.proveedor_nombre ?? cab.proveedor_nombre;
     const porId = new Map(actuales.map((r) => [r.id, r]));
     let movimientos = 0, unidades = 0, modificadas = 0, agregadas = 0, eliminadas = 0;
 
@@ -775,7 +781,7 @@ export async function editarCompraConMovimiento(
              $17,$18::integer,$19,$20,$21::date,$22,
              $23,'registrada',now(),$24::uuid,$25
            )`,
-          [empresaId, cab.proveedor_id, cab.proveedor_nombre, l.producto_id, l.producto_nombre ?? "",
+          [empresaId, provIdFinal, provNombreFinal, l.producto_id, l.producto_nombre ?? "",
            l.cantidad, cab.moneda, cab.tipo_cambio, l.costo_unitario_original, l.costo_unitario,
            l.iva_tipo, l.subtotal, l.monto_iva, l.total, l.precio_venta, l.margen_venta,
            cab.tipo_pago, cab.plazo_dias, header.nro_timbrado, header.numero_factura, header.fecha_factura, header.observacion,
@@ -793,12 +799,16 @@ export async function editarCompraConMovimiento(
       }
     }
 
-    // ── 3) Datos de factura en todas las filas que quedaron ──
+    // ── 3) Datos de factura + proveedor en todas las filas que quedaron ──
     await client.query(
       `UPDATE ${tC} SET numero_factura = $1, nro_timbrado = $2, fecha_factura = $3::date,
-         observacion = $4, updated_at = now()
-       WHERE empresa_id = $5::uuid AND numero_control = $6`,
-      [header.numero_factura, header.nro_timbrado, header.fecha_factura, header.observacion, empresaId, numeroControl]
+         observacion = $4,
+         proveedor_id = COALESCE($5::uuid, proveedor_id),
+         proveedor_nombre = COALESCE($6, proveedor_nombre),
+         updated_at = now()
+       WHERE empresa_id = $7::uuid AND numero_control = $8`,
+      [header.numero_factura, header.nro_timbrado, header.fecha_factura, header.observacion,
+       header.proveedor_id ?? null, header.proveedor_nombre ?? null, empresaId, numeroControl]
     );
 
     // Comprobante nuevo (imagen/PDF): reemplaza el de toda la compra.

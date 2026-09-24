@@ -78,10 +78,21 @@ export async function PATCH(
       nro_timbrado: req("nro_timbrado") ? String(body.nro_timbrado).trim().toUpperCase() : null,
       fecha_factura: req("fecha_factura") ? String(body.fecha_factura).trim().slice(0, 10) : null,
       observacion: req("observacion") ? String(body.observacion).trim().slice(0, 2000) : null,
+      proveedor_id: req("proveedor_id") ? String(body.proveedor_id) : null,
+      proveedor_nombre: req("proveedor_nombre") ? String(body.proveedor_nombre).trim() : null,
       comprobante_storage_path: req("comprobante_storage_path") ? String(body.comprobante_storage_path) : null,
       comprobante_nombre: req("comprobante_nombre") ? String(body.comprobante_nombre) : null,
       comprobante_mime_type: req("comprobante_mime_type") ? String(body.comprobante_mime_type) : null,
     };
+
+    // Si se cambia el proveedor, validar que exista y pertenezca a la empresa.
+    if (header.proveedor_id) {
+      const pv = await ctx.supabase
+        .from("proveedores").select("id")
+        .eq("empresa_id", empresaId).eq("id", header.proveedor_id).maybeSingle();
+      if (pv.error) throw new Error(pv.error.message);
+      if (!pv.data) return NextResponse.json(errorResponse("El proveedor seleccionado no existe."), { status: 400 });
+    }
 
     try {
       const out = await editarCompraConMovimiento(

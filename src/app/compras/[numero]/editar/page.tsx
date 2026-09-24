@@ -18,6 +18,7 @@ import MontoInput from "@/components/ui/MontoInput";
 import ConfirmModal from "@/components/ui/ConfirmModal";
 import ProductoBuscadorInline from "@/components/inventario/ProductoBuscadorInline";
 import { getCompras, editarCompra, uploadComprobante, type EditarCompraLineaPayload } from "@/lib/compras/storage";
+import ProveedorPicker from "@/components/proveedores/ProveedorPicker";
 import type { Compra, TipoIva } from "@/lib/compras/types";
 import { parseCantidad, permiteDecimales, formatCantidad } from "@/lib/productos/unidades";
 
@@ -55,7 +56,9 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [bloqueada, setBloqueada] = useState<string | null>(null);
-  const [proveedor, setProveedor] = useState("");
+  const [proveedorId, setProveedorId] = useState("");
+  const [proveedorNombre, setProveedorNombre] = useState("");
+  const proveedorOriginalId = useRef("");
   const [numeroFactura, setNumeroFactura] = useState("");
   const [nroTimbrado, setNroTimbrado] = useState("");
   const [fechaFactura, setFechaFactura] = useState("");
@@ -81,7 +84,9 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
         setBloqueada("Esta compra proviene de una orden de compra. Para corregirla, ajustá la orden de compra correspondiente.");
       }
       const cab = rows[0];
-      setProveedor(cab.proveedor_nombre);
+      setProveedorId(cab.proveedor_id);
+      setProveedorNombre(cab.proveedor_nombre);
+      proveedorOriginalId.current = cab.proveedor_id;
       setNumeroFactura(cab.numero_factura ?? "");
       setNroTimbrado(cab.nro_timbrado ?? "");
       setFechaFactura((cab.fecha_factura ?? "").slice(0, 10));
@@ -142,8 +147,8 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
   }, [lineas]);
 
   const hayCambios = useMemo(
-    () => eliminadas.length > 0 || lineas.some((l) => !l.id || l.cantidad !== l.cantidadOriginal),
-    [lineas, eliminadas]
+    () => eliminadas.length > 0 || proveedorId !== proveedorOriginalId.current || lineas.some((l) => !l.id || l.cantidad !== l.cantidadOriginal),
+    [lineas, eliminadas, proveedorId]
   );
 
   async function subirComprobante(file: File) {
@@ -186,6 +191,8 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
       nro_timbrado: nroTimbrado.trim() || null,
       fecha_factura: fechaFactura || null,
       observacion: observacion.trim() || null,
+      proveedor_id: proveedorId || null,
+      proveedor_nombre: proveedorNombre || null,
       lineas: payloadLineas,
       eliminar: eliminadas,
       comprobante_storage_path: compNuevo?.storage_path ?? null,
@@ -212,7 +219,14 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
           <div>
             <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-[#4FAEB2]">Zentra · Compras</p>
             <h1 className="mt-0.5 text-xl font-bold tracking-tight text-slate-900">Editar compra {numeroControl}</h1>
-            <p className="mt-0.5 text-xs text-slate-500">Proveedor: <span className="font-medium text-slate-700">{proveedor}</span></p>
+            {bloqueada ? (
+              <p className="mt-0.5 text-xs text-slate-500">Proveedor: <span className="font-medium text-slate-700">{proveedorNombre}</span></p>
+            ) : (
+              <div className="mt-2 w-full max-w-sm">
+                <label className="mb-1 block text-xs font-medium text-slate-500">Proveedor</label>
+                <ProveedorPicker value={proveedorId} onChange={(id, nombre) => { setProveedorId(id); setProveedorNombre(nombre); }} />
+              </div>
+            )}
           </div>
         </div>
       </div>
