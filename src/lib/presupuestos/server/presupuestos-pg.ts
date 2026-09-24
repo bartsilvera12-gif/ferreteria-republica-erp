@@ -202,6 +202,163 @@ export async function crearPresupuesto(
   return { id: presupuestoId, numero_control: numero };
 }
 
+/** Error de edición bloqueada (no encontrado o ya convertido). */
+export class PresupuestoEdicionBloqueadaError extends Error {
+  motivo: "no_encontrado" | "convertido";
+  constructor(motivo: "no_encontrado" | "convertido", message: string) {
+    super(message);
+    this.name = "PresupuestoEdicionBloqueadaError";
+    this.motivo = motivo;
+  }
+}
+
+/**
+ * Actualiza un presupuesto existente: cliente, ítems, condiciones y observaciones,
+ * recalculando ítems/descuentos/totales. CONSERVA el mismo `numero_control`, el
+ * `estado` y la `fecha` de creación. Registra quién editó (updated_by /
+ * updated_by_nombre) y updated_at. Bloquea si el presupuesto ya fue convertido.
+ * No toca stock, ventas ni facturación.
+ */
+export async function actualizarPresupuesto(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  id: string,
+  input: CrearPresupuestoInput,
+  usuario: { id: string | null; nombre: string | null }
+): Promise<{ id: string; numero_control: string }> {
+  if (!input.items || input.items.length === 0) {
+    throw new Error("El presupuesto debe tener al menos un ítem.");
+  }
+  if (!input.cliente_nombre || !input.cliente_nombre.trim()) {
+    throw new Error("El nombre del cliente es obligatorio.");
+  }
+
+  // 1) Cargar el presupuesto actual (estado, número, fecha) para validar y conservar.
+  const actualQ = await sb
+    .from("presupuestos")
+    .select("id, numero_control, estado, fecha")
+    .eq("empresa_id", empresaId)
+    .eq("id", id)
+    .maybeSingle();
+  if (actualQ.error) throw new Error(actualQ.error.message);
+  if (!actualQ.data) {
+    throw new PresupuestoEdicionBloqueadaError("no_encontrado", "El presupuesto no existe.");
+  }
+  const actual = actualQ.data as { numero_control: string; estado: string; fecha: string };
+  if (actual.estado === "convertido") {
+    throw new PresupuestoEdicionBloqueadaError(
+      "convertido",
+      "El presupuesto ya fue convertido en pedido/venta; no se puede editar."
+    );
+  }
+
+  // 2) Recalcular ítems y totales.
+  const calculados = input.items.map((it) => ({ raw: it, calc: calcularItem(it) }));
+  let subtotal = 0;
+  let montoIva = 0;
+  let descuentoTotal = 0;
+  let total = 0;
+  for (const { calc } of calculados) {
+    subtotal += calc.subtotal;
+    montoIva += calc.monto_iva;
+    descuentoTotal += calc.descuento;
+    total += calc.total;
+  }
+
+  // Vencimiento recalculado sobre la fecha ORIGINAL (no se extiende al editar).
+  let vencimiento: string | null = null;
+  if (input.validez_dias && input.validez_dias > 0) {
+    const base = actual.fecha ? new Date(actual.fecha) : new Date();
+    base.setDate(base.getDate() + input.validez_dias);
+    vencimiento = base.toISOString().slice(0, 10);
+  }
+
+  // 3) Actualizar cabecera (NO toca numero_control, estado, fecha, created_at ni convertido_*).
+  const base = {
+    cliente_id: input.cliente_id,
+    cliente_nombre: input.cliente_nombre.trim(),
+    cliente_ruc: input.cliente_ruc?.trim() || null,
+    cliente_telefono: input.cliente_telefono?.trim() || null,
+    cliente_direccion: input.cliente_direccion?.trim() || null,
+    moneda: input.moneda || "PYG",
+    subtotal: round2(subtotal),
+    monto_iva: round2(montoIva),
+    descuento_total: round2(descuentoTotal),
+    total: round2(total),
+    validez_dias: input.validez_dias ?? null,
+    fecha_vencimiento: vencimiento,
+    condicion: input.condicion === "credito" ? "credito" : "contado",
+    forma_pago: input.forma_pago?.trim() || null,
+    plazo_entrega: input.plazo_entrega?.trim() || null,
+    observaciones: input.observaciones?.trim() || null,
+    updated_at: new Date().toISOString(),
+  };
+  const conAuditoria = { ...base, updated_by: usuario.id, updated_by_nombre: usuario.nombre };
+  let updHead = await sb.from("presupuestos").update(conAuditoria).eq("empresa_id", empresaId).eq("id", id);
+  if (updHead.error && esColumnaFaltante(updHead.error)) {
+    // Faltan columnas de auditoría: guardar sin ellas (migración aún no aplicada).
+    console.warn(
+      "[presupuestos] presupuestos sin columnas de auditoría (updated_by/updated_by_nombre); " +
+        "guardando sin ellas. Falta aplicar 20260924120000_ferreteriarepublica_presupuestos_auditoria_edicion.sql"
+    );
+    updHead = await sb.from("presupuestos").update(base).eq("empresa_id", empresaId).eq("id", id);
+  }
+  if (updHead.error) throw new Error(updHead.error.message);
+
+  // 4) Reemplazar ítems: se INSERTAN los nuevos y luego se borran los viejos por
+  //    id (si el insert falla, los viejos quedan intactos: sin pérdida de datos).
+  const viejosQ = await sb
+    .from("presupuesto_items")
+    .select("id")
+    .eq("empresa_id", empresaId)
+    .eq("presupuesto_id", id);
+  if (viejosQ.error) throw new Error(viejosQ.error.message);
+  const viejosIds = ((viejosQ.data ?? []) as { id: string }[]).map((r) => r.id);
+
+  const itemsRows = calculados.map(({ raw, calc }) => ({
+    empresa_id: empresaId,
+    presupuesto_id: id,
+    producto_id: raw.producto_id,
+    producto_nombre: raw.producto_nombre,
+    sku: raw.sku,
+    cantidad: calc.cantidad,
+    unidad_medida: raw.unidad_medida,
+    precio_unitario: calc.precio_unitario,
+    iva_tipo: raw.iva_tipo,
+    subtotal: calc.subtotal,
+    monto_iva: calc.monto_iva,
+    descuento: calc.descuento,
+    total: calc.total,
+    presentacion_id: raw.presentacion_id ?? null,
+    presentacion_nombre: raw.presentacion_nombre ?? null,
+    presentacion_cantidad_base: raw.presentacion_cantidad_base ?? null,
+  }));
+
+  let insItems = await sb.from("presupuesto_items").insert(itemsRows);
+  if (insItems.error && esColumnaFaltante(insItems.error)) {
+    const sinPresentacion = itemsRows.map((row) => {
+      const copia: Partial<typeof row> = { ...row };
+      delete copia.presentacion_id;
+      delete copia.presentacion_nombre;
+      delete copia.presentacion_cantidad_base;
+      return copia;
+    });
+    insItems = await sb.from("presupuesto_items").insert(sinPresentacion);
+  }
+  if (insItems.error) throw new Error(insItems.error.message);
+
+  if (viejosIds.length > 0) {
+    const delOld = await sb
+      .from("presupuesto_items")
+      .delete()
+      .eq("empresa_id", empresaId)
+      .in("id", viejosIds);
+    if (delOld.error) throw new Error(delOld.error.message);
+  }
+
+  return { id, numero_control: actual.numero_control };
+}
+
 /**
  * Convierte un presupuesto APROBADO en un pedido (proyecto tipo 'pedido', estado inicial 'nuevo').
  * NO descuenta stock (el pedido aún no está confirmado). Evita doble conversión.

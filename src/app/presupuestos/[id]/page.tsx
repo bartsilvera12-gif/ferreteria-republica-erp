@@ -3,8 +3,9 @@
 import { useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { FileText, ArrowLeft, Loader2, Download, FileCheck2 } from "lucide-react";
+import { FileText, ArrowLeft, Loader2, Download, FileCheck2, Pencil } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 import { ESTADO_LABEL, type EstadoPresupuesto } from "@/lib/presupuestos/types";
 
 type Presu = {
@@ -82,6 +83,17 @@ export default function PresupuestoDetallePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ok, setOk] = useState<string | null>(null);
+  // Solo admin/administrador/super_admin pueden editar (el server también lo valida).
+  const [puedeEditar, setPuedeEditar] = useState(false);
+
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setPuedeEditar(esRolAdminEmpresaOGlobal(j?.usuario?.rol)); })
+      .catch(() => { if (!cancel) setPuedeEditar(false); });
+    return () => { cancel = true; };
+  }, []);
 
   const cargar = useCallback(async () => {
     setLoading(true);
@@ -173,12 +185,22 @@ export default function PresupuestoDetallePage() {
         <Link href="/presupuestos" className="inline-flex items-center gap-1 text-sm text-slate-500 hover:text-slate-700">
           <ArrowLeft className="h-4 w-4" /> Volver a presupuestos
         </Link>
-        <a
-          href={`/api/presupuestos/${id}/pdf`}
-          className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#4FAEB2]/30 transition-colors hover:bg-[#3F8E91]"
-        >
-          <Download className="h-4 w-4" /> Descargar PDF
-        </a>
+        <div className="flex items-center gap-2">
+          {puedeEditar && presu.estado !== "convertido" && (
+            <Link
+              href={`/presupuestos/${id}/editar`}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:border-slate-400 hover:bg-slate-50"
+            >
+              <Pencil className="h-4 w-4" /> Editar
+            </Link>
+          )}
+          <a
+            href={`/api/presupuestos/${id}/pdf`}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-[#4FAEB2] px-4 py-2 text-sm font-bold text-white shadow-sm shadow-[#4FAEB2]/30 transition-colors hover:bg-[#3F8E91]"
+          >
+            <Download className="h-4 w-4" /> Descargar PDF
+          </a>
+        </div>
       </div>
 
       {error && <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">{error}</div>}
