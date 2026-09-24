@@ -162,11 +162,15 @@ export default function ComprasPage() {
     return () => { cancel = true; };
   }, []);
 
-  const eliminar = useCallback(async (numeroControl: string) => {
+  const eliminar = useCallback(async (numeroControl: string, ordenCompraNumero?: string | null) => {
+    const notaOC = ordenCompraNumero
+      ? `\n\nProviene de la orden ${ordenCompraNumero}: también se descontará la cantidad recibida y se recalculará su estado.`
+      : "";
     if (!confirm(
       `¿Eliminar la compra ${numeroControl}?\n\n` +
       `Se revertirá el stock de sus productos y se recalculará el costo. ` +
-      `Queda registrado en la bitácora. Esta acción no se puede deshacer.`
+      `Queda registrado en la bitácora. Esta acción no se puede deshacer.` +
+      notaOC
     )) return;
     setEliminando(numeroControl);
     const res = await eliminarCompra(numeroControl);
@@ -434,33 +438,29 @@ export default function ComprasPage() {
                         </td>
                         <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
                         <td className="py-4 text-right">
-                          {/* Editar/Eliminar: solo compras manuales (las de OC se ajustan desde la orden). */}
-                          {!g.orden_compra_numero ? (
-                            <div className="inline-flex items-center gap-2">
-                              <Link
-                                href={`/compras/${encodeURIComponent(g.numero_control)}/editar`}
-                                onClick={(e) => e.stopPropagation()}
-                                className="inline-flex items-center gap-1 rounded-lg border border-[#4FAEB2]/30 px-2.5 py-1 text-xs font-semibold text-[#3F8E91] transition-colors hover:border-[#4FAEB2] hover:bg-[#4FAEB2] hover:text-white"
-                                title="Editar compra"
+                          {/* Editar/Eliminar. En compras derivadas de una OC, ambos ajustan la orden. */}
+                          <div className="inline-flex items-center gap-2">
+                            <Link
+                              href={`/compras/${encodeURIComponent(g.numero_control)}/editar`}
+                              onClick={(e) => e.stopPropagation()}
+                              className="inline-flex items-center gap-1 rounded-lg border border-[#4FAEB2]/30 px-2.5 py-1 text-xs font-semibold text-[#3F8E91] transition-colors hover:border-[#4FAEB2] hover:bg-[#4FAEB2] hover:text-white"
+                              title={g.orden_compra_numero ? "Corregir compra (ajusta la orden de compra)" : "Editar compra"}
+                            >
+                              <Pencil className="h-3.5 w-3.5" /> Editar
+                            </Link>
+                            {esAdmin && (
+                              <button
+                                type="button"
+                                onClick={(e) => { e.stopPropagation(); eliminar(g.numero_control, g.orden_compra_numero); }}
+                                disabled={eliminando === g.numero_control}
+                                className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 transition-colors hover:border-rose-400 hover:bg-rose-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                                title={g.orden_compra_numero ? "Eliminar compra (revierte stock/costo y ajusta la orden)" : "Eliminar compra (revierte stock y costo)"}
                               >
-                                <Pencil className="h-3.5 w-3.5" /> Editar
-                              </Link>
-                              {esAdmin && (
-                                <button
-                                  type="button"
-                                  onClick={(e) => { e.stopPropagation(); eliminar(g.numero_control); }}
-                                  disabled={eliminando === g.numero_control}
-                                  className="inline-flex items-center gap-1 rounded-lg border border-rose-200 px-2.5 py-1 text-xs font-semibold text-rose-600 transition-colors hover:border-rose-400 hover:bg-rose-500 hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
-                                  title="Eliminar compra (revierte stock y costo)"
-                                >
-                                  <Trash2 className="h-3.5 w-3.5" />
-                                  {eliminando === g.numero_control ? "Eliminando…" : "Eliminar"}
-                                </button>
-                              )}
-                            </div>
-                          ) : (
-                            <span className="text-[11px] text-slate-300">—</span>
-                          )}
+                                <Trash2 className="h-3.5 w-3.5" />
+                                {eliminando === g.numero_control ? "Eliminando…" : "Eliminar"}
+                              </button>
+                            )}
+                          </div>
                         </td>
                       </tr>
 
