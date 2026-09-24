@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { getAuthWithRol } from "@/lib/middleware/auth";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
@@ -23,6 +25,10 @@ export async function PATCH(
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const authRol = await getAuthWithRol(request);
+    if (!esRolAdminEmpresaOGlobal(authRol?.rol)) {
+      return NextResponse.json(errorResponse("Solo un administrador puede editar compras."), { status: 403 });
+    }
     const empresaId = ctx.auth.empresa_id;
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
     const { numero } = await params;

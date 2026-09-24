@@ -13,6 +13,7 @@ import {
   type CompraHeaderInput,
   type CompraItemInput,
 } from "@/lib/compras/server/compras-pg";
+import { registrarCompraAuditoria, snapshotCompra } from "@/lib/compras/server/compra-auditoria";
 
 function pool() {
   const p = getChatPostgresPool();
@@ -286,6 +287,13 @@ export async function actualizarOrdenCompra(
     const compNombre = header.comprobante_storage_path ? header.comprobante_nombre : orig.comprobante_nombre;
     const compMime = header.comprobante_storage_path ? header.comprobante_mime_type : orig.comprobante_mime_type;
 
+    // Snapshot ANTES (auditoría), con todos los datos de las líneas.
+    const { rows: antesRows } = await client.query<OrdenCompraRow>(
+      `SELECT ${COLS} FROM ${t} WHERE empresa_id = $1::uuid AND numero_oc = $2`,
+      [empresaId, numeroOc]
+    );
+    const antes = snapshotCompra(antesRows);
+
     await client.query(`DELETE FROM ${t} WHERE empresa_id = $1::uuid AND numero_oc = $2`, [empresaId, numeroOc]);
 
     for (const it of items) {
@@ -322,8 +330,79 @@ export async function actualizarOrdenCompra(
       );
       inserted.push(rows[0]);
     }
+    // Auditoría (atómica: misma transacción). "despues" = líneas resultantes.
+    await registrarCompraAuditoria(client, schema, {
+      empresaId,
+      tipo: "orden_compra",
+      documento: numeroOc,
+      accion: "editar",
+      usuario: { id: header.created_by, nombre: header.usuario_nombre },
+      detalle: { antes, despues: snapshotCompra(inserted) },
+    });
+
     await client.query("COMMIT");
     return { numero_oc: numeroOc, ordenes: inserted };
+  } catch (err) {
+    await client.query("ROLLBACK").catch(() => null);
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/** Error de eliminación bloqueada de una orden de compra. */
+export class OrdenEliminacionBloqueadaError extends Error {
+  motivo: "no_encontrada" | "con_recepciones";
+  constructor(motivo: "no_encontrada" | "con_recepciones", message: string) {
+    super(message);
+    this.name = "OrdenEliminacionBloqueadaError";
+    this.motivo = motivo;
+  }
+}
+
+/**
+ * Elimina una OC (todas sus líneas) SOLO si está 'pendiente' y NADA recibido
+ * (cantidad_recibida = 0 en todas las líneas). Si tuvo cualquier recepción, se
+ * bloquea. La eliminación y su registro en la bitácora son ATÓMICOS (misma
+ * transacción). Como la OC no impacta stock, borrarla en ese estado es seguro.
+ */
+export async function eliminarOrdenCompra(
+  schemaRaw: string,
+  empresaId: string,
+  numeroOc: string,
+  usuario: { id: string | null; nombre: string | null }
+): Promise<{ eliminadas: number }> {
+  const schema = assertAllowedChatDataSchema(schemaRaw);
+  const t = quoteSchemaTable(schema, "ordenes_compra");
+  const client = await pool().connect();
+  try {
+    await client.query("BEGIN");
+    const { rows } = await client.query<OrdenCompraRow>(
+      `SELECT ${COLS} FROM ${t} WHERE empresa_id = $1::uuid AND numero_oc = $2 FOR UPDATE`,
+      [empresaId, numeroOc]
+    );
+    if (rows.length === 0) {
+      throw new OrdenEliminacionBloqueadaError("no_encontrada", "Orden de compra no encontrada.");
+    }
+    const bloqueada = rows.find((r) => r.estado !== "pendiente" || Number(r.cantidad_recibida) > 0);
+    if (bloqueada) {
+      throw new OrdenEliminacionBloqueadaError(
+        "con_recepciones",
+        "No se puede eliminar: la orden ya tiene recepciones o no está pendiente."
+      );
+    }
+    const antes = snapshotCompra(rows);
+    await client.query(`DELETE FROM ${t} WHERE empresa_id = $1::uuid AND numero_oc = $2`, [empresaId, numeroOc]);
+    await registrarCompraAuditoria(client, schema, {
+      empresaId,
+      tipo: "orden_compra",
+      documento: numeroOc,
+      accion: "eliminar",
+      usuario,
+      detalle: { antes },
+    });
+    await client.query("COMMIT");
+    return { eliminadas: rows.length };
   } catch (err) {
     await client.query("ROLLBACK").catch(() => null);
     throw err;

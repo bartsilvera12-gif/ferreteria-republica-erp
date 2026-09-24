@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { getOrdenesCompra } from "@/lib/ordenes-compra/storage";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
+import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 import type { OrdenCompra, EstadoOrdenCompra } from "@/lib/ordenes-compra/types";
 
 function fmtGs(v: number) {
@@ -46,9 +48,39 @@ export default function OrdenesCompraPage() {
   const [busqueda, setBusqueda] = useState("");
   const [filtroEstado, setFiltroEstado] = useState<EstadoOrdenCompra | "">("");
 
+  // Solo admin/administrador/super_admin pueden eliminar (el server también valida).
+  const [esAdmin, setEsAdmin] = useState(false);
+  const [eliminando, setEliminando] = useState<string | null>(null);
+
   useEffect(() => {
     getOrdenesCompra().then((o) => { setOrdenes(o); setCargando(false); });
   }, []);
+
+  useEffect(() => {
+    let cancel = false;
+    fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setEsAdmin(esRolAdminEmpresaOGlobal(j?.usuario?.rol)); })
+      .catch(() => { if (!cancel) setEsAdmin(false); });
+    return () => { cancel = true; };
+  }, []);
+
+  async function eliminarOrden(numeroOc: string) {
+    if (eliminando) return;
+    if (!confirm(`¿Eliminar la orden de compra ${numeroOc}? Solo se puede si está pendiente y sin recepciones. Esta acción no se puede deshacer.`)) return;
+    setEliminando(numeroOc);
+    try {
+      const r = await fetchWithSupabaseSession(`/api/ordenes-compra/${encodeURIComponent(numeroOc)}`, { method: "DELETE" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || j?.success === false) { alert(j?.error ?? "No se pudo eliminar la orden."); return; }
+      const o = await getOrdenesCompra();
+      setOrdenes(o);
+    } catch {
+      alert("Error de red al eliminar la orden.");
+    } finally {
+      setEliminando(null);
+    }
+  }
 
   const grupos = useMemo<Grupo[]>(() => {
     const map = new Map<string, Grupo>();
@@ -159,6 +191,12 @@ export default function OrdenesCompraPage() {
                         {(g.estado === "pendiente" || g.estado === "recibida_parcial") && (
                           <Link href={`/compras/desde-orden/${encodeURIComponent(g.numero_oc)}`}
                             className="text-xs font-semibold text-emerald-700 hover:underline">Recibir</Link>
+                        )}
+                        {esAdmin && g.estado === "pendiente" && (
+                          <button type="button" onClick={() => eliminarOrden(g.numero_oc)} disabled={eliminando === g.numero_oc}
+                            className="text-xs font-semibold text-red-600 hover:underline disabled:opacity-50">
+                            {eliminando === g.numero_oc ? "Eliminando…" : "Eliminar"}
+                          </button>
                         )}
                       </div>
                     </td>
