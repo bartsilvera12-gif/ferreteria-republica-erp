@@ -8,6 +8,7 @@
  *   3) actualiza producto.precio_venta + costo_promedio + stock_actual
  */
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { registrarCompraAuditoria, snapshotCompra } from "./compra-auditoria";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { escapeIlikeToken, normalizeText, splitTokens } from "@/lib/productos/token-search";
 
@@ -715,6 +716,7 @@ export async function editarCompraConMovimiento(
     }
 
     const cab = actuales[0]; // cabecera compartida (proveedor, moneda, etc.)
+    const antes = snapshotCompra(actuales); // snapshot ANTES de tocar nada (auditoría)
     const porId = new Map(actuales.map((r) => [r.id, r]));
     let movimientos = 0, unidades = 0, modificadas = 0, agregadas = 0, eliminadas = 0;
 
@@ -809,6 +811,24 @@ export async function editarCompraConMovimiento(
          header.comprobante_mime_type ?? null, empresaId, numeroControl]
       );
     }
+
+    // Auditoría (atómica: dentro de la misma transacción). "despues" = estado final.
+    const { rows: finales } = await client.query<CompraRow>(
+      `SELECT ${COLS} FROM ${tC} WHERE empresa_id = $1::uuid AND numero_control = $2`,
+      [empresaId, numeroControl]
+    );
+    await registrarCompraAuditoria(client, schema, {
+      empresaId,
+      tipo: "compra",
+      documento: numeroControl,
+      accion: "editar",
+      usuario,
+      detalle: {
+        antes,
+        despues: snapshotCompra(finales),
+        resumen: { lineas_actualizadas: modificadas, lineas_agregadas: agregadas, lineas_eliminadas: eliminadas },
+      },
+    });
 
     await client.query("COMMIT");
     return {

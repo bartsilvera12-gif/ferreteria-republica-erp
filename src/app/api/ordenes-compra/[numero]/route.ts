@@ -1,11 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { getAuthWithRol } from "@/lib/middleware/auth";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import {
   getOrdenCompra,
   actualizarOrdenCompra,
+  eliminarOrdenCompra,
+  OrdenEliminacionBloqueadaError,
   type OrdenCompraHeaderInput,
   type OrdenCompraItemInput,
 } from "@/lib/ordenes-compra/server/ordenes-compra-pg";
@@ -38,6 +42,10 @@ export async function PUT(
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const authRol = await getAuthWithRol(request);
+    if (!esRolAdminEmpresaOGlobal(authRol?.rol)) {
+      return NextResponse.json(errorResponse("Solo un administrador puede editar órdenes de compra."), { status: 403 });
+    }
     const empresaId = ctx.auth.empresa_id;
     const schema = await fetchDataSchemaForEmpresaId(empresaId);
     const numeroOc = decodeURIComponent((await params).numero);
@@ -112,5 +120,46 @@ export async function PUT(
   } catch (err) {
     console.error("[/api/ordenes-compra/[numero] PUT] outer", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudo editar la orden de compra."), { status: 500 });
+  }
+}
+
+/**
+ * DELETE /api/ordenes-compra/[numero] — elimina una OC SOLO si está 'pendiente'
+ * y sin ninguna recepción. Solo admin/administrador/super_admin. Atómico con la
+ * bitácora de auditoría (registra la eliminación con el detalle de la orden).
+ */
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ numero: string }> }
+) {
+  try {
+    const ctx = await getTenantSupabaseFromAuth(request);
+    if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
+    const authRol = await getAuthWithRol(request);
+    if (!esRolAdminEmpresaOGlobal(authRol?.rol)) {
+      return NextResponse.json(errorResponse("Solo un administrador puede eliminar órdenes de compra."), { status: 403 });
+    }
+    const empresaId = ctx.auth.empresa_id;
+    const schema = await fetchDataSchemaForEmpresaId(empresaId);
+    const numeroOc = decodeURIComponent((await params).numero);
+
+    try {
+      const out = await eliminarOrdenCompra(schema, empresaId, numeroOc, {
+        id: ctx.auth.usuarioCatalogId ?? null,
+        nombre: ctx.auth.nombre ?? ctx.auth.user?.email ?? null,
+      });
+      return NextResponse.json(successResponse({ eliminadas: out.eliminadas }));
+    } catch (e) {
+      if (e instanceof OrdenEliminacionBloqueadaError) {
+        return NextResponse.json(
+          { success: false, error: e.message, motivo: e.motivo },
+          { status: e.motivo === "no_encontrada" ? 404 : 409 }
+        );
+      }
+      throw e;
+    }
+  } catch (err) {
+    console.error("[/api/ordenes-compra/[numero] DELETE]", err instanceof Error ? err.message : err);
+    return NextResponse.json(errorResponse("No se pudo eliminar la orden de compra."), { status: 500 });
   }
 }
