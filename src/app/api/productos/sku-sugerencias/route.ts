@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
+import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
+import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
+import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 
@@ -62,16 +65,41 @@ export async function GET(request: NextRequest) {
       .sort((a, b) => a.prefix.localeCompare(b.prefix));
 
     // SKU sugerido: número correlativo plano (sin prefijo), continuando la
-    // numeración del catálogo del cliente. Toma el mayor SKU puramente numérico
-    // y suma 1, con piso en SKU_BASE para que nunca retroceda por debajo de la
-    // numeración acordada (el próximo después de 17079 es 17080).
+    // numeración del catálogo del cliente. Se toma el MAYOR SKU puramente numérico
+    // DIRECTO EN LA BASE con un MAX(): antes se recorría `data` (el `.select("sku")`
+    // de arriba), pero PostgREST corta ese select en ~1000 filas y con 17k+
+    // productos el correlativo quedaba estancado (~17344).
+    //
+    // Se acota a SKUs de HASTA 6 dígitos: el correlativo es de ~5 dígitos (base
+    // 17079), y algunos productos tienen guardado un CÓDIGO DE BARRAS numérico
+    // (12-13 dígitos) como SKU; sin este tope, el MAX saltaría a ese número de
+    // barras. 6 dígitos deja amplio margen (hasta 999999) y excluye las barras.
+    // Piso en SKU_BASE.
     const SKU_BASE = 17079;
     let maxNumerico = SKU_BASE;
-    for (const r of (data ?? []) as Array<{ sku: string | null }>) {
-      const s = (r.sku ?? "").trim();
-      if (/^\d+$/.test(s)) {
-        const n = parseInt(s, 10);
-        if (Number.isFinite(n) && n > maxNumerico) maxNumerico = n;
+    try {
+      const pool = getChatPostgresPool();
+      if (pool) {
+        const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(ctx.auth.empresa_id));
+        const t = quoteSchemaTable(schema, "productos");
+        const { rows } = await pool.query(
+          `SELECT COALESCE(MAX(sku::bigint), 0)::text AS maxnum
+             FROM ${t}
+            WHERE empresa_id = $1::uuid AND sku ~ '^[0-9]{1,6}$'`,
+          [ctx.auth.empresa_id]
+        );
+        const dbMax = rows[0]?.maxnum != null ? Number(rows[0].maxnum) : 0;
+        if (Number.isFinite(dbMax) && dbMax > maxNumerico) maxNumerico = dbMax;
+      }
+    } catch (e) {
+      console.error("[/api/productos/sku-sugerencias] MAX sku numérico", e instanceof Error ? e.message : e);
+      // Fallback: el máximo del subconjunto ya cargado (mejor que fallar).
+      for (const r of (data ?? []) as Array<{ sku: string | null }>) {
+        const s = (r.sku ?? "").trim();
+        if (/^\d{1,6}$/.test(s)) {
+          const n = parseInt(s, 10);
+          if (Number.isFinite(n) && n > maxNumerico) maxNumerico = n;
+        }
       }
     }
     const sugerido = String(maxNumerico + 1);
