@@ -7,9 +7,8 @@
  */
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
-import ClienteBuscador from "@/components/clientes/ClienteBuscador";
-import { getClientes } from "@/lib/clientes/storage";
-import type { Cliente } from "@/lib/clientes/types";
+import ClienteBuscadorServer from "@/components/clientes/ClienteBuscadorServer";
+import { clienteNombre } from "@/lib/clientes/storage";
 import { ShoppingCart, Download, Search, Loader2, ChevronRight } from "lucide-react";
 
 interface VentaRow {
@@ -41,7 +40,7 @@ export default function ReporteVentasDetallePage() {
   const [horaDesde, setHoraDesde] = useState("");
   const [horaHasta, setHoraHasta] = useState("");
   const [clienteId, setClienteId] = useState("");
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clienteLabel, setClienteLabel] = useState("");
   const [cajero, setCajero] = useState("");
   const [vendedor, setVendedor] = useState("");
   const [codigo, setCodigo] = useState("");
@@ -56,8 +55,6 @@ export default function ReporteVentasDetallePage() {
   const [expandida, setExpandida] = useState<string | null>(null);
   const [itemsCache, setItemsCache] = useState<Record<string, ItemRow[]>>({});
   const [itemsCargando, setItemsCargando] = useState<string | null>(null);
-
-  useEffect(() => { getClientes().then(setClientes).catch(() => setClientes([])); }, []);
 
   const params = useCallback((extra?: Record<string, string>) => {
     const p = new URLSearchParams({ desde, hasta });
@@ -121,7 +118,7 @@ export default function ReporteVentasDetallePage() {
           <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Hora hasta</span>
             <input type="time" value={horaHasta} onChange={(e) => setHoraHasta(e.target.value)} className={inputCls} /></label>
           <div className="text-sm sm:col-span-2"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cliente</span>
-            <ClienteBuscador clientes={clientes} value={clienteId} onChange={setClienteId} sinClienteLabel="— Todos —" placeholder="Todos — nombre o RUC…" /></div>
+            <ClienteBuscadorServer selectedId={clienteId} selectedLabel={clienteLabel} onSelect={(c) => { setClienteId(c?.id ?? ""); setClienteLabel(c ? clienteNombre(c) : ""); }} placeholder="Todos — nombre o RUC…" /></div>
         </div>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <label className="text-sm"><span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cajero</span>

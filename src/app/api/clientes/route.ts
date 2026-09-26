@@ -262,23 +262,36 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("nombre_contacto es obligatorio"), { status: 400 });
     }
 
-    // Anti-clon: si el RUC ya existe (cliente no eliminado), no crear otro.
-    // Evita la acumulación de clientes duplicados al facturar/armar pedidos.
-    const rucNorm = typeof ruc === "string" ? ruc.trim() : "";
-    if (rucNorm) {
+    // Anti-clon: comparar por RUC NORMALIZADO (ignorando guion/dígito verificador)
+    // y por documento/cédula. Evita duplicados del mismo cliente cargado con RUC
+    // "1139406" vs "1139406-4", o con la cédula en otro registro.
+    const rucRaw = (typeof ruc === "string" ? ruc.trim() : "").replace(/[^0-9-]/g, "");
+    const rucBase = (rucRaw.split("-")[0] || "").replace(/\D/g, ""); // RUC sin dígito verificador
+    const docNorm = (typeof documento === "string" ? documento : "").replace(/\D/g, "");
+    // En .or() de PostgREST el comodín de ilike es '*', no '%'.
+    const orConds: string[] = [];
+    if (rucRaw) orConds.push(`ruc.eq.${rucRaw}`);
+    if (rucBase) orConds.push(`ruc.eq.${rucBase}`, `ruc.ilike.${rucBase}-*`);
+    if (docNorm) {
+      orConds.push(`documento.eq.${docNorm}`);
+      if (docNorm !== rucRaw) orConds.push(`ruc.eq.${docNorm}`); // por si cargaron la cédula como RUC
+    }
+    if (orConds.length > 0) {
       const dupq = await supabase
         .from("clientes")
-        .select("id, empresa, nombre_contacto, nombre, ruc")
+        .select("id, empresa, nombre_contacto, nombre, ruc, documento")
         .eq("empresa_id", auth.empresa_id)
-        .eq("ruc", rucNorm)
         .is("deleted_at", null)
+        .or(orConds.join(","))
         .limit(1)
         .maybeSingle();
       if (dupq.data) {
         const ex = dupq.data as Record<string, unknown>;
         const nombreEx = String(ex.empresa || ex.nombre_contacto || ex.nombre || "").trim();
+        const matchDoc = docNorm && String(ex.documento ?? "").replace(/\D/g, "") === docNorm;
+        const porQue = matchDoc ? `el documento ${documento}` : `el RUC ${(typeof ruc === "string" ? ruc.trim() : "") || rucRaw}`;
         return NextResponse.json(
-          { ...errorResponse(`Ya existe un cliente con el RUC ${rucNorm}${nombreEx ? ` (${nombreEx})` : ""}. Buscalo en la lista en vez de crear uno nuevo.`), cliente_id: String(ex.id), ruc: rucNorm },
+          { ...errorResponse(`Ya existe un cliente con ${porQue}${nombreEx ? ` (${nombreEx})` : ""}. Buscalo en la lista en vez de crear uno nuevo.`), cliente_id: String(ex.id), ruc: rucRaw || null },
           { status: 409 }
         );
       }
