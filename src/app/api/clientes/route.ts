@@ -262,20 +262,27 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(errorResponse("nombre_contacto es obligatorio"), { status: 400 });
     }
 
-    // Anti-clon: comparar por RUC NORMALIZADO (ignorando guion/dígito verificador)
-    // y por documento/cédula. Evita duplicados del mismo cliente cargado con RUC
-    // "1139406" vs "1139406-4", o con la cédula en otro registro.
-    const rucRaw = (typeof ruc === "string" ? ruc.trim() : "").replace(/[^0-9-]/g, "");
-    const rucBase = (rucRaw.split("-")[0] || "").replace(/\D/g, ""); // RUC sin dígito verificador
-    const docNorm = (typeof documento === "string" ? documento : "").replace(/\D/g, "");
-    // En .or() de PostgREST el comodín de ilike es '*', no '%'.
+    // Anti-clon: comparar por RUC NORMALIZADO a dígitos. Debe detectar como el
+    // mismo RUC sus variantes: "1139406" (base), "1139406-4" (base-DV) y
+    // "11394064" (base+DV pegado). Y por documento/cédula (dígitos normalizados).
+    const soloDigitos = (s: unknown) => (typeof s === "string" ? s : String(s ?? "")).replace(/\D/g, "");
+    const rucDigits = soloDigitos(ruc);       // guion/puntos fuera → p.ej. "11394064" o "1139406"
+    const docDigits = soloDigitos(documento);
+    /** Mismo RUC si los dígitos son iguales, o difieren solo en el DV final
+     *  (el más corto es prefijo del más largo y la diferencia es 1 dígito). */
+    const mismoRuc = (a: string, b: string) => {
+      if (!a || !b) return false;
+      if (a === b) return true;
+      const [s, l] = a.length <= b.length ? [a, b] : [b, a];
+      return l.length - s.length === 1 && l.startsWith(s);
+    };
+    // Traer un set chico de candidatos por prefijo numérico (ignora guion/puntos)
+    // y afinar en JS. En .or() de PostgREST el comodín de ilike es '*'.
     const orConds: string[] = [];
-    if (rucRaw) orConds.push(`ruc.eq.${rucRaw}`);
-    if (rucBase) orConds.push(`ruc.eq.${rucBase}`, `ruc.ilike.${rucBase}-*`);
-    if (docNorm) {
-      orConds.push(`documento.eq.${docNorm}`);
-      if (docNorm !== rucRaw) orConds.push(`ruc.eq.${docNorm}`); // por si cargaron la cédula como RUC
-    }
+    const rucPref = rucDigits.slice(0, 6);
+    const docPref = docDigits.slice(0, 6);
+    if (rucPref) orConds.push(`ruc.ilike.${rucPref}*`);
+    if (docPref) { orConds.push(`documento.ilike.${docPref}*`, `ruc.ilike.${docPref}*`); }
     if (orConds.length > 0) {
       const dupq = await supabase
         .from("clientes")
@@ -283,15 +290,21 @@ export async function POST(request: NextRequest) {
         .eq("empresa_id", auth.empresa_id)
         .is("deleted_at", null)
         .or(orConds.join(","))
-        .limit(1)
-        .maybeSingle();
-      if (dupq.data) {
-        const ex = dupq.data as Record<string, unknown>;
+        .limit(50);
+      const rows = (dupq.data ?? []) as Record<string, unknown>[];
+      const ex = rows.find((r) => {
+        const er = soloDigitos(r.ruc);
+        const ed = soloDigitos(r.documento);
+        const porRuc = rucDigits !== "" && (mismoRuc(rucDigits, er) || (ed !== "" && mismoRuc(rucDigits, ed)));
+        const porDoc = docDigits !== "" && ((ed !== "" && ed === docDigits) || mismoRuc(docDigits, er));
+        return porRuc || porDoc;
+      });
+      if (ex) {
         const nombreEx = String(ex.empresa || ex.nombre_contacto || ex.nombre || "").trim();
-        const matchDoc = docNorm && String(ex.documento ?? "").replace(/\D/g, "") === docNorm;
-        const porQue = matchDoc ? `el documento ${documento}` : `el RUC ${(typeof ruc === "string" ? ruc.trim() : "") || rucRaw}`;
+        const matchDoc = docDigits !== "" && soloDigitos(ex.documento) === docDigits;
+        const porQue = matchDoc ? `el documento ${documento}` : `el RUC ${(typeof ruc === "string" ? ruc.trim() : "") || rucDigits}`;
         return NextResponse.json(
-          { ...errorResponse(`Ya existe un cliente con ${porQue}${nombreEx ? ` (${nombreEx})` : ""}. Buscalo en la lista en vez de crear uno nuevo.`), cliente_id: String(ex.id), ruc: rucRaw || null },
+          { ...errorResponse(`Ya existe un cliente con ${porQue}${nombreEx ? ` (${nombreEx})` : ""}. Buscalo en la lista en vez de crear uno nuevo.`), cliente_id: String(ex.id), ruc: rucDigits || null },
           { status: 409 }
         );
       }
