@@ -20,4 +20,15 @@ ALTER TABLE ferreteriarepublica.creditos_cliente
     'anticipo'::text
   ]));
 
+-- Reverso idempotente: un movimiento solo puede revertirse una vez.
+-- `reversa_de_id` apunta al movimiento que este 'reverso' revierte.
+ALTER TABLE ferreteriarepublica.creditos_cliente
+  ADD COLUMN IF NOT EXISTS reversa_de_id uuid
+  REFERENCES ferreteriarepublica.creditos_cliente(id);
+
+-- Impide dos reversos del mismo movimiento a nivel de base (además del chequeo en código).
+CREATE UNIQUE INDEX IF NOT EXISTS uq_creditos_cliente_reversa_de
+  ON ferreteriarepublica.creditos_cliente(reversa_de_id)
+  WHERE reversa_de_id IS NOT NULL;
+
 COMMIT;
