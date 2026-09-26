@@ -190,6 +190,45 @@ export async function crearOReusarRecibo(
   throw new ReciboError("Origen de recibo inválido.");
 }
 
+/**
+ * Crea un recibo de dinero MANUAL (origen 'manual'), p.ej. la recepción de un
+ * anticipo / saldo a favor. No es idempotente (cada anticipo emite su recibo).
+ */
+export async function crearReciboManual(
+  sb: AppSupabaseClient,
+  empresaId: string,
+  input: {
+    cliente_id: string | null;
+    monto: number;
+    moneda?: string;
+    metodo_pago?: string | null;
+    concepto?: string | null;
+    observaciones?: string | null;
+    referencia?: string | null;
+  },
+  usuario: { id: string | null; nombre: string | null }
+): Promise<{ recibo: Record<string, unknown>; existed: boolean }> {
+  const monto = Number(input.monto) || 0;
+  if (!(monto > 0)) throw new ReciboError("El monto del recibo debe ser mayor a cero.");
+  const { nombre, documento } = await nombreYDoc(sb, empresaId, input.cliente_id);
+  return await insertarRecibo(sb, empresaId, usuario, {
+    cliente_id: input.cliente_id,
+    cliente_nombre: nombre,
+    cliente_documento: documento,
+    origen: "manual",
+    venta_id: null,
+    cuenta_por_cobrar_id: null,
+    cobro_cliente_id: null,
+    moneda: input.moneda === "USD" ? "USD" : "PYG",
+    monto,
+    metodo_pago: input.metodo_pago ?? "efectivo",
+    entidad_bancaria_id: null,
+    referencia: input.referencia ?? null,
+    concepto: input.concepto ?? "Recibo de anticipo / saldo a favor",
+    observaciones: input.observaciones ?? null,
+  });
+}
+
 type InsertData = {
   cliente_id: string | null;
   cliente_nombre: string;
