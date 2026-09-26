@@ -67,6 +67,60 @@ export interface RegistrarAnticipoResult {
   saldoPrevio: number;
   saldoNuevo: number;
   monto: number;
+  recibo: { id: string; numero_recibo: string };
+}
+
+/**
+ * Inserta un recibo de dinero 'manual' DENTRO de la transacción del anticipo
+ * (atómico: anticipo + caja + recibo, todo o nada). Numera REC-NNNNNN con lock
+ * por empresa + reintento seguro ante colisión (índice único), sin duplicar.
+ */
+async function crearReciboAnticipoPg(
+  client: import("pg").PoolClient,
+  schema: string,
+  empresaId: string,
+  data: { clienteId: string; monto: number; metodoPago: string; concepto: string; observacion: string | null },
+  usuario: { id: string | null; nombre: string | null }
+): Promise<{ id: string; numero_recibo: string }> {
+  const tR = quoteSchemaTable(schema, "recibos_dinero");
+  const tCli = quoteSchemaTable(schema, "clientes");
+  const cli = (await client.query(
+    `SELECT empresa, nombre_contacto, nombre, ruc, documento FROM ${tCli} WHERE empresa_id=$1::uuid AND id=$2::uuid`,
+    [empresaId, data.clienteId]
+  )).rows[0] as Record<string, unknown> | undefined;
+  const s = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+  const nombre = cli ? (s(cli.empresa) || s(cli.nombre_contacto) || s(cli.nombre) || "Cliente") : "Cliente";
+  const documento = cli ? (s(cli.ruc) || s(cli.documento) || null) : null;
+
+  // Serializa la numeración de recibos por empresa dentro de la tx.
+  await client.query(`SELECT pg_advisory_xact_lock(hashtext($1))`, [`recibo:${empresaId}`]);
+  for (let intento = 0; intento < 6; intento++) {
+    const last = (await client.query(
+      `SELECT numero_recibo FROM ${tR} WHERE empresa_id=$1::uuid AND numero_recibo LIKE 'REC-%' ORDER BY numero_recibo DESC LIMIT 1`,
+      [empresaId]
+    )).rows[0] as { numero_recibo?: string } | undefined;
+    let next = 1;
+    if (last?.numero_recibo) { const m = last.numero_recibo.match(/^REC-(\d+)$/); if (m) next = parseInt(m[1], 10) + 1; }
+    const numero = `REC-${String(next).padStart(6, "0")}`;
+    await client.query("SAVEPOINT rec");
+    try {
+      const ins = (await client.query(
+        `INSERT INTO ${tR} (
+           empresa_id, numero_recibo, cliente_id, cliente_nombre, cliente_documento, origen,
+           fecha, moneda, monto, metodo_pago, concepto, observaciones, usuario_id, usuario_nombre
+         ) VALUES ($1::uuid,$2,$3::uuid,$4,$5,'manual',now(),'PYG',$6::numeric,$7,$8,$9,$10::uuid,$11)
+         RETURNING id::text, numero_recibo`,
+        [empresaId, numero, data.clienteId, nombre, documento, data.monto, data.metodoPago, data.concepto, data.observacion, usuario.id, usuario.nombre]
+      )).rows[0];
+      await client.query("RELEASE SAVEPOINT rec");
+      return { id: String(ins.id), numero_recibo: String(ins.numero_recibo) };
+    } catch (e) {
+      await client.query("ROLLBACK TO SAVEPOINT rec").catch(() => {});
+      if ((e as { code?: string }).code === "23505") continue; // colisión de número → reintentar
+      throw e;
+    }
+  }
+  throw new CreditoOperacionError("No se pudo generar el número de recibo del anticipo.", 500);
 }
 
 export async function registrarAnticipo(
@@ -123,6 +177,12 @@ export async function registrarAnticipo(
     });
     await client.query(`UPDATE ${tCM} SET credito_cliente_id=$2::uuid WHERE id=$1::uuid`, [cajaMovId, movCredId]);
 
+    // Recibo de recepción (atómico: misma transacción que el anticipo + caja).
+    const recibo = await crearReciboAnticipoPg(client, schema, empresaId, {
+      clienteId: input.clienteId, monto, metodoPago: medio, concepto,
+      observacion: input.observacion?.trim()?.slice(0, 500) || null,
+    }, input.usuario);
+
     await client.query("COMMIT");
     return {
       movimientoCreditoId: movCredId,
@@ -131,6 +191,7 @@ export async function registrarAnticipo(
       saldoPrevio,
       saldoNuevo: round2(saldoPrevio + monto),
       monto,
+      recibo,
     };
   } catch (e) {
     await client.query("ROLLBACK").catch(() => {});
@@ -165,6 +226,7 @@ export async function ajustarCredito(
 ): Promise<AjustarCreditoResult> {
   const schema = assertAllowedChatDataSchema(schemaRaw);
   const tCC = quoteSchemaTable(schema, "creditos_cliente");
+  const tCM = quoteSchemaTable(schema, "caja_movimientos");
   const client = await pool().connect();
   try {
     await client.query("BEGIN");
@@ -173,19 +235,35 @@ export async function ajustarCredito(
     let monto: number;
     let motivo: string;
     let tipo: "ajuste" | "reverso";
+    /** Movimiento de caja a anular (solo cuando se revierte un 'anticipo'). */
+    let cajaMovIdAnular: string | null = null;
 
     if (input.modo === "reverso") {
       if (!input.movimientoId) throw new CreditoOperacionError("Falta el movimiento a revertir.");
       const orig = await client.query(
-        `SELECT monto, tipo, motivo FROM ${tCC} WHERE id=$1::uuid AND empresa_id=$2::uuid AND cliente_id=$3::uuid`,
+        `SELECT monto, tipo, caja_movimiento_id::text AS caja_movimiento_id FROM ${tCC}
+          WHERE id=$1::uuid AND empresa_id=$2::uuid AND cliente_id=$3::uuid`,
         [input.movimientoId, empresaId, input.clienteId]
       );
       if (orig.rows.length === 0) throw new CreditoOperacionError("Movimiento no encontrado.", 404);
+      const origTipo = String(orig.rows[0].tipo);
+      // Solo se pueden revertir desde acá movimientos manuales sin operaciones
+      // asociadas (anticipo, ajuste). devolucion/consumo_venta/retiro_efectivo
+      // tienen una venta/devolución/retiro detrás y se corrigen en su módulo.
+      if (!["anticipo", "ajuste"].includes(origTipo)) {
+        throw new CreditoOperacionError(
+          `No se puede revertir un movimiento de tipo '${origTipo}' desde acá: tiene una operación asociada (venta/devolución/retiro).`,
+          409
+        );
+      }
       const original = round2(Number(orig.rows[0].monto) || 0);
-      if (orig.rows[0].tipo === "reverso") throw new CreditoOperacionError("No se puede revertir un reverso.", 409);
       monto = round2(-original); // revierte el signo
       tipo = "reverso";
       motivo = (input.motivo?.trim() || `Reverso del movimiento ${input.movimientoId}`).slice(0, 300);
+      // Si es un anticipo, también hay que revertir su ingreso de Caja.
+      if (origTipo === "anticipo" && orig.rows[0].caja_movimiento_id) {
+        cajaMovIdAnular = String(orig.rows[0].caja_movimiento_id);
+      }
     } else {
       monto = round2(Number(input.monto) || 0);
       if (monto === 0) throw new CreditoOperacionError("El ajuste no puede ser cero.");
@@ -208,6 +286,17 @@ export async function ajustarCredito(
       motivo,
       usuario: input.usuario,
     });
+
+    // Anular (soft) el ingreso de Caja del anticipo revertido — misma transacción,
+    // sin borrar el movimiento (queda tachado, con auditoría). Idempotente.
+    if (cajaMovIdAnular) {
+      await client.query(
+        `UPDATE ${tCM} SET anulado_at=now(), anulado_por_id=$2::uuid,
+                anulado_motivo=$3
+          WHERE id=$1::uuid AND empresa_id=$4::uuid AND anulado_at IS NULL`,
+        [cajaMovIdAnular, input.usuario.id, `Reverso de anticipo (crédito ${input.movimientoId})`.slice(0, 500), empresaId]
+      );
+    }
 
     await client.query("COMMIT");
     return { movimientoId: movId, saldoPrevio, saldoNuevo: round2(saldoPrevio + monto), monto };

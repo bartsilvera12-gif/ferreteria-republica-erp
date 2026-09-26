@@ -11,7 +11,6 @@ import {
   CreditoOperacionError,
   CreditoInsuficienteError,
 } from "@/lib/creditos/server/anticipos-pg";
-import { crearReciboManual } from "@/lib/recibos/server/recibos-pg";
 
 /**
  * GET /api/clientes/[id]/saldo-favor
@@ -47,7 +46,7 @@ export async function POST(request: NextRequest, ctxParams: { params: Promise<{ 
     const { id } = await ctxParams.params;
     const ctx = await getTenantSupabaseFromAuthWithRol(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    const { auth, supabase } = ctx;
+    const { auth } = ctx;
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
     const usuario = { id: auth.user?.id ?? null, nombre: auth.nombre ?? auth.user?.email ?? null };
 
@@ -59,26 +58,11 @@ export async function POST(request: NextRequest, ctxParams: { params: Promise<{ 
     const observacion = typeof body.observacion === "string" ? body.observacion : null;
 
     try {
+      // Anticipo + ingreso de Caja + recibo: todo atómico (una sola transacción).
       const out = await registrarAnticipo(schema, auth.empresa_id, {
         clienteId: id, monto, medioPago, concepto, observacion, usuario,
       });
-      // Comprobante (best-effort: el anticipo ya quedó registrado).
-      let recibo: { id: string; numero_recibo: string } | null = null;
-      let recibo_warning: string | null = null;
-      try {
-        const r = await crearReciboManual(supabase, auth.empresa_id, {
-          cliente_id: id,
-          monto: out.monto,
-          metodo_pago: medioPago,
-          concepto: concepto || "Recibo de anticipo / saldo a favor",
-          observaciones: observacion,
-        }, usuario);
-        recibo = { id: String(r.recibo.id), numero_recibo: String(r.recibo.numero_recibo) };
-      } catch (re) {
-        recibo_warning = re instanceof Error ? re.message : "No se pudo emitir el recibo.";
-        console.error("[saldo-favor POST recibo]", recibo_warning);
-      }
-      return NextResponse.json(successResponse({ ...out, recibo, recibo_warning }));
+      return NextResponse.json(successResponse(out));
     } catch (e) {
       if (e instanceof SinCajaAbiertaError) return NextResponse.json(errorResponse(e.message), { status: 409 });
       if (e instanceof CreditoInsuficienteError) return NextResponse.json(errorResponse(e.message), { status: 409 });
