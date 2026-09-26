@@ -7,9 +7,8 @@
  */
 import { useCallback, useEffect, useMemo, useState } from "react";
 import PageHeader from "@/components/ui/PageHeader";
-import ClienteBuscador from "@/components/clientes/ClienteBuscador";
-import { getClientes } from "@/lib/clientes/storage";
-import type { Cliente } from "@/lib/clientes/types";
+import ClienteBuscadorServer from "@/components/clientes/ClienteBuscadorServer";
+import { clienteNombre } from "@/lib/clientes/storage";
 import { FileText, Download, ExternalLink, Loader2, Search } from "lucide-react";
 
 interface FacturaRow {
@@ -46,11 +45,9 @@ export default function ReporteFacturasPage() {
   const [desde, setDesde] = useState(`${hoy.slice(0, 7)}-01`);
   const [hasta, setHasta] = useState(hoy);
   const [clienteId, setClienteId] = useState("");
-  const [clientes, setClientes] = useState<Cliente[]>([]);
+  const [clienteLabel, setClienteLabel] = useState("");
   const [data, setData] = useState<Reporte | null>(null);
   const [cargando, setCargando] = useState(true);
-
-  useEffect(() => { getClientes().then(setClientes).catch(() => setClientes([])); }, []);
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -93,7 +90,7 @@ export default function ReporteFacturasPage() {
           </label>
           <div className="text-sm">
             <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Cliente</span>
-            <ClienteBuscador clientes={clientes} value={clienteId} onChange={setClienteId} sinClienteLabel="— Todos los clientes —" placeholder="Todos — buscar por nombre o RUC…" />
+            <ClienteBuscadorServer selectedId={clienteId} selectedLabel={clienteLabel} onSelect={(c) => { setClienteId(c?.id ?? ""); setClienteLabel(c ? clienteNombre(c) : ""); }} placeholder="Todos — buscar por nombre o RUC…" />
           </div>
           <button
             type="button"
