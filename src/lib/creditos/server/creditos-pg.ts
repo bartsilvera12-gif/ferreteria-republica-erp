@@ -20,7 +20,8 @@ export type TipoMovimientoCredito =
   | "consumo_venta"
   | "retiro_efectivo"
   | "ajuste"
-  | "reverso";
+  | "reverso"
+  | "anticipo";
 
 export interface MovimientoCredito {
   id: string;

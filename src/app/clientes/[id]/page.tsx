@@ -31,6 +31,7 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import { SifenEstadoBadge } from "@/components/sifen/SifenEstadoBadge";
 import { useFacturaSifenEstados } from "@/hooks/useFacturaSifenEstados";
 import MontoInput from "@/components/ui/MontoInput";
+import SaldoFavorClienteBlock from "@/components/creditos/SaldoFavorClienteBlock";
 import { getPlanes } from "@/lib/planes/storage";
 import type { Cliente, NotaCliente } from "@/lib/clientes/types";
 import {
@@ -517,6 +518,18 @@ export default function ClienteDetailPage() {
     };
   }, []);
 
+  /** Carga las cuentas por cobrar (ventas a crédito) del cliente. */
+  function cargarCuentasCredito() {
+    if (!id.trim()) return;
+    fetchWithSupabaseSession(`/api/cobros/cuentas?cliente_id=${encodeURIComponent(id)}`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        const arr = (j?.data?.cuentas ?? j?.data ?? []) as CuentaCredito[];
+        setCuentasCredito(Array.isArray(arr) ? arr : []);
+      })
+      .catch(() => setCuentasCredito([]));
+  }
+
   useEffect(() => {
     if (!id.trim()) return;
     if (activeTab === "marketing") {
@@ -530,14 +543,9 @@ export default function ClienteDetailPage() {
     // Ventas a crédito del cliente (cuentas por cobrar). Son las que genera una
     // venta a crédito en Caja; no son las facturas SaaS de arriba.
     if (activeTab === "estado_cuenta") {
-      fetchWithSupabaseSession(`/api/cobros/cuentas?cliente_id=${encodeURIComponent(id)}`, { cache: "no-store" })
-        .then((r) => r.json())
-        .then((j) => {
-          const arr = (j?.data?.cuentas ?? j?.data ?? []) as CuentaCredito[];
-          setCuentasCredito(Array.isArray(arr) ? arr : []);
-        })
-        .catch(() => setCuentasCredito([]));
+      cargarCuentasCredito();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, activeTab]);
 
   useEffect(() => {
@@ -1939,6 +1947,9 @@ export default function ClienteDetailPage() {
           {/* ── ESTADO DE CUENTA ─────────────────────────────────────────── */}
           {activeTab === "estado_cuenta" && (
             <div className="space-y-8">
+              {/* Saldo a favor / anticipos del cliente */}
+              <SaldoFavorClienteBlock clienteId={id} esAdmin={esAdmin} onAfterChange={() => cargarCuentasCredito()} />
+
               {/* Ventas a crédito (cuentas por cobrar) — lo que genera Caja al vender a crédito */}
               <div className="space-y-4">
                 <div className="flex flex-wrap items-center justify-between gap-3">
