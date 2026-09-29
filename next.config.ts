@@ -11,8 +11,8 @@ const nextConfig: NextConfig = {
 
   // Salida standalone para el Dockerfile (node server.js): la imagen solo lleva el
   // subconjunto de node_modules que Next rastreó → mucha menos RAM que `next start`.
-  // OJO: con esto, `next start` (nixpacks) ya no es el camino soportado; esta rama
-  // se usa con el Dockerfile. No mergear a main mientras AWS siga en nixpacks.
+  // OJO: con esto, `next start` (nixpacks) ya no es el camino soportado: producción
+  // se construye con el Dockerfile.
   output: "standalone",
 
   experimental: {
