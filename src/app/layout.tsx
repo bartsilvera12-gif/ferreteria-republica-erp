@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
+import localFont from "next/font/local";
 import AppShell from "../components/AppShell";
 import { ThemeProvider } from "../components/ThemeProvider";
 import AuthGuard from "../components/AuthGuard";
@@ -7,15 +7,23 @@ import ServiceWorkerRegister from "../components/ServiceWorkerRegister";
 import OfflinePrecache from "../components/OfflinePrecache";
 import "./globals.css";
 
-const plusJakarta = Plus_Jakarta_Sans({
+/**
+ * Fuentes locales, no `next/font/google`: con Google, `next build` descarga las fuentes en medio
+ * del build y, si esa descarga se corta, aborta el deploy entero. Mismos archivos que entregaba
+ * Google (subset latino, fuentes variables). Licencia OFL.
+ */
+const plusJakarta = localFont({
+  src: "./fonts/plus-jakarta-sans-latin.woff2",
   variable: "--font-plus-jakarta",
-  subsets: ["latin"],
-  weight: ["300", "400", "500", "600", "700", "800"],
+  weight: "300 800",
+  display: "swap",
 });
 
-const geistMono = Geist_Mono({
+const geistMono = localFont({
+  src: "./fonts/geist-mono-latin.woff2",
   variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: "100 900",
+  display: "swap",
 });
 
 export const metadata: Metadata = {
