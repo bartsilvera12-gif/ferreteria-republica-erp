@@ -6,6 +6,7 @@ import { getProductosPaginated } from "@/lib/inventario/storage";
 import { getRotacionAbcMapa } from "@/lib/reportes/storage";
 import type { RangoABC } from "@/lib/reportes/abc";
 import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
+import OfflineDetalleModal from "@/components/OfflineDetalleModal";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
@@ -114,6 +115,7 @@ export default function InventarioPage() {
 
   // Desactivar / reactivar (reversible, in-line). id del producto en curso.
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [offlineProducto, setOfflineProducto] = useState<Producto | null>(null);
 
   /**
    * Alterna activo del producto. Desactivar es reversible: el producto deja de
@@ -483,6 +485,12 @@ export default function InventarioPage() {
                         <div className="flex items-center justify-center gap-1">
                           <Link
                             href={`/inventario/${p.id}/editar`}
+                            onClick={(e) => {
+                              if (typeof navigator !== "undefined" && !navigator.onLine) {
+                                e.preventDefault();
+                                setOfflineProducto(p);
+                              }
+                            }}
                             title={p.activo === false ? "Ver producto (inactivo, solo lectura)" : "Editar producto"}
                             aria-label={`${p.activo === false ? "Ver" : "Editar"} ${p.nombre}`}
                             className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 transition-all hover:bg-[#4FAEB2]/10 hover:text-[#4FAEB2]"
@@ -674,6 +682,25 @@ export default function InventarioPage() {
           </div>
         )}
       </section>
+
+      {/* Ficha offline (solo lectura) */}
+      {offlineProducto && (
+        <OfflineDetalleModal
+          titulo={offlineProducto.nombre}
+          subtitulo={offlineProducto.sku}
+          onClose={() => setOfflineProducto(null)}
+          campos={[
+            { label: "Código de barras", value: offlineProducto.codigo_barras },
+            { label: "Marca", value: offlineProducto.marca },
+            { label: "Categoría", value: offlineProducto.categoria_principal_id ? (categoriaById.get(offlineProducto.categoria_principal_id) ?? null) : null },
+            { label: "Precio venta", value: `Gs. ${Math.round(offlineProducto.precio_venta).toLocaleString("es-PY")}` },
+            { label: "Precio mayorista", value: offlineProducto.precio_mayorista ? `Gs. ${Math.round(offlineProducto.precio_mayorista).toLocaleString("es-PY")}` : null },
+            { label: "Stock actual", value: `${offlineProducto.stock_actual} ${offlineProducto.unidad_medida}` },
+            { label: "Stock mínimo", value: `${offlineProducto.stock_minimo} ${offlineProducto.unidad_medida}` },
+            { label: "Estado", value: offlineProducto.activo === false ? "Inactivo" : "Activo" },
+          ]}
+        />
+      )}
 
       {/* Modal de confirmacion de eliminar */}
       {deleting && (

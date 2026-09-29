@@ -7,6 +7,7 @@ import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
 import { getClientesPaginado, clienteNombre } from "@/lib/clientes/storage";
+import OfflineDetalleModal from "@/components/OfflineDetalleModal";
 import type { Cliente } from "@/lib/clientes/types";
 import { etiquetaVisibleTipoServicio, type ClienteTipoServicioRow } from "@/lib/clientes/tipo-servicio-catalogo";
 import { filasTiposDesdeSistemaEstatico, fetchTiposFormCliente } from "@/lib/clientes/fetch-tipos-servicio-form";
@@ -285,6 +286,7 @@ export default function ClientesPage() {
   const [pageSize,    setPageSize]    = useState(25);
   const [total,       setTotal]       = useState(0);
   const [bajaOk,      setBajaOk]      = useState(false);
+  const [offlineCliente, setOfflineCliente] = useState<Cliente | null>(null);
   const [filtroEstado, setFiltroEstado] = useState<"" | "activo" | "inactivo">("");
   const [filtroOrigen, setFiltroOrigen] = useState<"" | "CRM" | "VENTA" | "MANUAL">("");
   const [filtroTipo,   setFiltroTipo]   = useState<"" | "empresa" | "persona">("");
@@ -619,7 +621,10 @@ export default function ClientesPage() {
                   <tr
                     key={c.id}
                     className="border-b border-slate-200 hover:bg-[#4FAEB2]/[0.04] transition-colors cursor-pointer group"
-                    onClick={() => window.location.href = `/clientes/${c.id}`}
+                    onClick={() => {
+                      if (typeof navigator !== "undefined" && !navigator.onLine) setOfflineCliente(c);
+                      else window.location.href = `/clientes/${c.id}`;
+                    }}
                   >
                     {visibleColumns.map((col) => (
                       <td key={col.key} className={col.className}>
@@ -671,6 +676,28 @@ export default function ClientesPage() {
       </div>
 
       <MobileFab href="/clientes/nuevo" label="Nuevo cliente" />
+
+      {offlineCliente && (
+        <OfflineDetalleModal
+          titulo={clienteNombre(offlineCliente)}
+          subtitulo={offlineCliente.codigo_cliente}
+          onClose={() => setOfflineCliente(null)}
+          campos={[
+            { label: "Tipo", value: offlineCliente.tipo_cliente === "empresa" ? "Empresa" : "Persona" },
+            { label: "Contacto", value: offlineCliente.nombre_contacto },
+            { label: "RUC", value: offlineCliente.ruc },
+            { label: "Documento", value: offlineCliente.documento },
+            { label: "Teléfono", value: offlineCliente.telefono },
+            { label: "Teléfono 2", value: offlineCliente.telefono_secundario },
+            { label: "Email", value: offlineCliente.email },
+            { label: "Dirección", value: offlineCliente.direccion },
+            { label: "Ciudad", value: offlineCliente.ciudad },
+            { label: "Condición de pago", value: offlineCliente.condicion_pago },
+            { label: "Vendedor", value: offlineCliente.vendedor_usuario_nombre || offlineCliente.vendedor_asignado },
+            { label: "Estado", value: offlineCliente.estado === "activo" ? "Activo" : "Inactivo" },
+          ]}
+        />
+      )}
     </div>
   );
 }

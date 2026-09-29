@@ -159,36 +159,45 @@ export async function getProductos(): Promise<Producto[]> {
 
 const OFFLINE_PRODUCTOS_KEY = "offline.productos.v1";
 
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
 /**
  * Descarga el catálogo COMPLETO paginando (PostgREST capa en 1000 filas) y lo
- * guarda en IndexedDB para consulta offline. Best-effort. Devuelve cuántos.
+ * guarda en IndexedDB. ROBUSTO: reintenta cada página hasta 3 veces; devuelve si
+ * quedó COMPLETO (para que el llamador no marque "listo" con datos a medias).
  */
-export async function warmProductosOffline(): Promise<number> {
+export async function warmProductosOffline(): Promise<{ count: number; complete: boolean }> {
+  const pageSize = 500;
+  let offset = 0;
+  let total = Infinity;
+  const acc: Producto[] = [];
+  let complete = false;
   try {
-    const pageSize = 500;
-    let offset = 0;
-    let total = Infinity;
-    const acc: Producto[] = [];
     for (let i = 0; i < 400 && offset < total; i++) {
-      const r = await fetch(`/api/productos?limit=${pageSize}&offset=${offset}`, {
-        credentials: "include",
-        cache: "no-store",
-      });
-      if (!r.ok) break;
-      const j = await r.json().catch(() => ({}));
-      if (!j?.success) break;
-      const data = j.data as { productos?: ProductoRow[]; total?: number };
-      const rows = (data.productos ?? []) as ProductoRow[];
-      if (Number.isFinite(data.total)) total = Number(data.total);
+      let rows: ProductoRow[] | null = null;
+      let pageTotal: number | undefined;
+      for (let intento = 0; intento < 3 && rows === null; intento++) {
+        try {
+          const r = await fetch(`/api/productos?limit=${pageSize}&offset=${offset}`, { credentials: "include", cache: "no-store" });
+          if (!r.ok) { await sleepMs(500); continue; }
+          const j = (await r.json().catch(() => ({}))) as { success?: boolean; data?: { productos?: ProductoRow[]; total?: number } };
+          if (!j?.success) { await sleepMs(500); continue; }
+          rows = (j.data?.productos ?? []) as ProductoRow[];
+          pageTotal = j.data?.total;
+        } catch { await sleepMs(500); }
+      }
+      if (rows === null) break; // 3 intentos fallidos → queda incompleto (se reintenta luego)
+      if (typeof pageTotal === "number" && Number.isFinite(pageTotal)) total = pageTotal;
       acc.push(...rows.map(rowToProducto));
-      if (rows.length < pageSize) break;
+      if (rows.length < pageSize) { complete = true; break; }
       offset += pageSize;
     }
+    if (offset >= total) complete = true;
     if (acc.length > 0) await idbSet(OFFLINE_PRODUCTOS_KEY, acc);
-    return acc.length;
   } catch {
-    return 0;
+    /* nop */
   }
+  return { count: acc.length, complete };
 }
 
 /** Catálogo completo para offline: IndexedDB si está; si no, el plano (cap 1000). */
@@ -196,6 +205,18 @@ async function getProductosLocalFull(): Promise<Producto[]> {
   const idb = await idbGet<Producto[]>(OFFLINE_PRODUCTOS_KEY);
   if (Array.isArray(idb) && idb.length > 0) return idb;
   return getProductos();
+}
+
+/** true si el navegador reporta que no hay conexión. */
+function sinConexion(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/** Busca un producto por id en el catálogo cacheado (ficha offline). */
+export async function getProductoLocal(id: string): Promise<Producto | null> {
+  const idb = await idbGet<Producto[]>(OFFLINE_PRODUCTOS_KEY);
+  if (Array.isArray(idb)) return idb.find((p) => String(p.id) === String(id)) ?? null;
+  return null;
 }
 
 export interface ProductosPaginadosOpts {
@@ -265,6 +286,10 @@ export async function getProducto(id: string): Promise<Producto | null> {
       credentials: "include",
       cache: "no-store",
     });
+    // Solo SIN conexión (SW devuelve 503) se usa el catálogo cacheado. Con internet,
+    // un error del server NO debe abrir datos viejos (la pantalla de edición
+    // podría guardar precios/stock desactualizados encima de los reales).
+    if (r.status === 503 && sinConexion()) return await getProductoLocal(id);
     const j = await r.json().catch(() => ({}));
     if (!r.ok || !j?.success) {
       console.error("[inventario] getProducto:", (j as { error?: string })?.error ?? r.status);
@@ -273,6 +298,8 @@ export async function getProducto(id: string): Promise<Producto | null> {
     const row = (j.data as { producto?: ProductoRow }).producto;
     return row ? rowToProducto(row) : null;
   } catch (err) {
+    // Error de red: sin conexión → ficha desde el catálogo cacheado.
+    if (sinConexion()) return await getProductoLocal(id);
     console.error("[inventario] getProducto:", err instanceof Error ? err.message : err);
     return null;
   }

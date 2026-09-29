@@ -205,30 +205,60 @@ export interface ClientesPagina {
 
 const OFFLINE_CLIENTES_KEY = "offline.clientes.v1";
 
-/** Descarga TODOS los clientes paginando y los guarda en IndexedDB. Best-effort. */
-export async function warmClientesOffline(): Promise<number> {
+const sleepMs = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/**
+ * Descarga TODOS los clientes paginando y los guarda en IndexedDB. ROBUSTO:
+ * reintenta cada página hasta 3 veces; devuelve si quedó COMPLETO.
+ */
+export async function warmClientesOffline(): Promise<{ count: number; complete: boolean }> {
+  const pageSize = 500;
+  let page = 1;
+  let total = Infinity;
+  const acc: Cliente[] = [];
+  let complete = false;
   try {
-    const pageSize = 500;
-    let page = 1;
-    let total = Infinity;
-    const acc: Cliente[] = [];
     for (let i = 0; i < 400 && acc.length < total; i++) {
-      const res = await fetchWithSupabaseSession(`/api/clientes?page=${page}&page_size=${pageSize}`, { cache: "no-store" });
-      if (!res.ok) break;
-      const json = (await res.json()) as { success?: boolean; data?: { clientes?: unknown; total?: number } };
-      const d = json?.data;
-      const rows = d?.clientes as SupabaseRow[] | undefined;
-      if (!json?.success || !Array.isArray(rows)) break;
-      if (d && Number.isFinite(d.total)) total = Number(d.total);
+      let rows: SupabaseRow[] | null = null;
+      let pageTotal: number | undefined;
+      for (let intento = 0; intento < 3 && rows === null; intento++) {
+        try {
+          const res = await fetchWithSupabaseSession(`/api/clientes?page=${page}&page_size=${pageSize}`, { cache: "no-store" });
+          if (!res.ok) { await sleepMs(500); continue; }
+          const json = (await res.json()) as { success?: boolean; data?: { clientes?: unknown; total?: number } };
+          const d = json?.data;
+          const r = d?.clientes as SupabaseRow[] | undefined;
+          if (!json?.success || !Array.isArray(r)) { await sleepMs(500); continue; }
+          rows = r;
+          pageTotal = d?.total;
+        } catch { await sleepMs(500); }
+      }
+      if (rows === null) break; // incompleto → se reintenta luego
+      if (typeof pageTotal === "number" && Number.isFinite(pageTotal)) total = pageTotal;
       acc.push(...rows.map((row) => rowToCliente(row)));
-      if (rows.length < pageSize) break;
+      if (rows.length < pageSize) { complete = true; break; }
       page++;
     }
+    if (acc.length >= total) complete = true;
     if (acc.length > 0) await idbSet(OFFLINE_CLIENTES_KEY, acc);
-    return acc.length;
   } catch {
-    return 0;
+    /* nop */
   }
+  return { count: acc.length, complete };
+}
+
+/** true si el navegador reporta que no hay conexión. */
+function sinConexion(): boolean {
+  return typeof navigator !== "undefined" && navigator.onLine === false;
+}
+
+/** Busca un cliente por id en la base cacheada (ficha offline). */
+export async function getClienteLocal(id: string): Promise<Cliente | null> {
+  const idb = await idbGet<Cliente[]>(OFFLINE_CLIENTES_KEY);
+  if (Array.isArray(idb)) {
+    return idb.find((c) => String((c as unknown as { id?: unknown }).id) === String(id)) ?? null;
+  }
+  return null;
 }
 
 /** Todos los clientes para offline: IndexedDB si está; si no, el plano (cap 1000). */
@@ -336,6 +366,9 @@ export async function getCliente(id: string, opts?: { incluirEliminados?: boolea
       console.warn("[clientes] getCliente 404", { id });
       return null;
     }
+    // Solo SIN conexión (SW devuelve 503) se usa la base cacheada. Con internet,
+    // un error del server NO debe abrir datos viejos (la ficha se puede editar).
+    if (res.status === 503 && sinConexion()) return await getClienteLocal(id);
     if (!res.ok) {
       const text = await res.text().catch(() => "");
       console.error("[clientes] getCliente API:", res.status, { id, body: text.slice(0, 500) });
@@ -353,6 +386,8 @@ export async function getCliente(id: string, opts?: { incluirEliminados?: boolea
     }
     return rowToCliente(row);
   } catch (e) {
+    // Error de red: sin conexión → ficha desde la base cacheada.
+    if (sinConexion()) return await getClienteLocal(id);
     console.error("[clientes] getCliente:", e);
     return null;
   }
