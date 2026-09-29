@@ -5,6 +5,7 @@ import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-po
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
+import { escapeIlikeToken, normalizeText, splitTokens } from "@/lib/productos/token-search";
 import type { Venta, LineaVenta, TipoIvaVenta, TipoPrecioVenta } from "@/lib/ventas/types";
 
 interface VentaRow {
@@ -61,10 +62,23 @@ function mapItems(rows: VentaItemRow[]): LineaVenta[] {
   }));
 }
 
+/** Normaliza una expresión SQL como `normalizeText` del cliente: minúsculas y sin acentos. */
+function sqlNorm(expr: string): string {
+  return `translate(lower(COALESCE(${expr}, '')), 'áéíóúüñàèìòù', 'aeiouunaeiou')`;
+}
+
 /**
- * GET /api/ventas — listado vía PG pool. Trae las 500 ventas más recientes y
- * SUS ítems con `venta_id = ANY(...)` (antes se traían todos los ventas_items y
- * topaban en 1000 filas de PostgREST → las ventas recientes quedaban sin líneas).
+ * GET /api/ventas — listado PAGINADO server-side, sin tope de filas.
+ *
+ * Query params (todos opcionales):
+ *  - page (1..N, default 1), limit (default 25, máx 200)
+ *  - q: búsqueda por tokens (AND, cualquier orden) sobre número de control,
+ *    número de factura, cliente y nombre/SKU de cualquier ítem.
+ *  - tipo: CONTADO | CREDITO
+ *  - iva: EXENTA | 5% | 10% (al menos un ítem con ese IVA)
+ *
+ * Devuelve { ventas, total (filtrado), total_general }. Los ítems se traen solo
+ * para las ventas de la página (`venta_id = ANY(...)`).
  * El "vendedor" se resuelve por el pedido que originó la venta (armado_por), no
  * por el cajero que la registró.
  */
@@ -82,6 +96,56 @@ export async function GET(request: NextRequest) {
     const tPc = quoteSchemaTable(schema, "pedidos_caja");
     const tU = quoteSchemaTable(schema, "usuarios");
     const tFa = quoteSchemaTable(schema, "factura_autoimpresor");
+    const tC = quoteSchemaTable(schema, "clientes");
+
+    const sp = new URL(request.url).searchParams;
+    const page = Math.max(1, Math.floor(Number(sp.get("page")) || 1));
+    const limit = Math.max(1, Math.min(200, Math.floor(Number(sp.get("limit")) || 25)));
+    const tipo = sp.get("tipo");
+    const iva = sp.get("iva");
+    const tokens = splitTokens(normalizeText(sp.get("q") ?? ""))
+      .map(escapeIlikeToken)
+      .filter(Boolean);
+
+    // Filtros sobre `v`; $1 = empresa_id.
+    const params: unknown[] = [empresaId];
+    const conds: string[] = [];
+    if (tipo === "CONTADO" || tipo === "CREDITO") {
+      params.push(tipo);
+      conds.push(`v.tipo_venta = $${params.length}`);
+    }
+    if (iva === "EXENTA" || iva === "5%" || iva === "10%") {
+      params.push(iva);
+      conds.push(
+        `EXISTS (SELECT 1 FROM ${tI} i WHERE i.venta_id = v.id AND i.empresa_id = v.empresa_id AND i.tipo_iva = $${params.length})`
+      );
+    }
+    // Cada token debe aparecer en algún campo (AND entre tokens, orden libre).
+    for (const tok of tokens) {
+      params.push(`%${tok}%`);
+      const p = `$${params.length}`;
+      conds.push(`(
+        ${sqlNorm("v.numero_control")} LIKE ${p}
+        OR EXISTS (SELECT 1 FROM ${tFa} fa WHERE fa.venta_id = v.id AND fa.empresa_id = v.empresa_id
+                   AND ${sqlNorm("fa.numero_completo")} LIKE ${p})
+        OR EXISTS (SELECT 1 FROM ${tC} c WHERE c.id = v.cliente_id AND c.empresa_id = v.empresa_id
+                   AND ${sqlNorm("concat_ws(' ', c.empresa, c.nombre_contacto, c.nombre)")} LIKE ${p})
+        OR EXISTS (SELECT 1 FROM ${tI} i WHERE i.venta_id = v.id AND i.empresa_id = v.empresa_id
+                   AND ${sqlNorm("concat_ws(' ', i.producto_nombre, i.sku)")} LIKE ${p})
+      )`);
+    }
+    const filtro = conds.length > 0 ? conds.join(" AND ") : "TRUE";
+
+    const countQ = await pool.query(
+      `SELECT count(*)::int AS total_general,
+              count(*) FILTER (WHERE ${filtro})::int AS total
+         FROM ${tV} v
+        WHERE v.empresa_id = $1::uuid`,
+      params
+    );
+    const total = Number(countQ.rows[0]?.total ?? 0);
+    const totalGeneral = Number(countQ.rows[0]?.total_general ?? 0);
+    const offset = (page - 1) * limit;
 
     const ventasQ = await pool.query(
       `SELECT v.id::text AS id, v.empresa_id::text AS empresa_id, v.numero_control, v.moneda,
@@ -99,14 +163,14 @@ export async function GET(request: NextRequest) {
                 WHERE fa.venta_id = v.id AND fa.empresa_id = v.empresa_id
                 LIMIT 1) AS numero_factura,
               (SELECT COALESCE(NULLIF(TRIM(c.empresa), ''), NULLIF(TRIM(c.nombre_contacto), ''), NULLIF(TRIM(c.nombre), ''))
-                 FROM ${quoteSchemaTable(schema, "clientes")} c
+                 FROM ${tC} c
                 WHERE c.id = v.cliente_id AND c.empresa_id = v.empresa_id
                 LIMIT 1) AS cliente_nombre
          FROM ${tV} v
-        WHERE v.empresa_id = $1::uuid
-        ORDER BY v.fecha DESC
-        LIMIT 5000`,
-      [empresaId]
+        WHERE v.empresa_id = $1::uuid AND ${filtro}
+        ORDER BY v.fecha DESC, v.numero_control DESC
+        LIMIT ${limit} OFFSET ${offset}`,
+      params
     );
     const ventasRows = ventasQ.rows as VentaRow[];
 
@@ -163,7 +227,7 @@ export async function GET(request: NextRequest) {
       };
     });
 
-    return NextResponse.json(successResponse({ ventas }));
+    return NextResponse.json(successResponse({ ventas, total, total_general: totalGeneral, page, limit }));
   } catch (err) {
     console.error("[/api/ventas GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudieron cargar las ventas."), { status: 500 });

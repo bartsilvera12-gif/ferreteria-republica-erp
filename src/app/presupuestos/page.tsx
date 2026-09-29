@@ -6,6 +6,9 @@ import { FileText, Plus, Loader2, Lock } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { ESTADO_LABEL, type EstadoPresupuesto } from "@/lib/presupuestos/types";
 import EstadoSelect from "@/components/presupuestos/EstadoSelect";
+import Paginador from "@/components/ui/Paginador";
+
+const POR_PAGINA = 25;
 
 type PresupuestoRow = {
   id: string;
@@ -52,6 +55,8 @@ export default function PresupuestosPage() {
   const [filtro, setFiltro] = useState<"todos" | EstadoPresupuesto>("todos");
   const [toast, setToast] = useState<{ tipo: "ok" | "error"; msg: string } | null>(null);
   const [actualizando, setActualizando] = useState<Set<string>>(new Set());
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
 
   const mostrarToast = useCallback((tipo: "ok" | "error", msg: string) => {
     setToast({ tipo, msg });
@@ -96,28 +101,34 @@ export default function PresupuestosPage() {
     [mostrarToast]
   );
 
+  // Paginación y filtro por estado server-side (sin tope de filas).
   const cargar = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchWithSupabaseSession("/api/presupuestos", { cache: "no-store" });
+      const params = new URLSearchParams({ page: String(pagina), limit: String(POR_PAGINA) });
+      if (filtro !== "todos") params.set("estado", filtro);
+      const res = await fetchWithSupabaseSession(`/api/presupuestos?${params.toString()}`, { cache: "no-store" });
       const body = await res.json();
       if (!res.ok || body?.success === false) {
         setError(body?.error ?? "No se pudieron cargar los presupuestos.");
         return;
       }
       setRows((body.data?.presupuestos ?? []) as PresupuestoRow[]);
+      setTotal(Number(body.data?.total ?? 0));
     } catch {
       setError("Error de red al cargar presupuestos.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pagina, filtro]);
 
   useEffect(() => {
     void cargar();
   }, [cargar]);
 
+  // Con el filtro "todos", un cambio de estado no saca la fila de la página;
+  // con un filtro puntual, la fila que cambió deja de coincidir y se oculta.
   const filtradas = useMemo(
     () => (filtro === "todos" ? rows : rows.filter((r) => r.estado === filtro)),
     [rows, filtro]
@@ -157,7 +168,7 @@ export default function PresupuestosPage() {
         {FILTROS.map((f) => (
           <button
             key={f.id}
-            onClick={() => setFiltro(f.id)}
+            onClick={() => { setFiltro(f.id); setPagina(1); }}
             className={`rounded-full px-3 py-1.5 text-sm font-medium transition-colors ${
               filtro === f.id ? "bg-[#4FAEB2] text-white" : "bg-white border border-slate-200 text-slate-600 hover:bg-slate-50"
             }`}
@@ -228,6 +239,9 @@ export default function PresupuestosPage() {
             </table>
           </div>
         )}
+        <div className="px-4 pb-4">
+          <Paginador pagina={pagina} porPagina={POR_PAGINA} total={total} onChange={setPagina} cargando={loading} />
+        </div>
       </div>
     </div>
   );

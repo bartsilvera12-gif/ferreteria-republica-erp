@@ -50,25 +50,50 @@ export type PagoLineaInput = {
   titular?: string | null;
 };
 
+export type FiltrosVentas = {
+  page: number;
+  limit: number;
+  q?: string;
+  tipo?: string;
+  iva?: string;
+};
+
+export type PaginaVentas = {
+  ventas: Venta[];
+  /** Total de ventas que cumplen los filtros. */
+  total: number;
+  /** Total de ventas del tenant, sin filtros. */
+  total_general: number;
+};
+
 /**
- * Lista ventas del tenant (misma fuente que el dashboard: tablas `ventas` / `ventas_items`).
+ * Lista una página de ventas del tenant (paginación, búsqueda y filtros server-side).
+ * Devuelve `null` si falló la carga.
  */
-export async function getVentas(): Promise<Venta[]> {
+export async function getVentasPagina(f: FiltrosVentas): Promise<PaginaVentas | null> {
   try {
-    const res = await fetchWithSupabaseSession("/api/ventas", { cache: "no-store" });
+    const params = new URLSearchParams({ page: String(f.page), limit: String(f.limit) });
+    if (f.q?.trim()) params.set("q", f.q.trim());
+    if (f.tipo) params.set("tipo", f.tipo);
+    if (f.iva) params.set("iva", f.iva);
+    const res = await fetchWithSupabaseSession(`/api/ventas?${params.toString()}`, { cache: "no-store" });
     const json = (await res.json()) as {
       success?: boolean;
-      data?: { ventas?: Venta[] };
+      data?: Partial<PaginaVentas>;
       error?: string;
     };
     if (!res.ok || !json.success || !json.data?.ventas) {
-      console.error("[ventas] getVentas:", json.error ?? res.statusText);
-      return [];
+      console.error("[ventas] getVentasPagina:", json.error ?? res.statusText);
+      return null;
     }
-    return json.data.ventas;
+    return {
+      ventas: json.data.ventas,
+      total: Number(json.data.total ?? json.data.ventas.length),
+      total_general: Number(json.data.total_general ?? json.data.total ?? 0),
+    };
   } catch (e) {
-    console.error("[ventas] getVentas:", e);
-    return [];
+    console.error("[ventas] getVentasPagina:", e);
+    return null;
   }
 }
 

@@ -37,6 +37,9 @@ import {
 } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import type { EstadoPedidoCaja } from "@/lib/pedidos-caja/types";
+import Paginador from "@/components/ui/Paginador";
+
+const POR_PAGINA = 25;
 
 type PedidoLite = {
   id: string;
@@ -93,6 +96,8 @@ export default function PedidosPage() {
   const [busqueda, setBusqueda] = useState("");
   const [busquedaDebounced, setBusquedaDebounced] = useState("");
   const [soloMios, setSoloMios] = useState(false);
+  const [pagina, setPagina] = useState(1);
+  const [total, setTotal] = useState(0);
 
   // Estado de acciones en progreso por id (para deshabilitar botones).
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -108,6 +113,8 @@ export default function PedidosPage() {
     try {
       const params = new URLSearchParams();
       params.set("estado", estado);
+      params.set("page", String(pagina));
+      params.set("limit", String(POR_PAGINA));
       if (soloMios) params.set("mios", "1");
       if (busquedaDebounced.trim()) params.set("q", busquedaDebounced.trim());
       const r = await fetchWithSupabaseSession(
@@ -139,11 +146,17 @@ export default function PedidosPage() {
           facturado_at: p.facturado_at ? String(p.facturado_at) : null,
         }))
       );
+      setTotal(Number(j.data?.total ?? raw.length));
     } catch (e) {
       setError(e instanceof Error ? e.message : "Error de red");
     } finally {
       setLoading(false);
     }
+  }, [estado, soloMios, busquedaDebounced, pagina]);
+
+  // Al cambiar filtros se vuelve a la primera página.
+  useEffect(() => {
+    setPagina(1);
   }, [estado, soloMios, busquedaDebounced]);
 
   useEffect(() => {
@@ -424,8 +437,8 @@ export default function PedidosPage() {
         {/* Footer */}
         {!loading && items.length > 0 && (
           <div className="px-5 py-3 border-t border-slate-100 bg-slate-50/40 text-xs text-slate-500">
-            Mostrando <span className="font-semibold text-slate-700">{items.length}</span>{" "}
-            {items.length === 1 ? "pedido" : "pedidos"}
+            <span className="font-semibold text-slate-700">{total.toLocaleString("es-PY")}</span>{" "}
+            {total === 1 ? "pedido" : "pedidos"}
             {estado !== "todos" && (
               <span>
                 {" "}
@@ -438,6 +451,9 @@ export default function PedidosPage() {
             .
           </div>
         )}
+        <div className="px-5 pb-4">
+          <Paginador pagina={pagina} porPagina={POR_PAGINA} total={total} onChange={setPagina} cargando={loading} />
+        </div>
       </section>
     </div>
   );

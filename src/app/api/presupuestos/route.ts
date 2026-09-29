@@ -42,22 +42,31 @@ function parseItems(raw: unknown): PresupuestoItemInput[] | null {
   return out;
 }
 
-/** GET /api/presupuestos — listado (opcional ?estado=). */
+/**
+ * GET /api/presupuestos — listado PAGINADO, sin tope de filas.
+ * Query: ?estado= (opcional), ?page= (default 1), ?limit= (default 25, máx 200).
+ * Devuelve { presupuestos, total } (total = cantidad que cumple el filtro).
+ */
 export async function GET(request: NextRequest) {
   try {
     const ctx = await getTenantSupabaseFromAuth(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    const estado = new URL(request.url).searchParams.get("estado");
+    const sp = new URL(request.url).searchParams;
+    const estado = sp.get("estado");
+    const page = Math.max(1, Math.floor(Number(sp.get("page")) || 1));
+    const limit = Math.max(1, Math.min(200, Math.floor(Number(sp.get("limit")) || 25)));
+    const from = (page - 1) * limit;
     let q = ctx.supabase
       .from("presupuestos")
-      .select(PRESU_COLS)
+      .select(PRESU_COLS, { count: "exact" })
       .eq("empresa_id", ctx.auth.empresa_id)
       .order("fecha", { ascending: false })
-      .limit(500);
-    if (estado) q = q.eq("estado", estado);
-    const { data, error } = await q;
+      .order("numero_control", { ascending: false })
+      .range(from, from + limit - 1);
+    if (estado && estado !== "todos") q = q.eq("estado", estado);
+    const { data, error, count } = await q;
     if (error) throw new Error(error.message);
-    return NextResponse.json(successResponse({ presupuestos: data ?? [] }));
+    return NextResponse.json(successResponse({ presupuestos: data ?? [], total: count ?? 0, page, limit }));
   } catch (err) {
     console.error("[/api/presupuestos GET]", err instanceof Error ? err.message : err);
     return NextResponse.json(errorResponse("No se pudieron cargar los presupuestos."), { status: 500 });

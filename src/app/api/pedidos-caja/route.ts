@@ -9,6 +9,7 @@ import { mapPedidoCaja, PEDIDO_CAJA_COLS, generarNumeroPedido } from "@/lib/pedi
  *
  *  - estado: pendiente | facturado | cancelado | todos (default pendiente).
  *  - mios=1: solo los del usuario actual (vista vendedor).
+ *  - page / limit: paginado (devuelve también `total`). Sin page: primeros `limit` (default 200).
  *
  * POST /api/pedidos-caja
  *  Body: { cliente_id?, cliente_nombre?, cliente_telefono?, observacion?, items: [...] }
@@ -48,14 +49,22 @@ export async function GET(request: NextRequest) {
     const estadoParam = url.searchParams.get("estado") ?? "pendiente";
     const mios = url.searchParams.get("mios") === "1";
     const qText = (url.searchParams.get("q") ?? "").trim();
-    const limit = Math.max(1, Math.min(500, Number(url.searchParams.get("limit") ?? 200) || 200));
+    // Con ?page= el listado va paginado (sin tope total) y devuelve `total`;
+    // sin page se mantiene el comportamiento anterior (primeros `limit`).
+    const pageParam = url.searchParams.get("page");
+    const paginado = pageParam !== null;
+    const page = Math.max(1, Math.floor(Number(pageParam) || 1));
+    const limit = paginado
+      ? Math.max(1, Math.min(200, Math.floor(Number(url.searchParams.get("limit")) || 25)))
+      : Math.max(1, Math.min(500, Number(url.searchParams.get("limit") ?? 200) || 200));
+    const from = paginado ? (page - 1) * limit : 0;
 
     let q = sb
       .from("pedidos_caja")
-      .select(PEDIDO_CAJA_COLS)
+      .select(PEDIDO_CAJA_COLS, paginado ? { count: "exact" } : undefined)
       .eq("empresa_id", empresaId)
       .order("created_at", { ascending: false })
-      .limit(limit);
+      .range(from, from + limit - 1);
 
     if (estadoParam !== "todos") q = q.eq("estado", estadoParam);
     if (mios && auth.usuarioCatalogId) q = q.eq("armado_por_id", auth.usuarioCatalogId);
@@ -67,10 +76,12 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const { data, error } = await q;
+    const { data, error, count } = await q;
     if (error) return NextResponse.json(errorResponse(error.message), { status: 400 });
     const pedidos = (((data ?? []) as unknown) as Record<string, unknown>[]).map(mapPedidoCaja);
-    return NextResponse.json(successResponse({ pedidos }));
+    return NextResponse.json(
+      successResponse(paginado ? { pedidos, total: count ?? 0, page, limit } : { pedidos })
+    );
   } catch (err) {
     const msg = err instanceof Error ? err.message : "No se pudieron cargar los pedidos.";
     return NextResponse.json(errorResponse(msg), { status: 500 });

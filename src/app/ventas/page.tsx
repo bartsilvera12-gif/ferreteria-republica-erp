@@ -7,12 +7,12 @@ import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session"
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { FancySelect } from "@/components/ui/FancySelect";
 import MobileFab from "@/components/ui/MobileFab";
-import { getVentas } from "@/lib/ventas/storage";
+import Paginador from "@/components/ui/Paginador";
+import { getVentasPagina } from "@/lib/ventas/storage";
 import PedidosPendientesCaja from "./PedidosPendientesCaja";
 import PedidosConsultaPendientes from "./PedidosConsultaPendientes";
 import CajaControlPanel from "@/components/caja/CajaControlPanel";
 import DevolucionWizard from "@/components/devoluciones/DevolucionWizard";
-import { productoMatchesQuery } from "@/lib/productos/token-search";
 import type { Venta, TipoVenta, TipoIvaVenta } from "@/lib/ventas/types";
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -91,8 +91,12 @@ function ResumenProductos({ v }: { v: Venta }) {
 // ── Componente principal ───────────────────────────────────────────────────────
 
 export default function VentasPage() {
-  const [todas,      setTodas]      = useState<Venta[]>([]);
+  const [paginadas,  setPaginadas]  = useState<Venta[]>([]);
+  const [totalFiltradas, setTotalFiltradas] = useState(0);
+  const [totalGeneral,   setTotalGeneral]   = useState(0);
+  const [cargando,   setCargando]   = useState(false);
   const [busqueda,   setBusqueda]   = useState("");
+  const [busquedaDebounced, setBusquedaDebounced] = useState("");
   const [filtroTipo, setFiltroTipo] = useState<TipoVenta | "">("");
   // Devoluciones: la UI solo aparece si el feature flag server-side está activo.
   const [devolucionesOn, setDevolucionesOn] = useState(false);
@@ -118,50 +122,33 @@ export default function VentasPage() {
     return () => { cancelled = true; };
   }, []);
 
+  // Búsqueda con debounce: cada tecla no dispara una consulta al server.
   useEffect(() => {
+    const t = setTimeout(() => setBusquedaDebounced(busqueda), 350);
+    return () => clearTimeout(t);
+  }, [busqueda]);
+
+  // Paginación, búsqueda y filtros server-side (sin tope de filas). Al cambiar
+  // un filtro se vuelve a la página 1. Solo se consulta con el historial abierto.
+  useEffect(() => { setPagina(1); }, [busquedaDebounced, filtroTipo, filtroIva]);
+  useEffect(() => {
+    if (!showOrdenes) return;
     let cancelled = false;
-    getVentas().then((data) => {
-      if (cancelled) return;
-      const ordenadas = [...data].sort((a, b) => {
-        const ta = new Date(a.fecha).getTime();
-        const tb = new Date(b.fecha).getTime();
-        return tb - ta || b.numero_control.localeCompare(a.numero_control);
-      });
-      setTodas(ordenadas);
-    });
+    setCargando(true);
+    getVentasPagina({ page: pagina, limit: POR_PAGINA, q: busquedaDebounced, tipo: filtroTipo, iva: filtroIva })
+      .then((res) => {
+        if (cancelled || !res) return;
+        setPaginadas(res.ventas);
+        setTotalFiltradas(res.total);
+        setTotalGeneral(res.total_general);
+      })
+      .finally(() => { if (!cancelled) setCargando(false); });
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  const filtradas = todas.filter((v) => {
-    // Búsqueda por tokens: número de control, nombre o SKU de cualquier ítem.
-    if (busqueda.trim() !== "" && !productoMatchesQuery(
-      busqueda,
-      v.numero_control,
-      v.numero_factura ?? "",
-      v.cliente_nombre ?? "",
-      ...v.items.map((i) => i.producto_nombre),
-      ...v.items.map((i) => i.sku),
-    )) return false;
-    // Tipo de venta
-    if (filtroTipo !== "" && v.tipo_venta !== filtroTipo) return false;
-    // IVA: coincide si al menos un ítem tiene ese tipo
-    if (filtroIva !== "" && !v.items.some((i) => i.tipo_iva === filtroIva))
-      return false;
-    return true;
-  });
+  }, [showOrdenes, pagina, busquedaDebounced, filtroTipo, filtroIva]);
 
   const hayFiltros = busqueda || filtroTipo || filtroIva;
-
-  // Paginación (cliente): la búsqueda/filtros aplican sobre TODO y después se
-  // corta en páginas de POR_PAGINA. Al cambiar filtros, se vuelve a la página 1.
-  useEffect(() => { setPagina(1); }, [busqueda, filtroTipo, filtroIva]);
-  const totalPaginas = Math.max(1, Math.ceil(filtradas.length / POR_PAGINA));
-  const paginaSegura = Math.min(pagina, totalPaginas);
-  const paginadas = filtradas.slice((paginaSegura - 1) * POR_PAGINA, paginaSegura * POR_PAGINA);
-  const desde = filtradas.length === 0 ? 0 : (paginaSegura - 1) * POR_PAGINA + 1;
-  const hasta = Math.min(paginaSegura * POR_PAGINA, filtradas.length);
 
   return (
     <div className="space-y-8">
@@ -282,7 +269,9 @@ export default function VentasPage() {
             </button>
           )}
           <span className="ml-auto text-sm text-gray-400">
-            {filtradas.length} de {todas.length} ventas
+            {cargando
+              ? "Cargando…"
+              : `${totalFiltradas.toLocaleString("es-PY")} de ${totalGeneral.toLocaleString("es-PY")} ventas`}
           </span>
         </div>
 
@@ -305,10 +294,12 @@ export default function VentasPage() {
               </tr>
             </thead>
             <tbody>
-              {filtradas.length === 0 ? (
+              {paginadas.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-12 text-center text-gray-400">
-                    {todas.length === 0
+                    {cargando
+                      ? "Cargando ventas…"
+                      : totalGeneral === 0
                       ? "No hay ventas registradas"
                       : "Ninguna venta coincide con los filtros"}
                   </td>
@@ -442,34 +433,13 @@ export default function VentasPage() {
         </EdgeScrollArea>
 
         {/* Paginación */}
-        {filtradas.length > POR_PAGINA && (
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-            <span className="text-xs text-gray-500">
-              Mostrando {desde}–{hasta} de {filtradas.length}
-            </span>
-            <div className="flex items-center gap-1">
-              <button
-                type="button"
-                onClick={() => setPagina((p) => Math.max(1, p - 1))}
-                disabled={paginaSegura <= 1}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-              >
-                ← Anterior
-              </button>
-              <span className="px-2 text-xs font-medium text-slate-600">
-                Página {paginaSegura} de {totalPaginas}
-              </span>
-              <button
-                type="button"
-                onClick={() => setPagina((p) => Math.min(totalPaginas, p + 1))}
-                disabled={paginaSegura >= totalPaginas}
-                className="inline-flex h-8 items-center gap-1 rounded-lg border border-slate-200 bg-white px-3 text-xs font-semibold text-slate-600 hover:bg-slate-50 disabled:opacity-40"
-              >
-                Siguiente →
-              </button>
-            </div>
-          </div>
-        )}
+        <Paginador
+          pagina={pagina}
+          porPagina={POR_PAGINA}
+          total={totalFiltradas}
+          onChange={setPagina}
+          cargando={cargando}
+        />
         </>)}
 
       </div>
