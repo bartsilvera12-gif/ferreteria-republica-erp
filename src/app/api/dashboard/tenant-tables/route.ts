@@ -299,26 +299,31 @@ export async function GET(request: NextRequest) {
     const fetchItemsByVentaIds = async (
       ventaIds: string[]
     ): Promise<{ data: unknown[]; error: { message: string } | null }> => {
-      const CHUNK = 300;
+      // 100 ids por lote (~4 KB de URL). Con 300 la URL llegaba a ~12 KB y el gateway la
+      // rechazaba (414): el panel quedaba sin items. NO subir sin medir (tope real ~8 KB).
+      const CHUNK = 100;
+      const EN_PARALELO = 6;
       const chunks: string[][] = [];
       for (let i = 0; i < ventaIds.length; i += CHUNK) chunks.push(ventaIds.slice(i, i + CHUNK));
-      const results = await Promise.all(
-        chunks.map((batch) =>
-          pageAll((from, to) =>
-            supabase
-              .from("ventas_items")
-              .select("*")
-              .eq("empresa_id", empresaId)
-              .in("venta_id", batch)
-              .order("id", { ascending: true })
-              .range(from, to)
-          )
-        )
-      );
       const all: unknown[] = [];
-      for (const r of results) {
-        if (r.error) return { data: all, error: r.error };
-        all.push(...r.data);
+      for (let i = 0; i < chunks.length; i += EN_PARALELO) {
+        const results = await Promise.all(
+          chunks.slice(i, i + EN_PARALELO).map((batch) =>
+            pageAll((from, to) =>
+              supabase
+                .from("ventas_items")
+                .select("*")
+                .eq("empresa_id", empresaId)
+                .in("venta_id", batch)
+                .order("id", { ascending: true })
+                .range(from, to)
+            )
+          )
+        );
+        for (const r of results) {
+          if (r.error) return { data: all, error: r.error };
+          all.push(...r.data);
+        }
       }
       return { data: all, error: null };
     };
