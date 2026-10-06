@@ -545,6 +545,21 @@ export default function ProductPickerModal({
                         );
                       })}
                     </div>
+                    {/* Aclaración: precio por unidad vs precio de la presentación (solo visual). */}
+                    {sel && (
+                      <p className="mt-1.5 text-[11px] text-slate-500">
+                        Precio por unidad:{" "}
+                        <span className="font-semibold tabular-nums text-slate-700">{formatGs(precioPorTipoPicker(sel, tipoPrecio))}</span>
+                        {presSel && presSel.cantidad_base !== 1 && (
+                          <>
+                            {" · "}{presSel.nombre} ({presSel.cantidad_base} u.):{" "}
+                            <span className="font-semibold tabular-nums text-slate-700">
+                              {formatGs(presSel.precio_venta != null && presSel.precio_venta > 0 ? presSel.precio_venta : precioPorTipoPicker(sel, tipoPrecio) * presSel.cantidad_base)}
+                            </span>
+                          </>
+                        )}
+                      </p>
+                    )}
                   </div>
                   <div className="grid grid-cols-2 gap-2">
                     <div>

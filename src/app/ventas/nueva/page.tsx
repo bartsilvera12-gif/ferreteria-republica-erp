@@ -1348,6 +1348,9 @@ export default function NuevaVentaPage() {
                                 {item.presentacion_nombre && (
                                   <p className="text-[11px] text-slate-500">
                                     {item.presentacion_nombre}
+                                    {item.presentacion_cantidad_base && item.presentacion_cantidad_base !== 1 ? (
+                                      <> · {item.presentacion_cantidad_base} u. · {formatGs(item.precio_venta / item.presentacion_cantidad_base)}/u</>
+                                    ) : null}
                                   </p>
                                 )}
                               </div>
