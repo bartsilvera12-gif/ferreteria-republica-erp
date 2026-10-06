@@ -5,6 +5,31 @@ import {
   mapPresentacion,
 } from "@/lib/inventario/presentaciones-server";
 import type { ProductoPresentacion } from "@/lib/inventario/presentaciones-types";
+import { precioNivel, type NivelPrecio } from "@/lib/ventas/precio-nivel";
+
+/**
+ * IVA incluido: el precio ya contiene el IVA; se desglosa desde adentro.
+ * Igual criterio que el cliente (calcIva en la pantalla de venta).
+ */
+function calcIvaIncluido(tipo: "EXENTA" | "5%" | "10%", total: number): number {
+  if (tipo === "EXENTA") return 0;
+  if (tipo === "5%") return total - total / 1.05;
+  return total - total / 1.1;
+}
+
+/**
+ * Precio enviado por el cajero que no coincide con el precio configurado del
+ * producto para el tipo elegido, y el usuario no es admin (no puede fijar precio
+ * manual). Lleva el detalle para un mensaje claro.
+ */
+export class PrecioInvalidoError extends Error {
+  detalle: Array<{ producto: string; tipo: string; esperado: number; enviado: number }>;
+  constructor(detalle: Array<{ producto: string; tipo: string; esperado: number; enviado: number }>) {
+    super("El precio de uno o más productos no coincide con el configurado.");
+    this.name = "PrecioInvalidoError";
+    this.detalle = detalle;
+  }
+}
 
 /** Un faltante de stock detectado al validar la venta. */
 export interface FaltanteStock {
@@ -97,6 +122,9 @@ export interface CreateVentaPgParams {
   /** Usuario que registra la venta (auditoría de movimientos de inventario). */
   usuarioId?: string | null;
   usuarioNombre?: string | null;
+  /** Si el usuario es admin/administrador/super_admin: puede aplicar precio manual
+   *  (distinto del configurado). Un usuario normal NO puede. */
+  esAdmin?: boolean;
 }
 
 function recalcTotals(items: CreateVentaItemInput[]) {
@@ -201,6 +229,10 @@ export async function createVentaTransaccionalPg(
     presentacionNombre: string | null;
     presentacionCantBase: number;
     cantidadTotalBase: number;
+    /** true si la línea trajo una presentación explícita (no la default). */
+    presExplicita: boolean;
+    /** Precio override de la presentación (fijo, por presentación) o null. */
+    presOverride: number | null;
   };
   const lineResolved: LineResolved[] = items.map((it) => {
     let pres: ProductoPresentacion | null = null;
@@ -226,11 +258,14 @@ export async function createVentaTransaccionalPg(
     }
     // Compat legacy: producto sin ninguna presentacion (no deberia pasar).
     const cantBase = pres ? pres.cantidad_base : 1;
+    const override = pres && pres.precio_venta != null && Number(pres.precio_venta) > 0 ? Number(pres.precio_venta) : null;
     return {
       presentacionId: pres ? pres.id : null,
       presentacionNombre: pres ? pres.nombre : null,
       presentacionCantBase: cantBase,
       cantidadTotalBase: it.cantidad * cantBase,
+      presExplicita: !!it.presentacion_id,
+      presOverride: override,
     };
   });
 
@@ -256,7 +291,7 @@ export async function createVentaTransaccionalPg(
   const ids = [...qtyByProduct.keys()];
   const prodQ = await sb
     .from("productos")
-    .select("id, stock_actual, costo_promedio, nombre, sku, controla_stock, modo_receta")
+    .select("id, stock_actual, costo_promedio, nombre, sku, controla_stock, modo_receta, precio_venta, precio_mayorista, precio_distribuidor")
     .eq("empresa_id", params.empresaId)
     .in("id", ids);
   if (prodQ.error) throw new Error(prodQ.error.message);
@@ -268,7 +303,19 @@ export async function createVentaTransaccionalPg(
     sku: string;
     controla_stock: boolean | null;
     modo_receta: string | null;
+    precio_venta: number | string | null;
+    precio_mayorista: number | string | null;
+    precio_distribuidor: number | string | null;
   }>;
+  // Precios configurados por producto (para validar el precio de cada línea).
+  const precioMap = new Map<string, { minorista: number; mayorista: number | null; distribuidor: number | null }>();
+  for (const r of prodRows) {
+    precioMap.set(r.id, {
+      minorista: Number(r.precio_venta) || 0,
+      mayorista: r.precio_mayorista != null ? Number(r.precio_mayorista) : null,
+      distribuidor: r.precio_distribuidor != null ? Number(r.precio_distribuidor) : null,
+    });
+  }
 
   if (prodRows.length !== ids.length) {
     const found = new Set(prodRows.map((r) => r.id));
@@ -290,6 +337,62 @@ export async function createVentaTransaccionalPg(
       modo: r.modo_receta ?? "preparado_al_vender",
     });
   }
+
+  // ── Validación de precio server-side (Casos 1+4) ──────────────────────────
+  // El precio de cada línea debe coincidir con el CONFIGURADO del producto para
+  // el tipo elegido (minorista/mayorista/distribuidor), considerando la
+  // presentación. Si no coincide: un admin puede aplicarlo como precio MANUAL
+  // (se guarda quién y el configurado); un usuario normal NO puede → se rechaza.
+  // Subtotal/IVA/total se recalculan SIEMPRE desde el precio validado.
+  type PrecioMetaLinea = { modo: "configurado" | "manual"; modificadoPor: string | null; modificadoPorNombre: string | null };
+  const precioMeta: PrecioMetaLinea[] = [];
+  const preciosInvalidos: Array<{ producto: string; tipo: string; esperado: number; enviado: number }> = [];
+  for (let i = 0; i < items.length; i++) {
+    const it = items[i];
+    const lr = lineResolved[i];
+    const pm = precioMap.get(it.producto_id);
+    const enviado = Math.round(Number(it.precio_venta) || 0);
+    if (!pm) { precioMeta.push({ modo: "configurado", modificadoPor: null, modificadoPorNombre: null }); continue; }
+    if (it.tipo_precio === "costo") {
+      // 'costo' ya no se ofrece: no se permite vender al costo desde acá.
+      preciosInvalidos.push({ producto: it.producto_nombre, tipo: "costo", esperado: 0, enviado });
+      precioMeta.push({ modo: "configurado", modificadoPor: null, modificadoPorNombre: null });
+      continue;
+    }
+    const tipo = it.tipo_precio as NivelPrecio;
+    // Precio configurado POR PRESENTACIÓN:
+    //  - presentación explícita con override → el override (fijo).
+    //  - presentación explícita sin override → precioNivel × cantidad_base.
+    //  - sin presentación explícita (carga rápida) → precioNivel (por unidad).
+    const esperado = lr.presExplicita
+      ? (lr.presOverride != null ? Math.round(lr.presOverride) : Math.round(precioNivel(pm, tipo) * lr.presentacionCantBase))
+      : Math.round(precioNivel(pm, tipo));
+    const difiere = Math.abs(enviado - esperado) > 1; // 1 Gs de tolerancia por redondeo
+    let aplicado = esperado;
+    let meta: PrecioMetaLinea = { modo: "configurado", modificadoPor: null, modificadoPorNombre: null };
+    if (difiere) {
+      if (!params.esAdmin) {
+        preciosInvalidos.push({ producto: it.producto_nombre, tipo, esperado, enviado });
+        precioMeta.push(meta);
+        continue; // se rechaza abajo
+      }
+      aplicado = enviado; // admin: precio manual permitido
+      meta = { modo: "manual", modificadoPor: params.usuarioId ?? null, modificadoPorNombre: params.usuarioNombre ?? null };
+    }
+    // Recalcular totales de la línea desde el precio validado (IVA incluido).
+    const totalLinea = it.cantidad > 0 && aplicado > 0 ? it.cantidad * aplicado : 0;
+    const montoIva = calcIvaIncluido(it.tipo_iva, totalLinea);
+    it.precio_venta = aplicado;
+    it.precio_venta_original = esperado; // precio configurado
+    it.total_linea = totalLinea;
+    it.monto_iva = montoIva;
+    it.subtotal = totalLinea - montoIva;
+    precioMeta.push(meta);
+  }
+  if (preciosInvalidos.length > 0) throw new PrecioInvalidoError(preciosInvalidos);
+
+  // Totales server-side desde el precio validado (fuente de verdad del header).
+  const calcFinal = recalcTotals(items);
 
   // 2b) Recetas: para cada producto vendido con receta activa, calcular el consumo de
   //     materia prima (insumos). Consistente con el costeo (fn_receta_costeo):
@@ -541,9 +644,9 @@ export async function createVentaTransaccionalPg(
       numero_control: numeroControl,
       moneda: params.moneda,
       tipo_cambio: params.tipoCambio,
-      subtotal: calc.subtotal,
-      monto_iva: calc.montoIva,
-      total: calc.total,
+      subtotal: calcFinal.subtotal,
+      monto_iva: calcFinal.montoIva,
+      total: calcFinal.total,
       estado: "completada",
       tipo_venta: params.tipoVenta,
       plazo_dias: params.plazoDias,
@@ -602,6 +705,10 @@ export async function createVentaTransaccionalPg(
         presentacion_nombre: lr.presentacionNombre,
         presentacion_cantidad_base: lr.presentacionCantBase,
         cantidad_total_base: lr.cantidadTotalBase,
+        // Auditoría de precio (Casos 1+4): 'configurado' | 'manual' + quién lo aplicó.
+        modo_precio: precioMeta[i]?.modo ?? "configurado",
+        precio_modificado_por: precioMeta[i]?.modificadoPor ?? null,
+        precio_modificado_por_nombre: precioMeta[i]?.modificadoPorNombre ?? null,
       };
     });
     const insItems = await sb.from("ventas_items").insert(itemsRows);
