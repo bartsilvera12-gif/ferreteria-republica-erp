@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserAndEmpresa } from "@/lib/middleware/auth";
+import { getUserAndEmpresa, getAuthWithRol } from "@/lib/middleware/auth";
+import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
-import { createVentaTransaccionalPg, StockInsuficienteError } from "@/lib/ventas/server/create-venta-pg";
+import { createVentaTransaccionalPg, StockInsuficienteError, PrecioInvalidoError, NivelPrecioNoConfiguradoError } from "@/lib/ventas/server/create-venta-pg";
 import type { CreateVentaItemInput } from "@/lib/ventas/server/create-venta-pg";
 import { insertVentaPagoDetalle } from "@/lib/ventas/server/pago-detalle-pg";
 import { successResponse, errorResponse } from "@/lib/api/response";
@@ -112,6 +113,9 @@ export async function POST(request: NextRequest) {
     if (!auth) {
       return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     }
+    // Rol: solo admin/administrador/super_admin puede aplicar precio manual.
+    const authRol = await getAuthWithRol(request);
+    const esAdmin = esRolAdminEmpresaOGlobal(authRol?.rol);
 
     let body: unknown;
     try {
@@ -314,6 +318,7 @@ export async function POST(request: NextRequest) {
       cajaId: o.caja_id != null && String(o.caja_id).trim() !== "" ? String(o.caja_id) : null,
       usuarioId: auth.usuarioCatalogId ?? null,
       usuarioNombre: auth.nombre ?? auth.user?.email ?? null,
+      esAdmin,
     });
 
     // Vincular el pedido facturado con la venta creada (Caja). Trazabilidad:
@@ -493,6 +498,39 @@ export async function POST(request: NextRequest) {
     }
     if (err instanceof PedidoYaFacturadoError) {
       return NextResponse.json(errorResponse(err.message), { status: 409 });
+    }
+    // Nivel de precio (mayorista/distribuidor) sin configurar en el producto: rechazo claro.
+    if (err instanceof NivelPrecioNoConfiguradoError) {
+      const lista = err.detalle
+        .map((d) => `• ${d.producto}: no tiene precio ${d.tipo} configurado`)
+        .join("\n");
+      return NextResponse.json(
+        {
+          ...errorResponse(
+            `El producto no tiene precio ${err.detalle[0]?.tipo ?? "mayorista/distribuidor"} configurado. ` +
+            `Cargá ese precio en el producto o vendé como minorista:\n${lista}`
+          ),
+          nivel_no_configurado: err.detalle,
+        },
+        { status: 409 }
+      );
+    }
+    // Precio que no coincide con el configurado (y el usuario no es admin): rechazo claro.
+    if (err instanceof PrecioInvalidoError) {
+      const fmt = (n: number) => `Gs. ${Math.round(n).toLocaleString("es-PY")}`;
+      const lista = err.detalle
+        .map((d) => `• ${d.producto} (${d.tipo}): configurado ${fmt(d.esperado)}, enviado ${fmt(d.enviado)}`)
+        .join("\n");
+      return NextResponse.json(
+        {
+          ...errorResponse(
+            `El precio de uno o más productos cambió o no coincide con el configurado. ` +
+            `Revisá y confirmá de nuevo (solo un administrador puede aplicar un precio distinto):\n${lista}`
+          ),
+          precios_invalidos: err.detalle,
+        },
+        { status: 409 }
+      );
     }
     const msg = err instanceof Error ? err.message : "Error al crear la venta.";
     const status =
