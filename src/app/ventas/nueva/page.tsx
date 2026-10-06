@@ -741,28 +741,14 @@ export default function NuevaVentaPage() {
     if (tipo === "costo") return l.precio_venta;
     return precioNivel({ minorista: base, mayorista: l.precio_mayorista, distribuidor: l.precio_distribuidor }, tipo);
   }
-  /** Tipo automático por cantidad: mayorista al llegar a la cantidad mínima. */
-  function tipoPorCantidad(l: LineaVenta): TipoPrecioVenta {
-    const min = l.cantidad_minima_mayorista;
-    const may = l.precio_mayorista;
-    if (may != null && may > 0 && min != null && min > 0 && l.cantidad >= min) return "mayorista";
-    return "minorista";
-  }
-
   // ── Autocomplete rápido + edición inline ──────────────────────────────────
   // Recalcula subtotal/IVA/total de una línea (IVA incluido, igual que calcIva).
-  // Además aplica el precio por canal según la cantidad, salvo que el cajero
-  // haya fijado el precio/tipo a mano (precio_manual).
+  // La CANTIDAD nunca cambia el tipo ni el precio: el nivel (minorista/mayorista/
+  // distribuidor) lo elige siempre el cajero. Acá solo se recalculan los totales.
   function recomputeLinea(l: LineaVenta): LineaVenta {
-    let out = l;
-    if (!l.precio_manual) {
-      const tipo = tipoPorCantidad(l);
-      const precio = precioDeTipoLinea(l, tipo);
-      out = { ...l, tipo_precio: tipo, precio_venta: precio, precio_venta_original: precio };
-    }
-    const total_linea = out.cantidad > 0 && out.precio_venta > 0 ? out.cantidad * out.precio_venta : 0;
-    const monto_iva = calcIva(out.tipo_iva, total_linea);
-    return { ...out, total_linea, monto_iva, subtotal: total_linea - monto_iva };
+    const total_linea = l.cantidad > 0 && l.precio_venta > 0 ? l.cantidad * l.precio_venta : 0;
+    const monto_iva = calcIva(l.tipo_iva, total_linea);
+    return { ...l, total_linea, monto_iva, subtotal: total_linea - monto_iva };
   }
 
   /** Agrega un producto directo desde el autocomplete: si ya está (sin presentación)
