@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { parseCantidad, pasoCantidad, minimoCantidad, permiteDecimales } from "@/lib/productos/unidades";
+import { precioNivel, nivelConfigurado } from "@/lib/ventas/precio-nivel";
 
 export interface ProductoPickerItem {
   id: string;
@@ -74,9 +75,7 @@ function precioPorTipoPicker(
   p: ProductoPickerItem,
   tipo: "minorista" | "mayorista" | "distribuidor"
 ): number {
-  if (tipo === "mayorista") return p.precio_mayorista != null && p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
-  if (tipo === "distribuidor") return p.precio_distribuidor != null && p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
-  return p.precio_venta;
+  return precioNivel({ minorista: p.precio_venta, mayorista: p.precio_mayorista, distribuidor: p.precio_distribuidor }, tipo);
 }
 
 interface Props {
@@ -144,6 +143,11 @@ export default function ProductPickerModal({
    * - Sin override: precio = precio_tipo * cantidad_base.
    */
   function handleTipoPrecio(tipo: "minorista" | "mayorista" | "distribuidor") {
+    // No permitir elegir un nivel sin precio propio cargado (evita cobrar minorista "calladito").
+    if (sel && !nivelConfigurado({ mayorista: sel.precio_mayorista, distribuidor: sel.precio_distribuidor }, tipo)) {
+      setFeedback(`Este producto no tiene precio ${tipo} cargado.`);
+      return;
+    }
     setTipoPrecio(tipo);
     setFeedback(null);
     if (!sel) return;
@@ -508,14 +512,18 @@ export default function ProductPickerModal({
                   <div>
                     <label className="block text-[11px] uppercase text-slate-400 mb-1">Tipo de precio</label>
                     <div className="flex border border-slate-200 rounded-lg overflow-hidden">
-                      {(["minorista", "mayorista", "distribuidor"] as const).map((t) => (
+                      {(["minorista", "mayorista", "distribuidor"] as const).map((t) => {
+                        const disp = !sel || nivelConfigurado({ mayorista: sel.precio_mayorista, distribuidor: sel.precio_distribuidor }, t);
+                        return (
                         <button
                           key={t}
                           type="button"
                           onClick={() => handleTipoPrecio(t)}
+                          disabled={!disp}
+                          title={disp ? undefined : `Este producto no tiene precio ${t} cargado`}
                           className={`flex-1 py-1.5 px-1 text-center transition-colors ${
                             tipoPrecio === t ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-50"
-                          }`}
+                          } ${!disp ? "cursor-not-allowed text-slate-300 line-through hover:bg-white" : ""}`}
                         >
                           <span className="block text-xs font-medium">
                             {t === "minorista" ? "Minorista" : t === "mayorista" ? "Mayorista" : "Distribuidor"}
@@ -534,7 +542,8 @@ export default function ProductPickerModal({
                             )}
                           </span>
                         </button>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-2">

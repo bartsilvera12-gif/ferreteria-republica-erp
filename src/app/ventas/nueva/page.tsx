@@ -10,6 +10,7 @@ import { getProductos } from "@/lib/inventario/storage";
 import CrearClienteModal, { type ClienteCreado } from "@/components/clientes/CrearClienteModal";
 import { generarYAbrirRecibo } from "@/lib/recibos/client";
 import type { TipoIvaVenta, TipoVenta, MonedaVenta, LineaVenta, MetodoPago, TipoPrecioVenta } from "@/lib/ventas/types";
+import { precioNivel, nivelConfigurado } from "@/lib/ventas/precio-nivel";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
 import { productoMatchesQuery } from "@/lib/productos/token-search";
 import {
@@ -57,10 +58,8 @@ function calcIva(tipo: TipoIvaVenta, total: number) {
  *  costo     → costo_promedio.
  */
 function precioPorTipo(p: Producto, tipo: TipoPrecioVenta): number {
-  if (tipo === "mayorista") return p.precio_mayorista != null && p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
-  if (tipo === "distribuidor") return p.precio_distribuidor != null && p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
   if (tipo === "costo") return p.costo_promedio ?? 0; // histórico: ya no se ofrece en la UI
-  return p.precio_venta;
+  return precioNivel({ minorista: p.precio_venta, mayorista: p.precio_mayorista, distribuidor: p.precio_distribuidor }, tipo);
 }
 
 /** Tipos de precio ofrecidos en la UI (sin 'costo', que queda solo como histórico). */
@@ -739,9 +738,8 @@ export default function NuevaVentaPage() {
   /** Precio de la línea para un tipo, según su snapshot de precios. */
   function precioDeTipoLinea(l: LineaVenta, tipo: TipoPrecioVenta): number {
     const base = l.precio_minorista ?? l.precio_venta;
-    if (tipo === "mayorista") return l.precio_mayorista != null && l.precio_mayorista > 0 ? l.precio_mayorista : base;
-    if (tipo === "distribuidor") return l.precio_distribuidor != null && l.precio_distribuidor > 0 ? l.precio_distribuidor : base;
-    return base;
+    if (tipo === "costo") return l.precio_venta;
+    return precioNivel({ minorista: base, mayorista: l.precio_mayorista, distribuidor: l.precio_distribuidor }, tipo);
   }
   /** Tipo automático por cantidad: mayorista al llegar a la cantidad mínima. */
   function tipoPorCantidad(l: LineaVenta): TipoPrecioVenta {
@@ -1360,14 +1358,21 @@ export default function NuevaVentaPage() {
                             <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
                               {(["minorista", "mayorista", "distribuidor"] as const).map((tp) => {
                                 const sel = (item.tipo_precio ?? "minorista") === tp;
+                                const disponible = nivelConfigurado({ mayorista: item.precio_mayorista, distribuidor: item.precio_distribuidor }, tp);
                                 return (
-                                  <button key={tp} type="button" onClick={() => changeTipoPrecioItem(idx, tp)}
-                                    className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+                                  <button key={tp} type="button"
+                                    onClick={() => disponible && changeTipoPrecioItem(idx, tp)}
+                                    disabled={!disponible}
+                                    title={disponible ? undefined : `Este producto no tiene precio ${tp} cargado`}
+                                    className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-100"} ${!disponible ? "cursor-not-allowed text-slate-300 line-through hover:bg-white" : ""}`}>
                                     {tp === "minorista" ? "Min" : tp === "mayorista" ? "May" : "Dist"}
                                   </button>
                                 );
                               })}
                             </div>
+                            {(item.tipo_precio === "mayorista" || item.tipo_precio === "distribuidor") && !nivelConfigurado({ mayorista: item.precio_mayorista, distribuidor: item.precio_distribuidor }, item.tipo_precio) && (
+                              <p className="mt-1 text-[10px] font-medium text-amber-600">Sin precio {item.tipo_precio} cargado — se usa el minorista.</p>
+                            )}
                           </td>
                           {/* IVA */}
                           <td className="hidden px-3 py-2.5 md:table-cell">
