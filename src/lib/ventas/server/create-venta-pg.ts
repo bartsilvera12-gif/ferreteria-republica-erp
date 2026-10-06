@@ -5,7 +5,7 @@ import {
   mapPresentacion,
 } from "@/lib/inventario/presentaciones-server";
 import type { ProductoPresentacion } from "@/lib/inventario/presentaciones-types";
-import { precioNivel, type NivelPrecio } from "@/lib/ventas/precio-nivel";
+import { precioNivel, nivelConfigurado, type NivelPrecio } from "@/lib/ventas/precio-nivel";
 
 /**
  * IVA incluido: el precio ya contiene el IVA; se desglosa desde adentro.
@@ -27,6 +27,20 @@ export class PrecioInvalidoError extends Error {
   constructor(detalle: Array<{ producto: string; tipo: string; esperado: number; enviado: number }>) {
     super("El precio de uno o más productos no coincide con el configurado.");
     this.name = "PrecioInvalidoError";
+    this.detalle = detalle;
+  }
+}
+
+/**
+ * Se eligió mayorista/distribuidor en un producto que NO tiene ese precio
+ * configurado. NO se usa el minorista como reemplazo: se rechaza y hay que
+ * cargar el precio del nivel (o vender como minorista).
+ */
+export class NivelPrecioNoConfiguradoError extends Error {
+  detalle: Array<{ producto: string; tipo: "mayorista" | "distribuidor" }>;
+  constructor(detalle: Array<{ producto: string; tipo: "mayorista" | "distribuidor" }>) {
+    super("Un producto no tiene configurado el precio del nivel elegido.");
+    this.name = "NivelPrecioNoConfiguradoError";
     this.detalle = detalle;
   }
 }
@@ -345,28 +359,40 @@ export async function createVentaTransaccionalPg(
   // (se guarda quién y el configurado); un usuario normal NO puede → se rechaza.
   // Subtotal/IVA/total se recalculan SIEMPRE desde el precio validado.
   type PrecioMetaLinea = { modo: "configurado" | "manual"; modificadoPor: string | null; modificadoPorNombre: string | null };
+  const metaConfig: PrecioMetaLinea = { modo: "configurado", modificadoPor: null, modificadoPorNombre: null };
   const precioMeta: PrecioMetaLinea[] = [];
   const preciosInvalidos: Array<{ producto: string; tipo: string; esperado: number; enviado: number }> = [];
+  const nivelFaltante: Array<{ producto: string; tipo: "mayorista" | "distribuidor" }> = [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
     const lr = lineResolved[i];
     const pm = precioMap.get(it.producto_id);
     const enviado = Math.round(Number(it.precio_venta) || 0);
-    if (!pm) { precioMeta.push({ modo: "configurado", modificadoPor: null, modificadoPorNombre: null }); continue; }
+    if (!pm) { precioMeta.push({ ...metaConfig }); continue; }
     if (it.tipo_precio === "costo") {
       // 'costo' ya no se ofrece: no se permite vender al costo desde acá.
       preciosInvalidos.push({ producto: it.producto_nombre, tipo: "costo", esperado: 0, enviado });
-      precioMeta.push({ modo: "configurado", modificadoPor: null, modificadoPorNombre: null });
+      precioMeta.push({ ...metaConfig });
       continue;
     }
     const tipo = it.tipo_precio as NivelPrecio;
+    // Una presentación con override fija el precio (independiente del nivel).
+    const usaOverride = lr.presExplicita && lr.presOverride != null;
+    // Si se eligió mayorista/distribuidor y ese nivel NO tiene precio propio
+    // configurado, se RECHAZA (no se usa el minorista como reemplazo). El override
+    // de presentación sí es un precio válido por sí mismo.
+    if (!usaOverride && (tipo === "mayorista" || tipo === "distribuidor") && !nivelConfigurado(pm, tipo)) {
+      nivelFaltante.push({ producto: it.producto_nombre, tipo });
+      precioMeta.push({ ...metaConfig });
+      continue; // se rechaza abajo
+    }
     // Precio configurado POR PRESENTACIÓN:
     //  - presentación explícita con override → el override (fijo).
     //  - presentación explícita sin override → precioNivel × cantidad_base.
     //  - sin presentación explícita (carga rápida) → precioNivel (por unidad).
-    const esperado = lr.presExplicita
-      ? (lr.presOverride != null ? Math.round(lr.presOverride) : Math.round(precioNivel(pm, tipo) * lr.presentacionCantBase))
-      : Math.round(precioNivel(pm, tipo));
+    const esperado = usaOverride
+      ? Math.round(lr.presOverride as number)
+      : (lr.presExplicita ? Math.round(precioNivel(pm, tipo) * lr.presentacionCantBase) : Math.round(precioNivel(pm, tipo)));
     const difiere = Math.abs(enviado - esperado) > 1; // 1 Gs de tolerancia por redondeo
     let aplicado = esperado;
     let meta: PrecioMetaLinea = { modo: "configurado", modificadoPor: null, modificadoPorNombre: null };
@@ -389,6 +415,7 @@ export async function createVentaTransaccionalPg(
     it.subtotal = totalLinea - montoIva;
     precioMeta.push(meta);
   }
+  if (nivelFaltante.length > 0) throw new NivelPrecioNoConfiguradoError(nivelFaltante);
   if (preciosInvalidos.length > 0) throw new PrecioInvalidoError(preciosInvalidos);
 
   // Totales server-side desde el precio validado (fuente de verdad del header).
