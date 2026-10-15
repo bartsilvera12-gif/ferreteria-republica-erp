@@ -5,7 +5,7 @@ import {
   mapPresentacion,
 } from "@/lib/inventario/presentaciones-server";
 import type { ProductoPresentacion } from "@/lib/inventario/presentaciones-types";
-import { precioNivel, nivelConfigurado, type NivelPrecio } from "@/lib/ventas/precio-nivel";
+import { precioNivel, nivelConfigurado, precioPresentacionNivel, type NivelPrecio } from "@/lib/ventas/precio-nivel";
 
 /**
  * IVA incluido: el precio ya contiene el IVA; se desglosa desde adentro.
@@ -245,8 +245,10 @@ export async function createVentaTransaccionalPg(
     cantidadTotalBase: number;
     /** true si la línea trajo una presentación explícita (no la default). */
     presExplicita: boolean;
-    /** Precio override de la presentación (fijo, por presentación) o null. */
-    presOverride: number | null;
+    /** Precios por nivel de la presentación (null = no cargado en la presentación). */
+    presMinorista: number | null;
+    presMayorista: number | null;
+    presDistribuidor: number | null;
   };
   const lineResolved: LineResolved[] = items.map((it) => {
     let pres: ProductoPresentacion | null = null;
@@ -272,14 +274,16 @@ export async function createVentaTransaccionalPg(
     }
     // Compat legacy: producto sin ninguna presentacion (no deberia pasar).
     const cantBase = pres ? pres.cantidad_base : 1;
-    const override = pres && pres.precio_venta != null && Number(pres.precio_venta) > 0 ? Number(pres.precio_venta) : null;
+    const posv = (v: number | null | undefined) => (v != null && Number(v) > 0 ? Number(v) : null);
     return {
       presentacionId: pres ? pres.id : null,
       presentacionNombre: pres ? pres.nombre : null,
       presentacionCantBase: cantBase,
       cantidadTotalBase: it.cantidad * cantBase,
       presExplicita: !!it.presentacion_id,
-      presOverride: override,
+      presMinorista: pres ? posv(pres.precio_venta) : null,
+      presMayorista: pres ? posv(pres.precio_mayorista) : null,
+      presDistribuidor: pres ? posv(pres.precio_distribuidor) : null,
     };
   });
 
@@ -376,23 +380,33 @@ export async function createVentaTransaccionalPg(
       continue;
     }
     const tipo = it.tipo_precio as NivelPrecio;
-    // Una presentación con override fija el precio (independiente del nivel).
-    const usaOverride = lr.presExplicita && lr.presOverride != null;
-    // Si se eligió mayorista/distribuidor y ese nivel NO tiene precio propio
-    // configurado, se RECHAZA (no se usa el minorista como reemplazo). El override
-    // de presentación sí es un precio válido por sí mismo.
-    if (!usaOverride && (tipo === "mayorista" || tipo === "distribuidor") && !nivelConfigurado(pm, tipo)) {
-      nivelFaltante.push({ producto: it.producto_nombre, tipo });
-      precioMeta.push({ ...metaConfig });
-      continue; // se rechaza abajo
+    // Precio CONFIGURADO de la línea (opción C):
+    //  - con presentación explícita → precio de la presentación para el nivel; si
+    //    no está cargado, precio del producto para el nivel × cantidad_base;
+    //  - sin presentación explícita (carga rápida) → precio del producto por unidad.
+    // mayorista/distribuidor sin precio (ni en presentación ni en producto) → se
+    // RECHAZA (no se usa el minorista como reemplazo).
+    let esperado: number;
+    if (lr.presExplicita) {
+      const r = precioPresentacionNivel(
+        pm,
+        { cantidad_base: lr.presentacionCantBase, minorista: lr.presMinorista, mayorista: lr.presMayorista, distribuidor: lr.presDistribuidor },
+        tipo
+      );
+      if (!r.configurado) {
+        nivelFaltante.push({ producto: it.producto_nombre, tipo: tipo as "mayorista" | "distribuidor" });
+        precioMeta.push({ ...metaConfig });
+        continue; // se rechaza abajo
+      }
+      esperado = r.precio;
+    } else {
+      if ((tipo === "mayorista" || tipo === "distribuidor") && !nivelConfigurado(pm, tipo)) {
+        nivelFaltante.push({ producto: it.producto_nombre, tipo });
+        precioMeta.push({ ...metaConfig });
+        continue; // se rechaza abajo
+      }
+      esperado = Math.round(precioNivel(pm, tipo));
     }
-    // Precio configurado POR PRESENTACIÓN:
-    //  - presentación explícita con override → el override (fijo).
-    //  - presentación explícita sin override → precioNivel × cantidad_base.
-    //  - sin presentación explícita (carga rápida) → precioNivel (por unidad).
-    const esperado = usaOverride
-      ? Math.round(lr.presOverride as number)
-      : (lr.presExplicita ? Math.round(precioNivel(pm, tipo) * lr.presentacionCantBase) : Math.round(precioNivel(pm, tipo)));
     const difiere = Math.abs(enviado - esperado) > 1; // 1 Gs de tolerancia por redondeo
     let aplicado = esperado;
     let meta: PrecioMetaLinea = { modo: "configurado", modificadoPor: null, modificadoPorNombre: null };
