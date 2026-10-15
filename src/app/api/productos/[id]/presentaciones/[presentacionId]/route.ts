@@ -35,6 +35,8 @@ export async function PATCH(
       nombre: string;
       cantidad_base: number;
       precio_venta: number | null;
+      precio_mayorista: number | null;
+      precio_distribuidor: number | null;
       es_default: boolean;
       activo: boolean;
     }> | null;
@@ -53,10 +55,12 @@ export async function PATCH(
     const existente = mapPresentacion(current.data as Record<string, unknown>);
 
     // Validar solo los campos enviados.
-    const valInput: Partial<{ nombre: string; cantidad_base: number; precio_venta: number | null }> = {};
+    const valInput: Partial<{ nombre: string; cantidad_base: number; precio_venta: number | null; precio_mayorista: number | null; precio_distribuidor: number | null }> = {};
     if (body.nombre !== undefined) valInput.nombre = body.nombre;
     if (body.cantidad_base !== undefined) valInput.cantidad_base = body.cantidad_base;
     if (body.precio_venta !== undefined) valInput.precio_venta = body.precio_venta;
+    if (body.precio_mayorista !== undefined) valInput.precio_mayorista = body.precio_mayorista;
+    if (body.precio_distribuidor !== undefined) valInput.precio_distribuidor = body.precio_distribuidor;
     // Si no se manda nombre/cantidad nuevos, usar los actuales para la validacion.
     valInput.nombre = valInput.nombre ?? existente.nombre;
     valInput.cantidad_base = valInput.cantidad_base ?? existente.cantidad_base;
@@ -69,6 +73,8 @@ export async function PATCH(
     if (body.nombre !== undefined) patch.nombre = String(body.nombre).trim();
     if (body.cantidad_base !== undefined) patch.cantidad_base = Number(body.cantidad_base);
     if (body.precio_venta !== undefined) patch.precio_venta = body.precio_venta == null ? null : Number(body.precio_venta);
+    if (body.precio_mayorista !== undefined) patch.precio_mayorista = body.precio_mayorista == null ? null : Number(body.precio_mayorista);
+    if (body.precio_distribuidor !== undefined) patch.precio_distribuidor = body.precio_distribuidor == null ? null : Number(body.precio_distribuidor);
     // es_default y activo se manejan abajo con cuidado especial.
 
     // Caso: intentan desactivar la default. Solo permitir si hay OTRA default

@@ -8,7 +8,7 @@ import type {
 } from "./presentaciones-types";
 
 export const PRESENTACION_COLS =
-  "id, empresa_id, producto_id, nombre, cantidad_base, precio_venta, es_default, activo, created_at, updated_at";
+  "id, empresa_id, producto_id, nombre, cantidad_base, precio_venta, precio_mayorista, precio_distribuidor, es_default, activo, created_at, updated_at";
 
 function num(v: unknown): number {
   const n = typeof v === "number" ? v : Number(v ?? 0);
@@ -28,6 +28,8 @@ export function mapPresentacion(r: Record<string, unknown>): ProductoPresentacio
     nombre: String(r.nombre ?? ""),
     cantidad_base: num(r.cantidad_base),
     precio_venta: numOrNull(r.precio_venta),
+    precio_mayorista: numOrNull(r.precio_mayorista),
+    precio_distribuidor: numOrNull(r.precio_distribuidor),
     es_default: r.es_default === true,
     activo: r.activo === true,
     created_at: String(r.created_at ?? ""),
@@ -154,10 +156,15 @@ export function validatePresentacionInput(
   if (!Number.isFinite(cb) || cb <= 0) {
     return "La cantidad base debe ser mayor a 0.";
   }
-  if (input.precio_venta != null) {
-    const pv = Number(input.precio_venta);
-    if (!Number.isFinite(pv) || pv < 0) {
-      return "El precio debe ser >= 0.";
+  for (const [campo, label] of [
+    ["precio_venta", "minorista"],
+    ["precio_mayorista", "mayorista"],
+    ["precio_distribuidor", "distribuidor"],
+  ] as const) {
+    const v = (input as Record<string, unknown>)[campo];
+    if (v != null) {
+      const pv = Number(v);
+      if (!Number.isFinite(pv) || pv < 0) return `El precio ${label} debe ser >= 0.`;
     }
   }
   return null;

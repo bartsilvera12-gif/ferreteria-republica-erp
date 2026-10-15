@@ -71,6 +71,8 @@ export async function POST(
       nombre: string;
       cantidad_base: number;
       precio_venta: number | null;
+      precio_mayorista: number | null;
+      precio_distribuidor: number | null;
       es_default: boolean;
       activo: boolean;
     }> | null;
@@ -82,6 +84,8 @@ export async function POST(
     const nombre = (body.nombre ?? "").trim();
     const cantidadBase = Number(body.cantidad_base);
     const precioVenta = body.precio_venta == null ? null : Number(body.precio_venta);
+    const precioMayorista = body.precio_mayorista == null ? null : Number(body.precio_mayorista);
+    const precioDistribuidor = body.precio_distribuidor == null ? null : Number(body.precio_distribuidor);
     const esDefaultRequested = body.es_default === true;
     const activo = body.activo !== false;
 
@@ -93,6 +97,8 @@ export async function POST(
         nombre,
         cantidad_base: cantidadBase,
         precio_venta: precioVenta,
+        precio_mayorista: precioMayorista,
+        precio_distribuidor: precioDistribuidor,
         es_default: false, // se setea despues con setAsDefault si corresponde (evita race con indice unique parcial)
         activo,
       })

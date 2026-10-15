@@ -31,6 +31,8 @@ interface Presentacion {
   nombre: string;
   cantidad_base: number;
   precio_venta: number | null;
+  precio_mayorista: number | null;
+  precio_distribuidor: number | null;
   es_default: boolean;
   activo: boolean;
 }
@@ -61,6 +63,8 @@ export default function PresentacionesEditor({
   const [fNombre, setFNombre] = useState("");
   const [fCantBase, setFCantBase] = useState("");
   const [fPrecio, setFPrecio] = useState("");
+  const [fMayorista, setFMayorista] = useState("");
+  const [fDistribuidor, setFDistribuidor] = useState("");
   const [fEsDefault, setFEsDefault] = useState(false);
   const [fActivo, setFActivo] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -93,6 +97,8 @@ export default function PresentacionesEditor({
     setFNombre("");
     setFCantBase("");
     setFPrecio("");
+    setFMayorista("");
+    setFDistribuidor("");
     setFEsDefault(items.length === 0);
     setFActivo(true);
     setFError(null);
@@ -103,6 +109,8 @@ export default function PresentacionesEditor({
     setFNombre(p.nombre);
     setFCantBase(String(p.cantidad_base));
     setFPrecio(p.precio_venta != null ? String(p.precio_venta) : "");
+    setFMayorista(p.precio_mayorista != null ? String(p.precio_mayorista) : "");
+    setFDistribuidor(p.precio_distribuidor != null ? String(p.precio_distribuidor) : "");
     setFEsDefault(p.es_default);
     setFActivo(p.activo);
     setFError(null);
@@ -122,6 +130,8 @@ export default function PresentacionesEditor({
         nombre: fNombre.trim(),
         cantidad_base: Number(fCantBase),
         precio_venta: fPrecio.trim() === "" ? null : Number(fPrecio),
+        precio_mayorista: fMayorista.trim() === "" ? null : Number(fMayorista),
+        precio_distribuidor: fDistribuidor.trim() === "" ? null : Number(fDistribuidor),
         es_default: fEsDefault,
         activo: fActivo,
       };
@@ -402,7 +412,7 @@ export default function PresentacionesEditor({
 
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
-                  Precio (opcional)
+                  Precio minorista (opcional)
                 </label>
                 <input
                   type="number"
@@ -415,10 +425,39 @@ export default function PresentacionesEditor({
                   }
                   className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                 />
-                <p className="text-[11px] text-slate-500 mt-1">
-                  Si dejás vacío, la caja usará el precio sugerido (precio base × equivalencia).
-                </p>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Precio mayorista (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={fMayorista}
+                    onChange={(e) => setFMayorista(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5 uppercase tracking-wide">
+                    Precio distribuidor (opcional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={fDistribuidor}
+                    onChange={(e) => setFDistribuidor(e.target.value)}
+                    className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:ring-2 focus:ring-sky-500 focus:border-transparent"
+                  />
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-500 -mt-1">
+                Cada precio es por esta presentación (ej. por caja). Si dejás un nivel vacío, se usa el precio del producto para ese nivel × equivalencia.
+              </p>
 
               <div className="flex flex-col gap-2 pt-2 border-t border-slate-100">
                 <label className="flex items-center gap-2 text-sm text-slate-700 cursor-pointer">

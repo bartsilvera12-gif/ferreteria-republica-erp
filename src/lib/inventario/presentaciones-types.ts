@@ -17,8 +17,14 @@ export interface ProductoPresentacion {
   producto_id: string;
   nombre: string;
   cantidad_base: number;
-  /** Override opcional. Si null, la UI computa precio_venta * cantidad_base. */
+  /** Precio MINORISTA de la presentación (override). Si null, se computa
+   *  precio_venta del producto * cantidad_base. */
   precio_venta: number | null;
+  /** Precio MAYORISTA de la presentación. Si null, se computa precio_mayorista
+   *  del producto * cantidad_base (y si el producto tampoco lo tiene, se bloquea). */
+  precio_mayorista: number | null;
+  /** Precio DISTRIBUIDOR de la presentación. Mismo criterio que mayorista. */
+  precio_distribuidor: number | null;
   es_default: boolean;
   activo: boolean;
   created_at: string;
@@ -30,6 +36,8 @@ export interface ProductoPresentacionInput {
   nombre: string;
   cantidad_base: number;
   precio_venta: number | null;
+  precio_mayorista?: number | null;
+  precio_distribuidor?: number | null;
   es_default?: boolean;
   activo?: boolean;
 }

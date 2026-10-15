@@ -35,12 +35,15 @@ import CantidadInput from "@/components/ui/CantidadInput";
 import type { Cliente } from "@/lib/clientes/types";
 import ClienteBuscadorServer from "@/components/clientes/ClienteBuscadorServer";
 import CrearClienteModal from "@/components/clientes/CrearClienteModal";
+import { precioNivel, precioPresentacionNivel } from "@/lib/ventas/precio-nivel";
 
 type PresentacionLite = {
   id: string;
   nombre: string;
   cantidad_base: number;
   precio_venta: number | null;
+  precio_mayorista: number | null;
+  precio_distribuidor: number | null;
   es_default: boolean;
   activo: boolean;
 };
@@ -87,24 +90,27 @@ function fmtGs(v: number) {
   return `Gs. ${Math.round(v || 0).toLocaleString("es-PY")}`;
 }
 
-function precioPorTipoBase(
-  p: { precio_venta: number; precio_mayorista: number; precio_distribuidor: number },
-  tipo: "minorista" | "mayorista" | "distribuidor"
-) {
-  if (tipo === "mayorista") return p.precio_mayorista > 0 ? p.precio_mayorista : p.precio_venta;
-  if (tipo === "distribuidor") return p.precio_distribuidor > 0 ? p.precio_distribuidor : p.precio_venta;
-  return p.precio_venta;
+function prodYPresDeItem(it: CartItem) {
+  const prod = { minorista: it.precio_minorista, mayorista: it.precio_mayorista, distribuidor: it.precio_distribuidor };
+  const pres = it.presentaciones.find((p) => p.id === it.presentacion_id) ?? null;
+  return { prod, pres };
 }
 
-/** Precio efectivo de un ítem para un tipo (base por canal × cantidad_base). */
+/** ¿El nivel está configurado (en la presentación o en el producto)? */
+function nivelDisponibleItem(it: CartItem, tipo: "minorista" | "mayorista" | "distribuidor"): boolean {
+  const { prod, pres } = prodYPresDeItem(it);
+  if (!pres) return tipo === "minorista" ? true : (tipo === "mayorista" ? prod.mayorista > 0 : prod.distribuidor > 0);
+  return precioPresentacionNivel(prod, { cantidad_base: pres.cantidad_base, minorista: pres.precio_venta, mayorista: pres.precio_mayorista, distribuidor: pres.precio_distribuidor }, tipo).configurado;
+}
+
+/** Precio efectivo de un ítem para un tipo (presentación + nivel, opción C). */
 function precioEfectivoItem(it: CartItem, tipo: "minorista" | "mayorista" | "distribuidor"): number {
-  const base = precioPorTipoBase(
-    { precio_venta: it.precio_minorista, precio_mayorista: it.precio_mayorista, precio_distribuidor: it.precio_distribuidor },
-    tipo
-  );
-  const cantBase = it.presentacion_cantidad_base ?? 1;
-  const pres = it.presentaciones.find((p) => p.id === it.presentacion_id);
-  return Math.round(pres && pres.precio_venta != null && pres.precio_venta > 0 ? pres.precio_venta : base * cantBase);
+  const { prod, pres } = prodYPresDeItem(it);
+  if (!pres) return Math.round(precioNivel(prod, tipo));
+  const presArg = { cantidad_base: pres.cantidad_base, minorista: pres.precio_venta, mayorista: pres.precio_mayorista, distribuidor: pres.precio_distribuidor };
+  const r = precioPresentacionNivel(prod, presArg, tipo);
+  if (r.configurado) return r.precio;
+  return precioPresentacionNivel(prod, presArg, "minorista").precio;
 }
 
 /** Aplica el precio por canal según la cantidad (mayorista al llegar al mínimo),
@@ -394,6 +400,7 @@ export default function EditarPedidoPage({
   function changeTipoPrecio(id: string, tipo: "minorista" | "mayorista" | "distribuidor") {
     const it = cart.find((x) => x.producto_id === id);
     if (!it) return;
+    if (!nivelDisponibleItem(it, tipo)) return;
     // Elegir el tipo a mano fija el precio: no se auto-cambia por cantidad.
     updateCart(id, { tipo_precio: tipo, precio_venta: precioEfectivoItem(it, tipo), precio_manual: true });
   }
@@ -402,23 +409,19 @@ export default function EditarPedidoPage({
     if (!it) return;
     const pres = it.presentaciones.find((p) => p.id === presentacionId);
     if (!pres) return;
-    const base = precioPorTipoBase(
-      {
-        precio_venta: it.precio_minorista,
-        precio_mayorista: it.precio_mayorista,
-        precio_distribuidor: it.precio_distribuidor,
-      },
-      it.tipo_precio
-    );
-    const efectivo =
-      pres.precio_venta != null && pres.precio_venta > 0
-        ? pres.precio_venta
-        : base * pres.cantidad_base;
+    const itNuevo: CartItem = {
+      ...it,
+      presentacion_id: pres.id,
+      presentacion_nombre: pres.nombre,
+      presentacion_cantidad_base: pres.cantidad_base,
+    };
+    const tipo = nivelDisponibleItem(itNuevo, it.tipo_precio) ? it.tipo_precio : "minorista";
     updateCart(id, {
       presentacion_id: pres.id,
       presentacion_nombre: pres.nombre,
       presentacion_cantidad_base: pres.cantidad_base,
-      precio_venta: Math.round(efectivo),
+      tipo_precio: tipo,
+      precio_venta: precioEfectivoItem(itNuevo, tipo),
     });
   }
 
@@ -695,9 +698,12 @@ export default function EditarPedidoPage({
                         <div className="inline-flex overflow-hidden rounded-lg border border-slate-200">
                           {(["minorista", "mayorista", "distribuidor"] as const).map((t) => {
                             const sel = it.tipo_precio === t;
+                            const disp = nivelDisponibleItem(it, t);
                             return (
-                              <button key={t} type="button" onClick={() => changeTipoPrecio(it.producto_id, t)}
-                                className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#4FAEB2] text-white" : "bg-white text-slate-600 hover:bg-slate-100"}`}>
+                              <button key={t} type="button" onClick={() => disp && changeTipoPrecio(it.producto_id, t)}
+                                disabled={!disp}
+                                title={disp ? undefined : `Sin precio ${t} en esta presentación ni en el producto`}
+                                className={`px-2 py-1.5 text-[11px] font-semibold transition-colors ${sel ? "bg-[#4FAEB2] text-white" : "bg-white text-slate-600 hover:bg-slate-100"} ${!disp ? "cursor-not-allowed text-slate-300 line-through hover:bg-white" : ""}`}>
                                 {t === "minorista" ? "Min" : t === "mayorista" ? "May" : "Dist"}
                               </button>
                             );

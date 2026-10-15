@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { parseCantidad, pasoCantidad, minimoCantidad, permiteDecimales } from "@/lib/productos/unidades";
-import { precioNivel, nivelConfigurado } from "@/lib/ventas/precio-nivel";
+import { precioNivel, nivelConfigurado, precioPresentacionNivel } from "@/lib/ventas/precio-nivel";
 
 export interface ProductoPickerItem {
   id: string;
@@ -61,21 +61,43 @@ interface PresentacionLite {
   nombre: string;
   cantidad_base: number;
   precio_venta: number | null;
+  precio_mayorista: number | null;
+  precio_distribuidor: number | null;
   es_default: boolean;
   activo: boolean;
 }
 
-/**
- * Precio unitario (en PYG) según el tipo elegido, con fallbacks:
- *  minorista → precio_venta;
- *  mayorista    → precio_mayorista (>0) o fallback a precio_venta;
- *  distribuidor → precio_distribuidor (>0) o fallback a precio_venta.
- */
-function precioPorTipoPicker(
-  p: ProductoPickerItem,
-  tipo: "minorista" | "mayorista" | "distribuidor"
-): number {
+type NivelTipo = "minorista" | "mayorista" | "distribuidor";
+
+/** Precio unitario (por unidad) del producto para un nivel. */
+function precioPorTipoPicker(p: ProductoPickerItem, tipo: NivelTipo): number {
   return precioNivel({ minorista: p.precio_venta, mayorista: p.precio_mayorista, distribuidor: p.precio_distribuidor }, tipo);
+}
+
+/**
+ * Precio de la línea con PRESENTACIÓN + nivel (opción C):
+ *  - si la presentación tiene cargado ese nivel → ese precio;
+ *  - si no → precio del producto para el nivel × cantidad_base;
+ *  - minorista siempre configurado; mayorista/distribuidor sin precio en
+ *    presentación NI producto → `configurado=false` (nivel deshabilitado).
+ * Sin presentación (`pres` null) cae al precio por unidad del producto.
+ */
+function precioPickerConPresentacion(
+  p: ProductoPickerItem,
+  pres: PresentacionLite | null,
+  tipo: NivelTipo
+): { precio: number; configurado: boolean } {
+  const prod = { minorista: p.precio_venta, mayorista: p.precio_mayorista, distribuidor: p.precio_distribuidor };
+  if (!pres) {
+    const conf = nivelConfigurado(prod, tipo);
+    return { precio: conf ? precioNivel(prod, tipo) : 0, configurado: conf };
+  }
+  return precioPresentacionNivel(prod, {
+    cantidad_base: pres.cantidad_base,
+    minorista: pres.precio_venta,
+    mayorista: pres.precio_mayorista,
+    distribuidor: pres.precio_distribuidor,
+  }, tipo);
 }
 
 interface Props {
@@ -143,20 +165,17 @@ export default function ProductPickerModal({
    * - Sin override: precio = precio_tipo * cantidad_base.
    */
   function handleTipoPrecio(tipo: "minorista" | "mayorista" | "distribuidor") {
-    // No permitir elegir un nivel sin precio propio cargado (evita cobrar minorista "calladito").
-    if (sel && !nivelConfigurado({ mayorista: sel.precio_mayorista, distribuidor: sel.precio_distribuidor }, tipo)) {
-      setFeedback(`Este producto no tiene precio ${tipo} cargado.`);
+    if (!sel) { setTipoPrecio(tipo); return; }
+    // Precio por PRESENTACIÓN + nivel: toma el de la presentación si está cargado,
+    // si no el del producto × cantidad_base. mayorista/distribuidor sin precio → no se permite.
+    const r = precioPickerConPresentacion(sel, presSel, tipo);
+    if (!r.configurado) {
+      setFeedback(`Este producto/presentación no tiene precio ${tipo} cargado.`);
       return;
     }
     setTipoPrecio(tipo);
     setFeedback(null);
-    if (!sel) return;
-    if (presSel && presSel.precio_venta != null && presSel.precio_venta > 0) {
-      // Override sticky.
-      return;
-    }
-    const cantBase = presSel ? presSel.cantidad_base : 1;
-    setPrecio(precioEnMonedaStr(precioPorTipoPicker(sel, tipo) * cantBase));
+    setPrecio(precioEnMonedaStr(r.precio));
   }
 
   useEffect(() => { if (open) { setQ(""); setError(null); setSel(null); setTimeout(() => inputRef.current?.focus(), 50); } }, [open]);
@@ -217,11 +236,9 @@ export default function ProductPickerModal({
         const def = activos.find((pp) => pp.es_default) ?? activos[0] ?? null;
         if (def) {
           setPresentacionId(def.id);
-          // Si la presentacion default tiene override de precio, lo usamos como
-          // inicial (en minorista). Sino dejamos el precio_venta del producto.
-          if (def.precio_venta != null && def.precio_venta > 0) {
-            setPrecio(precioEnMonedaStr(def.precio_venta));
-          }
+          // Precio inicial minorista de la presentación default (override o producto × base).
+          const r = precioPickerConPresentacion(p, def, "minorista");
+          if (r.configurado) setPrecio(precioEnMonedaStr(r.precio));
         }
       } catch {
         // best-effort: si falla, el flujo legacy sigue funcionando (sin
@@ -236,12 +253,12 @@ export default function ProductPickerModal({
     setFeedback(null);
     const pp = presentaciones.find((x) => x.id === id);
     if (!pp || !sel) return;
-    // Precio sugerido: override de presentacion > precio_base * cantidad_base.
-    const sugerido =
-      pp.precio_venta != null && pp.precio_venta > 0
-        ? pp.precio_venta
-        : Math.round(precioPorTipoPicker(sel, tipoPrecio) * pp.cantidad_base);
-    setPrecio(precioEnMonedaStr(sugerido));
+    // Recalcular con el nivel actual; si esta presentación no tiene ese nivel
+    // (ni el producto), caer a minorista para no quedar sin precio.
+    let tipo = tipoPrecio;
+    let r = precioPickerConPresentacion(sel, pp, tipo);
+    if (!r.configurado) { tipo = "minorista"; setTipoPrecio("minorista"); r = precioPickerConPresentacion(sel, pp, "minorista"); }
+    setPrecio(precioEnMonedaStr(r.precio));
   }
 
   function handleAgregar() {
@@ -513,14 +530,16 @@ export default function ProductPickerModal({
                     <label className="block text-[11px] uppercase text-slate-400 mb-1">Tipo de precio</label>
                     <div className="flex border border-slate-200 rounded-lg overflow-hidden">
                       {(["minorista", "mayorista", "distribuidor"] as const).map((t) => {
-                        const disp = !sel || nivelConfigurado({ mayorista: sel.precio_mayorista, distribuidor: sel.precio_distribuidor }, t);
+                        // Precio y disponibilidad POR PRESENTACIÓN + nivel.
+                        const r = sel ? precioPickerConPresentacion(sel, presSel, t) : { precio: 0, configurado: true };
+                        const disp = !sel || r.configurado;
                         return (
                         <button
                           key={t}
                           type="button"
                           onClick={() => handleTipoPrecio(t)}
                           disabled={!disp}
-                          title={disp ? undefined : `Este producto no tiene precio ${t} cargado`}
+                          title={disp ? undefined : `Sin precio ${t} en esta presentación ni en el producto`}
                           className={`flex-1 py-1.5 px-1 text-center transition-colors ${
                             tipoPrecio === t ? "bg-[#0EA5E9] text-white" : "bg-white text-slate-600 hover:bg-slate-50"
                           } ${!disp ? "cursor-not-allowed text-slate-300 line-through hover:bg-white" : ""}`}
@@ -529,17 +548,8 @@ export default function ProductPickerModal({
                             {t === "minorista" ? "Minorista" : t === "mayorista" ? "Mayorista" : "Distribuidor"}
                           </span>
                           <span className={`block text-[10px] tabular-nums ${tipoPrecio === t ? "text-white/90" : "text-slate-400"}`}>
-                            {/* El precio mostrado en cada boton es el de la
-                                presentacion actual (precio_tipo * cantidad_base),
-                                no el precio base del producto. Asi 'Mayorista'
-                                en una Caja=200 muestra Gs.8.000.000 (40k*200) en
-                                lugar de Gs.40.000 (base). Si la presentacion
-                                tiene override, mostramos el override fijo. */}
-                            {formatGs(
-                              presSel && presSel.precio_venta != null && presSel.precio_venta > 0
-                                ? presSel.precio_venta
-                                : precioPorTipoPicker(sel, t) * (presSel ? presSel.cantidad_base : 1)
-                            )}
+                            {/* Precio de la presentación para el nivel (o producto × cantidad_base). */}
+                            {disp ? formatGs(r.precio) : "—"}
                           </span>
                         </button>
                         );
