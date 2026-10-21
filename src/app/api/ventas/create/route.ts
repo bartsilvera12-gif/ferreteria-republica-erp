@@ -396,10 +396,25 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Detalle de cobro (conciliación) — best-effort, FUERA de la transacción de
-    // venta. Si falla, la venta queda igual (no se rompe ni se afectan recetas).
+    // Detalle de cobro (conciliación) — FUERA de la transacción de venta. Si
+    // falla, la venta queda igual (no se rompe ni se afectan recetas).
     // Con saldo a favor son DOS filas: el saldo aplicado y el resto por el medio
     // elegido. La suma sigue siendo el total de la venta.
+    //
+    // Blindaje: cada fila del detalle se inserta POR SEPARADO. Si una falla
+    // (p.ej. la de transferencia), NO tumba a las demás ni queda en silencio: se
+    // loguea y se reporta en `pago_detalle_warning` de la respuesta.
+    const pagoDetalleFallos: string[] = [];
+    /** Inserta una fila del detalle de cobro de forma aislada (una falla no corta el resto). */
+    const insertarDetalle = async (label: string, d: Parameters<typeof insertVentaPagoDetalle>[3]) => {
+      try {
+        await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, d);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        pagoDetalleFallos.push(`${label} (${Math.round(d.monto).toLocaleString("es-PY")}): ${msg}`);
+        console.error(`[ventas/create] pago_detalle "${label}" NO se guardó (venta ${numeroControl}):`, msg);
+      }
+    };
     try {
       // Ventas a CRÉDITO: no se cobra nada en el momento (la cobranza se hace
       // después por el módulo de créditos). No se registra detalle de cobro para
@@ -413,7 +428,7 @@ export async function POST(request: NextRequest) {
         return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
       })();
       if (saldoUsado > 0) {
-        await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+        await insertarDetalle("saldo a favor", {
           metodo_pago: "saldo_favor",
           entidad_bancaria_id: null,
           entidad_nombre_snapshot: null,
@@ -426,8 +441,10 @@ export async function POST(request: NextRequest) {
       }
       if (pagosMixtos.length > 0) {
         // Cobro mixto: una fila por medio de pago. La suma (+ saldo) es el total.
+        // Cada fila se guarda aislada: si falla (p.ej. transferencia), las demás
+        // igual se registran y el fallo se reporta.
         for (const p of pagosMixtos) {
-          await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+          await insertarDetalle(`mixto ${p.metodo_pago}`, {
             metodo_pago: p.metodo_pago,
             entidad_bancaria_id: p.entidad_bancaria_id,
             entidad_nombre_snapshot: p.entidad_nombre_snapshot,
@@ -444,7 +461,7 @@ export async function POST(request: NextRequest) {
           // Monto: el que ingresó el cajero en el modal (transferencia/tarjeta) si
           // es válido; si no, el resto calculado (total − saldo).
           const montoIngresado = pd?.monto != null && Number(pd.monto) > 0 ? Math.round(Number(pd.monto) * 100) / 100 : null;
-          await insertVentaPagoDetalle(schema, auth.empresa_id, ventaId, {
+          await insertarDetalle(metodoPagoBase, {
             metodo_pago: metodoPagoBase,
             entidad_bancaria_id: pd?.entidad_bancaria_id ? String(pd.entidad_bancaria_id) : null,
             entidad_nombre_snapshot: str(pd?.entidad_nombre_snapshot),
@@ -458,7 +475,7 @@ export async function POST(request: NextRequest) {
       }
       }
     } catch (e) {
-      console.error("[ventas/create] pago_detalle best-effort fallo (venta OK):", e instanceof Error ? e.message : e);
+      console.error("[ventas/create] pago_detalle fallo inesperado (venta OK):", e instanceof Error ? e.message : e);
     }
 
     let sub = 0;
@@ -486,7 +503,12 @@ export async function POST(request: NextRequest) {
       nota_remision_numero: notaRemisionNumero,
     });
 
-    return NextResponse.json(successResponse({ venta, nota_remision_numero: notaRemisionNumero }));
+    // Aviso no bloqueante: si alguna parte del cobro no se pudo registrar en el
+    // detalle (p.ej. transferencia), la venta igual quedó, pero se avisa.
+    const pagoDetalleWarning = pagoDetalleFallos.length > 0
+      ? `La venta se registró, pero no se pudo guardar el detalle de: ${pagoDetalleFallos.join("; ")}. Revisá/registrá ese cobro manualmente.`
+      : null;
+    return NextResponse.json(successResponse({ venta, nota_remision_numero: notaRemisionNumero, pago_detalle_warning: pagoDetalleWarning }));
   } catch (err) {
     // Falta de stock sin autorizar: 409 con el detalle de faltantes para que la UI
     // muestre el modal de confirmación y reintente con permitir_sin_stock=true.

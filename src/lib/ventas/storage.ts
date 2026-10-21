@@ -15,7 +15,7 @@ export type FaltanteStock = {
 };
 
 export type ResultadoGuardarVenta =
-  | { success: true; venta: Venta }
+  | { success: true; venta: Venta; pago_detalle_warning?: string | null }
   | { success: false; error: string; faltantes?: FaltanteStock[] };
 
 /** Modalidad del pedido (instancia gastronómica En lo de Mari). */
@@ -152,7 +152,7 @@ export async function saveVenta(
 
     const json = (await res.json()) as {
       success?: boolean;
-      data?: { venta?: Venta };
+      data?: { venta?: Venta; pago_detalle_warning?: string | null };
       error?: string;
       faltantes?: FaltanteStock[];
     };
@@ -165,7 +165,7 @@ export async function saveVenta(
       };
     }
 
-    return { success: true, venta: json.data.venta };
+    return { success: true, venta: json.data.venta, pago_detalle_warning: json.data.pago_detalle_warning ?? null };
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Error de red.";
     return { success: false, error: msg };
