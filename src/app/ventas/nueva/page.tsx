@@ -977,6 +977,12 @@ export default function NuevaVentaPage() {
       // cobrar") para que refresque su cola automáticamente.
       try { const bc = new BroadcastChannel("pedidos-caja"); bc.postMessage("refresh"); bc.close(); } catch { /* navegador sin soporte */ }
 
+      // Aviso si alguna parte del cobro (p.ej. transferencia) no se pudo guardar en
+      // el detalle: la venta quedó, pero hay que registrar ese cobro a mano.
+      if (resultado.pago_detalle_warning) {
+        try { window.alert(`⚠ ${resultado.pago_detalle_warning}`); } catch { /* no-op */ }
+      }
+
       // Documentos de la venta. La nota de remisión se abre además del ticket
       // SOLO si la venta la genera (cliente con usa_nota_remision o toggle activo).
       const v = resultado.venta;
