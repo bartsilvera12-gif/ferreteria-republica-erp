@@ -50,6 +50,10 @@ interface CajaBase {
   monto_cierre_contado: number | null;
   monto_esperado_efectivo: number | null;
   diferencia: number | null;
+  tarjeta_contado: number | null;
+  transferencia_contado: number | null;
+  monto_dejado_caja: number | null;
+  monto_tesoreria: number | null;
   observacion_cierre: string | null;
   arqueo_apertura_json: ArqueoItem[] | null;
   arqueo_cierre_json: ArqueoItem[] | null;
@@ -58,7 +62,8 @@ interface CajaBase {
 const CAJA_SELECT = `
   id::text AS id, numero_caja, estado, abierta_por::text AS abierta_por, cerrada_por::text AS cerrada_por,
   fecha_apertura, fecha_cierre, monto_apertura, monto_cierre_contado, monto_esperado_efectivo,
-  diferencia, observacion_cierre, arqueo_apertura_json, arqueo_cierre_json`;
+  diferencia, tarjeta_contado, transferencia_contado, monto_dejado_caja, monto_tesoreria,
+  observacion_cierre, arqueo_apertura_json, arqueo_cierre_json`;
 
 function mapCajaBase(r: Record<string, unknown>): CajaBase {
   return {
@@ -73,6 +78,10 @@ function mapCajaBase(r: Record<string, unknown>): CajaBase {
     monto_cierre_contado: r.monto_cierre_contado == null ? null : num(r.monto_cierre_contado),
     monto_esperado_efectivo: r.monto_esperado_efectivo == null ? null : num(r.monto_esperado_efectivo),
     diferencia: r.diferencia == null ? null : num(r.diferencia),
+    tarjeta_contado: r.tarjeta_contado == null ? null : num(r.tarjeta_contado),
+    transferencia_contado: r.transferencia_contado == null ? null : num(r.transferencia_contado),
+    monto_dejado_caja: r.monto_dejado_caja == null ? null : num(r.monto_dejado_caja),
+    monto_tesoreria: r.monto_tesoreria == null ? null : num(r.monto_tesoreria),
     observacion_cierre: (r.observacion_cierre as string | null) ?? null,
     arqueo_apertura_json: arqueoJson(r.arqueo_apertura_json),
     arqueo_cierre_json: arqueoJson(r.arqueo_cierre_json),
@@ -135,6 +144,9 @@ export async function getReporteCajasPg(
   const vQ = await p.query(
     `SELECT v.caja_id::text AS caja_id,
         COUNT(*) FILTER (WHERE v.estado <> 'anulada') AS cantidad,
+        COUNT(*) FILTER (WHERE v.estado <> 'anulada' AND v.tipo_venta <> 'CREDITO' AND (CASE WHEN pd.tiene THEN pd.efe > 0 ELSE COALESCE(v.metodo_pago,'efectivo') NOT IN ('tarjeta','transferencia') END)) AS cant_efectivo,
+        COUNT(*) FILTER (WHERE v.estado <> 'anulada' AND v.tipo_venta <> 'CREDITO' AND (CASE WHEN pd.tiene THEN pd.tar > 0 ELSE v.metodo_pago = 'tarjeta' END)) AS cant_tarjeta,
+        COUNT(*) FILTER (WHERE v.estado <> 'anulada' AND v.tipo_venta <> 'CREDITO' AND (CASE WHEN pd.tiene THEN pd.tra > 0 ELSE v.metodo_pago = 'transferencia' END)) AS cant_transferencia,
         COALESCE(SUM(v.total) FILTER (WHERE v.estado <> 'anulada'), 0) AS total_vendido,
         COALESCE(SUM(v.total) FILTER (WHERE v.estado <> 'anulada' AND v.tipo_venta = 'CREDITO'), 0) AS credito,
         COALESCE(SUM(CASE WHEN v.tipo_venta = 'CREDITO' THEN 0 WHEN pd.tiene THEN pd.efe ELSE (CASE WHEN COALESCE(v.metodo_pago,'efectivo') NOT IN ('tarjeta','transferencia') THEN v.total ELSE 0 END) END) FILTER (WHERE v.estado <> 'anulada'), 0) AS efectivo,
@@ -152,10 +164,12 @@ export async function getReporteCajasPg(
       GROUP BY v.caja_id`,
     [empresaId, cajaIds]
   );
-  const vAgg = new Map<string, { cantidad: number; total: number; efectivo: number; tarjeta: number; transferencia: number; credito: number }>();
+  const vAgg = new Map<string, { cantidad: number; cantEfectivo: number; cantTarjeta: number; cantTransferencia: number; total: number; efectivo: number; tarjeta: number; transferencia: number; credito: number }>();
   for (const r of vQ.rows as Record<string, unknown>[]) {
     vAgg.set(String(r.caja_id), {
-      cantidad: num(r.cantidad), total: num(r.total_vendido),
+      cantidad: num(r.cantidad),
+      cantEfectivo: num(r.cant_efectivo), cantTarjeta: num(r.cant_tarjeta), cantTransferencia: num(r.cant_transferencia),
+      total: num(r.total_vendido),
       efectivo: num(r.efectivo), tarjeta: num(r.tarjeta), transferencia: num(r.transferencia), credito: num(r.credito),
     });
   }
@@ -181,7 +195,7 @@ export async function getReporteCajasPg(
   const nombreById = await nombresUsuarios(schema, empresaId, cajas.flatMap((c) => [c.abierta_por, c.cerrada_por]).filter((x): x is string => !!x));
 
   const filas: CajaReporteRow[] = cajas.map((c) => {
-    const v = vAgg.get(c.id) ?? { cantidad: 0, total: 0, efectivo: 0, tarjeta: 0, transferencia: 0, credito: 0 };
+    const v = vAgg.get(c.id) ?? { cantidad: 0, cantEfectivo: 0, cantTarjeta: 0, cantTransferencia: 0, total: 0, efectivo: 0, tarjeta: 0, transferencia: 0, credito: 0 };
     const m = mAgg.get(c.id) ?? { ingresos: 0, egresos: 0, retiros: 0, ajustes: 0 };
     const efectivoEsperado = c.monto_apertura + v.efectivo + m.ingresos - m.egresos - m.retiros + m.ajustes;
     return {
@@ -190,13 +204,19 @@ export async function getReporteCajasPg(
       abierta_por_nombre: c.abierta_por ? nombreById.get(c.abierta_por) ?? null : null,
       cerrada_por_nombre: c.cerrada_por ? nombreById.get(c.cerrada_por) ?? null : null,
       monto_apertura: c.monto_apertura,
-      cantidad_ventas: v.cantidad, total_vendido: v.total,
+      cantidad_ventas: v.cantidad,
+      cantidad_efectivo: v.cantEfectivo, cantidad_tarjeta: v.cantTarjeta, cantidad_transferencia: v.cantTransferencia,
+      total_vendido: v.total,
       total_efectivo: v.efectivo, total_tarjeta: v.tarjeta, total_transferencia: v.transferencia, total_credito: v.credito,
       ingresos_efectivo: m.ingresos, egresos_efectivo: m.egresos, retiros_efectivo: m.retiros, ajustes_efectivo: m.ajustes,
       efectivo_esperado: efectivoEsperado,
       monto_esperado_efectivo: c.monto_esperado_efectivo,
       monto_cierre_contado: c.monto_cierre_contado,
       diferencia: c.diferencia,
+      tarjeta_contado: c.tarjeta_contado,
+      transferencia_contado: c.transferencia_contado,
+      monto_dejado_caja: c.monto_dejado_caja,
+      monto_tesoreria: c.monto_tesoreria,
       observacion_cierre: c.observacion_cierre,
       arqueo_apertura_json: c.arqueo_apertura_json,
       arqueo_cierre_json: c.arqueo_cierre_json,
@@ -271,6 +291,7 @@ export async function getDetalleCajaPg(
   }));
 
   let totalEfectivo = 0, totalTarjeta = 0, totalTransferencia = 0, totalCredito = 0, totalVendido = 0, cantidadVentas = 0;
+  let cantEfectivo = 0, cantTarjeta = 0, cantTransferencia = 0;
   for (const r of vQ.rows as Record<string, unknown>[]) {
     if (String(r.estado) === "anulada") continue;
     cantidadVentas++;
@@ -278,9 +299,13 @@ export async function getDetalleCajaPg(
     // Ventas a CRÉDITO: no ingresan a caja ahora (cobranza posterior). No suman
     // al efectivo esperado del arqueo. (#1)
     if (String(r.tipo_venta) === "CREDITO") { totalCredito += num(r.total); continue; }
-    totalEfectivo += num(r.efectivo_arqueo);
-    totalTarjeta += num(r.tarjeta_arqueo);
-    totalTransferencia += num(r.transferencia_arqueo);
+    const efe = num(r.efectivo_arqueo), tar = num(r.tarjeta_arqueo), tra = num(r.transferencia_arqueo);
+    totalEfectivo += efe;
+    totalTarjeta += tar;
+    totalTransferencia += tra;
+    if (efe > 0) cantEfectivo++;
+    if (tar > 0) cantTarjeta++;
+    if (tra > 0) cantTransferencia++;
   }
 
   const mQ = await p.query(
@@ -330,13 +355,19 @@ export async function getDetalleCajaPg(
     abierta_por_nombre: c.abierta_por ? nombreById.get(c.abierta_por) ?? null : null,
     cerrada_por_nombre: c.cerrada_por ? nombreById.get(c.cerrada_por) ?? null : null,
     monto_apertura: c.monto_apertura,
-    cantidad_ventas: cantidadVentas, total_vendido: totalVendido,
+    cantidad_ventas: cantidadVentas,
+    cantidad_efectivo: cantEfectivo, cantidad_tarjeta: cantTarjeta, cantidad_transferencia: cantTransferencia,
+    total_vendido: totalVendido,
     total_efectivo: totalEfectivo, total_tarjeta: totalTarjeta, total_transferencia: totalTransferencia, total_credito: totalCredito,
     ingresos_efectivo: ingresosEf, egresos_efectivo: egresosEf, retiros_efectivo: retirosEf, ajustes_efectivo: ajustesEf,
     efectivo_esperado: efectivoEsperado,
     monto_esperado_efectivo: c.monto_esperado_efectivo,
     monto_cierre_contado: c.monto_cierre_contado,
     diferencia: c.diferencia,
+    tarjeta_contado: c.tarjeta_contado,
+    transferencia_contado: c.transferencia_contado,
+    monto_dejado_caja: c.monto_dejado_caja,
+    monto_tesoreria: c.monto_tesoreria,
     observacion_cierre: c.observacion_cierre,
     arqueo_apertura_json: c.arqueo_apertura_json,
     arqueo_cierre_json: c.arqueo_cierre_json,

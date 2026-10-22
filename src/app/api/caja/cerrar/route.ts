@@ -42,6 +42,17 @@ export async function POST(request: NextRequest) {
     const observacion =
       o.observacion == null || o.observacion === "" ? null : String(o.observacion).slice(0, 2000);
 
+    // Datos extra del arqueo (ticket): contado digital por método y efectivo
+    // dejado en caja. Opcionales y no negativos; inválido → se ignora (null).
+    const montoOpcional = (v: unknown): number | null => {
+      if (v == null || v === "") return null;
+      const n = Number(v);
+      return Number.isFinite(n) && n >= 0 ? n : null;
+    };
+    const tarjetaContado = montoOpcional(o.tarjeta_contado);
+    const transferenciaContado = montoOpcional(o.transferencia_contado);
+    const montoDejadoCaja = montoOpcional(o.monto_dejado_caja);
+
     let cajaId = o.caja_id == null || o.caja_id === "" ? null : String(o.caja_id);
     if (!cajaId) {
       const abierta = await getCajaAbierta(ctx.supabase, ctx.auth.empresa_id);
@@ -61,6 +72,9 @@ export async function POST(request: NextRequest) {
       observacion,
       usuarioId: ctx.auth.usuarioCatalogId ?? null,
       arqueoCierre,
+      tarjetaContado,
+      transferenciaContado,
+      montoDejadoCaja,
     });
     return NextResponse.json(successResponse({ resumen }));
   } catch (err) {
