@@ -57,6 +57,7 @@ async function fetchDetallePorVenta(
 const CAJA_COLS =
   "id, numero_caja, estado, abierta_por, cerrada_por, fecha_apertura, fecha_cierre, " +
   "monto_apertura, monto_cierre_contado, monto_esperado_efectivo, diferencia, " +
+  "tarjeta_contado, transferencia_contado, monto_dejado_caja, monto_tesoreria, " +
   "observacion_apertura, observacion_cierre, arqueo_apertura_json, arqueo_cierre_json";
 
 interface CajaRow {
@@ -71,6 +72,10 @@ interface CajaRow {
   monto_cierre_contado: number | string | null;
   monto_esperado_efectivo: number | string | null;
   diferencia: number | string | null;
+  tarjeta_contado: number | string | null;
+  transferencia_contado: number | string | null;
+  monto_dejado_caja: number | string | null;
+  monto_tesoreria: number | string | null;
   observacion_apertura: string | null;
   observacion_cierre: string | null;
   arqueo_apertura_json: ArqueoItem[] | null;
@@ -97,6 +102,10 @@ function mapCaja(r: CajaRow): Caja {
     monto_esperado_efectivo:
       r.monto_esperado_efectivo == null ? null : num(r.monto_esperado_efectivo),
     diferencia: r.diferencia == null ? null : num(r.diferencia),
+    tarjeta_contado: r.tarjeta_contado == null ? null : num(r.tarjeta_contado),
+    transferencia_contado: r.transferencia_contado == null ? null : num(r.transferencia_contado),
+    monto_dejado_caja: r.monto_dejado_caja == null ? null : num(r.monto_dejado_caja),
+    monto_tesoreria: r.monto_tesoreria == null ? null : num(r.monto_tesoreria),
     observacion_apertura: r.observacion_apertura,
     observacion_cierre: r.observacion_cierre,
     arqueo_apertura_json: r.arqueo_apertura_json ?? null,
@@ -278,6 +287,9 @@ export async function getReporteCajas(
   // 5) Acumuladores por caja.
   type Acc = {
     cantidad_ventas: number;
+    cantidad_efectivo: number;
+    cantidad_tarjeta: number;
+    cantidad_transferencia: number;
     total_vendido: number;
     total_efectivo: number;
     total_tarjeta: number;
@@ -291,6 +303,9 @@ export async function getReporteCajas(
   const accById = new Map<string, Acc>();
   const newAcc = (): Acc => ({
     cantidad_ventas: 0,
+    cantidad_efectivo: 0,
+    cantidad_tarjeta: 0,
+    cantidad_transferencia: 0,
     total_vendido: 0,
     total_efectivo: 0,
     total_tarjeta: 0,
@@ -317,16 +332,23 @@ export async function getReporteCajas(
     // Se reparte por el detalle de cobro (soporta pagos combinados). Si una
     // venta no tuviera detalle, se cae al método de la venta como antes.
     const det = detallePorVenta.get(v.id);
+    let efe = 0, tar = 0, tra = 0;
     if (det && det.length > 0) {
       for (const d of det) {
-        if (d.metodo_pago === "tarjeta") a.total_tarjeta += d.monto;
-        else if (d.metodo_pago === "transferencia") a.total_transferencia += d.monto;
-        else if (d.metodo_pago === "efectivo") a.total_efectivo += d.monto;
+        if (d.metodo_pago === "tarjeta") tar += d.monto;
+        else if (d.metodo_pago === "transferencia") tra += d.monto;
+        else if (d.metodo_pago === "efectivo") efe += d.monto;
         // saldo_favor / qr / billetera / otro: no suman al efectivo del cajón.
       }
-    } else if (v.metodo_pago === "tarjeta") a.total_tarjeta += t;
-    else if (v.metodo_pago === "transferencia") a.total_transferencia += t;
-    else a.total_efectivo += t;
+    } else if (v.metodo_pago === "tarjeta") tar += t;
+    else if (v.metodo_pago === "transferencia") tra += t;
+    else efe += t;
+    a.total_efectivo += efe;
+    a.total_tarjeta += tar;
+    a.total_transferencia += tra;
+    if (efe > 0) a.cantidad_efectivo++;
+    if (tar > 0) a.cantidad_tarjeta++;
+    if (tra > 0) a.cantidad_transferencia++;
   }
 
   for (const m of movs) {
@@ -361,6 +383,9 @@ export async function getReporteCajas(
       cerrada_por_nombre: c.cerrada_por ? nombrePorUsuario.get(c.cerrada_por) ?? null : null,
       monto_apertura: c.monto_apertura,
       cantidad_ventas: a.cantidad_ventas,
+      cantidad_efectivo: a.cantidad_efectivo,
+      cantidad_tarjeta: a.cantidad_tarjeta,
+      cantidad_transferencia: a.cantidad_transferencia,
       total_vendido: a.total_vendido,
       total_efectivo: a.total_efectivo,
       total_tarjeta: a.total_tarjeta,
@@ -374,6 +399,10 @@ export async function getReporteCajas(
       monto_esperado_efectivo: c.monto_esperado_efectivo,
       monto_cierre_contado: c.monto_cierre_contado,
       diferencia: c.diferencia,
+      tarjeta_contado: c.tarjeta_contado,
+      transferencia_contado: c.transferencia_contado,
+      monto_dejado_caja: c.monto_dejado_caja,
+      monto_tesoreria: c.monto_tesoreria,
       observacion_cierre: c.observacion_cierre,
       arqueo_apertura_json: c.arqueo_apertura_json,
       arqueo_cierre_json: c.arqueo_cierre_json,
@@ -474,6 +503,9 @@ export async function getDetalleCaja(
 
   // Acumuladores para la cabecera (misma lógica que getReporteCajas).
   let cantidadVentas = 0,
+    cantEfectivo = 0,
+    cantTarjeta = 0,
+    cantTransferencia = 0,
     totalVendido = 0,
     totalEfectivo = 0,
     totalTarjeta = 0,
@@ -492,16 +524,23 @@ export async function getDetalleCaja(
     // módulo de créditos). No suma al efectivo esperado del cierre. (#1)
     if (v.tipo_venta === "CREDITO") { totalCredito += v.total; continue; }
     const det = detPorVenta.get(v.id);
+    let efe = 0, tar = 0, tra = 0;
     if (det && det.length > 0) {
       for (const d of det) {
-        if (d.metodo_pago === "tarjeta") totalTarjeta += d.monto;
-        else if (d.metodo_pago === "transferencia") totalTransferencia += d.monto;
-        else if (d.metodo_pago === "efectivo") totalEfectivo += d.monto;
+        if (d.metodo_pago === "tarjeta") tar += d.monto;
+        else if (d.metodo_pago === "transferencia") tra += d.monto;
+        else if (d.metodo_pago === "efectivo") efe += d.monto;
         // saldo_favor y otros medios no suman al efectivo del cajón.
       }
-    } else if (v.metodo_pago === "tarjeta") totalTarjeta += v.total;
-    else if (v.metodo_pago === "transferencia") totalTransferencia += v.total;
-    else totalEfectivo += v.total;
+    } else if (v.metodo_pago === "tarjeta") tar += v.total;
+    else if (v.metodo_pago === "transferencia") tra += v.total;
+    else efe += v.total;
+    totalEfectivo += efe;
+    totalTarjeta += tar;
+    totalTransferencia += tra;
+    if (efe > 0) cantEfectivo++;
+    if (tar > 0) cantTarjeta++;
+    if (tra > 0) cantTransferencia++;
   }
   let ingresosEf = 0,
     egresosEf = 0,
@@ -569,6 +608,9 @@ export async function getDetalleCaja(
     cerrada_por_nombre: caja.cerrada_por ? nombrePorUsuario.get(caja.cerrada_por) ?? null : null,
     monto_apertura: caja.monto_apertura,
     cantidad_ventas: cantidadVentas,
+    cantidad_efectivo: cantEfectivo,
+    cantidad_tarjeta: cantTarjeta,
+    cantidad_transferencia: cantTransferencia,
     total_vendido: totalVendido,
     total_efectivo: totalEfectivo,
     total_tarjeta: totalTarjeta,
@@ -582,6 +624,10 @@ export async function getDetalleCaja(
     monto_esperado_efectivo: caja.monto_esperado_efectivo,
     monto_cierre_contado: caja.monto_cierre_contado,
     diferencia: caja.diferencia,
+    tarjeta_contado: caja.tarjeta_contado,
+    transferencia_contado: caja.transferencia_contado,
+    monto_dejado_caja: caja.monto_dejado_caja,
+    monto_tesoreria: caja.monto_tesoreria,
     observacion_cierre: caja.observacion_cierre,
     arqueo_apertura_json: caja.arqueo_apertura_json,
     arqueo_cierre_json: caja.arqueo_cierre_json,
@@ -701,6 +747,14 @@ export async function cerrarCaja(
      * detalle. Si es null/undefined, se usa `montoCierreContado` tal cual.
      */
     arqueoCierre?: ArqueoItem[] | null;
+    /** Contado del POS/banco por método digital (arqueo). Null si no se cargó. */
+    tarjetaContado?: number | null;
+    transferenciaContado?: number | null;
+    /**
+     * Efectivo que el cajero deja en la caja para la próxima jornada.
+     * Lo extraído a tesorería = montoCierreContado - montoDejadoCaja (se calcula).
+     */
+    montoDejadoCaja?: number | null;
   }
 ): Promise<CajaResumen> {
   const resumen = await getResumenCaja(sb, params.empresaId, params.cajaId);
@@ -713,6 +767,18 @@ export async function cerrarCaja(
   const esperado = Math.round(resumen.efectivo_esperado);
   const diferencia = contado - esperado;
 
+  // Efectivo dejado en caja vs extraído a tesorería. Si el cajero no cargó
+  // "dejado", asumimos que deja todo (tesorería = 0). Nunca negativo.
+  const dejado =
+    params.montoDejadoCaja == null
+      ? null
+      : Math.min(contado, Math.max(0, Math.round(params.montoDejadoCaja)));
+  const tesoreria = dejado == null ? null : Math.max(0, contado - dejado);
+  const tarjetaContado =
+    params.tarjetaContado == null ? null : Math.round(params.tarjetaContado);
+  const transferenciaContado =
+    params.transferenciaContado == null ? null : Math.round(params.transferenciaContado);
+
   const upd = await sb
     .from("cajas")
     .update({
@@ -722,6 +788,10 @@ export async function cerrarCaja(
       monto_cierre_contado: contado,
       monto_esperado_efectivo: esperado,
       diferencia,
+      tarjeta_contado: tarjetaContado,
+      transferencia_contado: transferenciaContado,
+      monto_dejado_caja: dejado,
+      monto_tesoreria: tesoreria,
       observacion_cierre: params.observacion,
       arqueo_cierre_json: usaArqueo ? params.arqueoCierre : null,
     })

@@ -124,7 +124,16 @@ export default function CajaControlPanel({ onStateChange }: Props) {
     notifyOk(`Caja ${numeroCaja} abierta correctamente.`);
     onStateChange?.();
   }
-  async function handleCerrar(monto: number, observacion: string | null, arqueo: ArqueoItem[] | null) {
+  async function handleCerrar(
+    monto: number,
+    observacion: string | null,
+    arqueo: ArqueoItem[] | null,
+    extra?: {
+      tarjetaContado: number | null;
+      transferenciaContado: number | null;
+      montoDejadoCaja: number | null;
+    }
+  ) {
     if (!target) return;
     const r = await fetch("/api/caja/cerrar", {
       method: "POST",
@@ -135,6 +144,9 @@ export default function CajaControlPanel({ onStateChange }: Props) {
         monto_cierre_contado: monto,
         observacion,
         arqueo_cierre: arqueo,
+        tarjeta_contado: extra?.tarjetaContado ?? null,
+        transferencia_contado: extra?.transferenciaContado ?? null,
+        monto_dejado_caja: extra?.montoDejadoCaja ?? null,
       }),
     });
     const j = await r.json();
@@ -738,7 +750,16 @@ function ModalCerrar({
 }: {
   resumen: CajaResumen;
   onClose: () => void;
-  onConfirm: (monto: number, obs: string | null, arqueo: ArqueoItem[] | null) => Promise<void>;
+  onConfirm: (
+    monto: number,
+    obs: string | null,
+    arqueo: ArqueoItem[] | null,
+    extra: {
+      tarjetaContado: number | null;
+      transferenciaContado: number | null;
+      montoDejadoCaja: number | null;
+    }
+  ) => Promise<void>;
 }) {
   const [modo, setModo] = useState<"arqueo" | "monto">("arqueo");
   const [monto, setMonto] = useState(String(Math.round(resumen.efectivo_esperado)));
@@ -760,6 +781,11 @@ function ModalCerrar({
   const esperado = Math.round(resumen.efectivo_esperado);
   const contado = modo === "arqueo" ? totalArqueo(cant) : Number(monto) || 0;
   const diferencia = contado - esperado;
+  // Efectivo dejado en caja para la próxima jornada; el resto va a tesorería.
+  const [dejado, setDejado] = useState("");
+  const montoDejado = dejado.trim() === "" ? null : Math.max(0, Math.round(Number(dejado) || 0));
+  const dejadoClamp = montoDejado == null ? null : Math.min(Math.max(0, contado), montoDejado);
+  const aTesoreria = dejadoClamp == null ? null : Math.max(0, contado - dejadoClamp);
 
   function signo(n: number) { return `${n >= 0 ? "+" : "−"}${fmtGs(Math.abs(n))}`; }
 
@@ -784,7 +810,11 @@ function ModalCerrar({
     setBusy(true);
     setErr(null);
     try {
-      await onConfirm(contado, obsFinal || null, arqueo);
+      await onConfirm(contado, obsFinal || null, arqueo, {
+        tarjetaContado: conTarjeta,
+        transferenciaContado: conTransfer,
+        montoDejadoCaja: dejadoClamp,
+      });
     } catch (e) {
       setErr(e instanceof Error ? e.message : "Error");
       setBusy(false);
@@ -877,6 +907,34 @@ function ModalCerrar({
             {diferencia >= 0 ? "+" : "−"}
             {fmtGs(Math.abs(diferencia))}
           </span>
+        </div>
+
+        {/* Efectivo: cuánto queda en caja y cuánto se extrae a tesorería */}
+        <div className="rounded-xl border border-slate-200 bg-white p-3 space-y-2.5">
+          <p className="text-xs font-semibold text-slate-600 uppercase tracking-wide">Cierre de efectivo</p>
+          <div className="flex items-center gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-slate-700">Dejado en caja</p>
+              <p className="text-[11px] text-slate-400">Para la próxima jornada</p>
+            </div>
+            <div className="w-40">
+              <MontoInput
+                value={dejado}
+                onChange={(n) => setDejado(String(n))}
+                decimals={false}
+                placeholder="Gs. dejados"
+                disabled={busy}
+                className="w-full rounded-lg border-2 border-slate-200 px-2.5 py-1.5 text-sm font-semibold tabular-nums focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 outline-none"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between border-t border-slate-100 pt-2">
+            <span className="text-xs font-semibold text-slate-600">Extraído a tesorería</span>
+            <span className="text-sm font-bold tabular-nums text-slate-800">
+              {aTesoreria == null ? "—" : fmtGs(aTesoreria)}
+            </span>
+          </div>
+          <p className="text-[10px] leading-tight text-slate-400">Opcional. Si lo dejás vacío, no se registra extracción a tesorería.</p>
         </div>
 
         {/* Conciliación de cobros digitales (tickets POS / transferencias) */}

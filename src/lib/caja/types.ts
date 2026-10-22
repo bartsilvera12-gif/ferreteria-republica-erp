@@ -35,6 +35,12 @@ export interface Caja {
   monto_cierre_contado: number | null;
   monto_esperado_efectivo: number | null;
   diferencia: number | null;
+  /** Contado del POS/banco por método digital (arqueo). Null si no se cargó. */
+  tarjeta_contado: number | null;
+  transferencia_contado: number | null;
+  /** Efectivo dejado en caja para la próxima jornada y extraído a tesorería. */
+  monto_dejado_caja: number | null;
+  monto_tesoreria: number | null;
   observacion_apertura: string | null;
   observacion_cierre: string | null;
   /** Detalle del conteo físico al abrir (null si se cargó el monto directo). */
@@ -96,6 +102,10 @@ export interface CajaReporteRow {
   cerrada_por_nombre: string | null;
   monto_apertura: number;
   cantidad_ventas: number;
+  /** Cantidad de ventas (contado) con una parte en cada método. */
+  cantidad_efectivo: number;
+  cantidad_tarjeta: number;
+  cantidad_transferencia: number;
   total_vendido: number;
   total_efectivo: number;
   total_tarjeta: number;
@@ -112,6 +122,12 @@ export interface CajaReporteRow {
   monto_esperado_efectivo: number | null;
   monto_cierre_contado: number | null;
   diferencia: number | null;
+  /** Contado del POS/banco por método digital (arqueo). Null si no se cargó. */
+  tarjeta_contado: number | null;
+  transferencia_contado: number | null;
+  /** Efectivo dejado en caja para la próxima jornada y extraído a tesorería. */
+  monto_dejado_caja: number | null;
+  monto_tesoreria: number | null;
   observacion_cierre: string | null;
   /** Detalle del arqueo (auditoría). Null si el turno usó monto directo o es previo a esta función. */
   arqueo_apertura_json: ArqueoItem[] | null;

@@ -9,7 +9,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams } from "next/navigation";
-import { ArrowDownCircle, ArrowUpCircle, ShoppingCart, DoorOpen, Download } from "lucide-react";
+import { ArrowDownCircle, ArrowUpCircle, ShoppingCart, DoorOpen, Download, Receipt } from "lucide-react";
 import PageHeader from "@/components/ui/PageHeader";
 import { getCajaDetalle } from "@/lib/reportes/storage";
 import type { ArqueoItem, CajaDetalle, MedioPagoCaja } from "@/lib/caja/types";
@@ -156,14 +156,24 @@ export default function CajaDetalledPage() {
         backHref="/reportes/cajas"
         backLabel="Cierres de caja"
         actions={c ? (
-          <a
-            href={`/api/reportes/cajas/${cajaId}/pdf?auto=1`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 rounded-xl border border-[#4FAEB2]/30 bg-white px-4 py-2.5 text-sm font-bold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10"
-          >
-            <Download className="h-4 w-4" /> Descargar PDF
-          </a>
+          <div className="flex flex-wrap items-center gap-2">
+            <a
+              href={`/api/reportes/cajas/${cajaId}/arqueo-ticket?auto=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-[#4FAEB2]/30 bg-white px-4 py-2.5 text-sm font-bold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10"
+            >
+              <Receipt className="h-4 w-4" /> Imprimir arqueo
+            </a>
+            <a
+              href={`/api/reportes/cajas/${cajaId}/pdf?auto=1`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-2 rounded-xl border border-[#4FAEB2]/30 bg-white px-4 py-2.5 text-sm font-bold text-[#3F8E91] transition-colors hover:bg-[#4FAEB2]/10"
+            >
+              <Download className="h-4 w-4" /> Descargar PDF
+            </a>
+          </div>
         ) : undefined}
       />
 
