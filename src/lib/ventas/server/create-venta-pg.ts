@@ -141,6 +141,15 @@ export interface CreateVentaPgParams {
   esAdmin?: boolean;
 }
 
+/**
+ * Redondea cantidades de stock a 6 decimales para evitar el "ruido" de punto
+ * flotante (ej. 3 × 0,1 = 0.30000000000000004 → 0,3). Suficiente para unidades
+ * fraccionadas (kg, metros, paquetes de 0,1) sin perder precisión real.
+ */
+function redondearCantidad(n: number): number {
+  return Math.round((n + Number.EPSILON) * 1e6) / 1e6;
+}
+
 function recalcTotals(items: CreateVentaItemInput[]) {
   let subtotal = 0;
   let montoIva = 0;
@@ -279,7 +288,7 @@ export async function createVentaTransaccionalPg(
       presentacionId: pres ? pres.id : null,
       presentacionNombre: pres ? pres.nombre : null,
       presentacionCantBase: cantBase,
-      cantidadTotalBase: it.cantidad * cantBase,
+      cantidadTotalBase: redondearCantidad(it.cantidad * cantBase),
       presExplicita: !!it.presentacion_id,
       presMinorista: pres ? posv(pres.precio_venta) : null,
       presMayorista: pres ? posv(pres.precio_mayorista) : null,
@@ -764,7 +773,7 @@ export async function createVentaTransaccionalPg(
       const p = stockMap.get(line.producto_id)!;
       if (recetaByProducto.has(line.producto_id)) continue;
       if (!p.controlaStock && p.modo !== "produccion_previa") continue;
-      const nuevoStock = Math.max(0, p.stock - lr.cantidadTotalBase);
+      const nuevoStock = Math.max(0, redondearCantidad(p.stock - lr.cantidadTotalBase));
       const upd = await sb
         .from("productos")
         .update({ stock_actual: nuevoStock })
@@ -798,7 +807,7 @@ export async function createVentaTransaccionalPg(
       const m = insumoMeta.get(insId)!;
       // Igual que productos: el stock de insumos nunca baja de 0 (la salida real
       // queda registrada en el movimiento SALIDA del insumo).
-      const nuevoStock = Math.max(0, m.stock - need);
+      const nuevoStock = Math.max(0, redondearCantidad(m.stock - need));
       const upd = await sb
         .from("productos")
         .update({ stock_actual: nuevoStock })

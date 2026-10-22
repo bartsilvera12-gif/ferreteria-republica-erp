@@ -364,7 +364,9 @@ export default function MovimientosPage() {
                         className={`px-3 py-3.5 text-right font-bold tabular-nums ${cantidadColor}`}
                       >
                         {signo}
-                        {Math.abs(m.cantidad)}
+                        {/* Redondeo a 6 decimales: evita mostrar el ruido de punto
+                            flotante en registros viejos (ej. 0.30000000000000004 → 0.3). */}
+                        {Math.round(Math.abs(m.cantidad) * 1e6) / 1e6}
                       </td>
                       <td className="hidden lg:table-cell px-3 py-3.5 text-right tabular-nums text-slate-700 text-xs">
                         {formatGs(m.costo_unitario)}
