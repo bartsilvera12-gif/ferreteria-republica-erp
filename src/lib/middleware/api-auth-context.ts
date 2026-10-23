@@ -23,6 +23,8 @@ export type ApiAuthContext = {
   userScopedSupabase: AppSupabaseClient;
   usuarioRol?: string | null;
   usuarioNombre?: string | null;
+  /** Área funcional del usuario (`zentra_erp.usuarios.area`): ventas, soporte, etc. */
+  usuarioArea?: string | null;
 };
 
 export type ApiAuthResult =
@@ -59,6 +61,7 @@ type UsuarioRow = {
   empresa_id?: string | null;
   rol?: string | null;
   nombre?: string | null;
+  area?: string | null;
 };
 
 export type ResolveApiAuthOptions = {
@@ -177,7 +180,7 @@ async function resolveApiAuthContextUncached(
     if (user.id) {
       const { data: byId, error: e1 } = await sr
         .from("usuarios")
-        .select("id, empresa_id, rol, nombre")
+        .select("id, empresa_id, rol, nombre, area")
         .eq("auth_user_id", user.id)
         .limit(1);
       if (e1) lastUsuarioErr = e1.message;
@@ -187,7 +190,7 @@ async function resolveApiAuthContextUncached(
       for (const em of usuarioEmailLookupVariants(user.email)) {
         const { data: rows, error: uErr } = await sr
           .from("usuarios")
-          .select("id, empresa_id, rol, nombre")
+          .select("id, empresa_id, rol, nombre, area")
           .ilike("email", em)
           .limit(1);
         if (uErr) {
@@ -204,7 +207,7 @@ async function resolveApiAuthContextUncached(
     if (user.id) {
       const { data: byId, error: e1 } = await userScopedSupabase
         .from("usuarios")
-        .select("id, empresa_id, rol, nombre")
+        .select("id, empresa_id, rol, nombre, area")
         .eq("auth_user_id", user.id)
         .limit(1);
       if (e1) lastUsuarioErr = e1.message;
@@ -214,7 +217,7 @@ async function resolveApiAuthContextUncached(
       for (const em of usuarioEmailLookupVariants(user.email)) {
         const { data: rows, error: uErr } = await userScopedSupabase
           .from("usuarios")
-          .select("id, empresa_id, rol, nombre")
+          .select("id, empresa_id, rol, nombre, area")
           .ilike("email", em)
           .limit(1);
         if (uErr) {
@@ -240,6 +243,7 @@ async function resolveApiAuthContextUncached(
   const empresa_id = row.empresa_id ?? null;
   const usuarioRol = row.rol ?? null;
   const usuarioNombre = row.nombre ?? null;
+  const usuarioArea = row.area ?? null;
   const usuarioCatalogId = typeof row.id === "string" ? row.id : null;
 
   if (empresa_id) {
@@ -252,6 +256,7 @@ async function resolveApiAuthContextUncached(
         userScopedSupabase,
         usuarioRol,
         usuarioNombre,
+        usuarioArea,
       },
     };
   }
@@ -266,6 +271,7 @@ async function resolveApiAuthContextUncached(
         userScopedSupabase,
         usuarioRol,
         usuarioNombre,
+        usuarioArea,
       },
     };
   }

@@ -13,3 +13,20 @@ export function esRolAdminEmpresaOGlobal(rol: string | null | undefined): boolea
     r === "superadmin"
   );
 }
+
+/** ¿El usuario pertenece al área de Ventas? (campo `usuarios.area`). */
+export function esAreaVentas(area: string | null | undefined): boolean {
+  return (area ?? "").trim().toLowerCase() === "ventas";
+}
+
+/**
+ * ¿Puede editar presupuestos? Los administradores de empresa/globales siempre,
+ * y además cualquier usuario del área de Ventas (deciden sobre sus cotizaciones).
+ * El bloqueo por estado "convertido" se valida aparte (no depende del permiso).
+ */
+export function puedeEditarPresupuesto(
+  rol: string | null | undefined,
+  area: string | null | undefined
+): boolean {
+  return esRolAdminEmpresaOGlobal(rol) || esAreaVentas(area);
+}

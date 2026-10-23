@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth, getTenantSupabaseFromAuthWithRol } from "@/lib/supabase/tenant-api";
 import { getUserAndEmpresa } from "@/lib/middleware/auth";
-import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
+import { puedeEditarPresupuesto } from "@/lib/auth/rol-empresa";
 import { successResponse, errorResponse } from "@/lib/api/response";
 import { API_ERRORS } from "@/lib/api/errors";
 import { ESTADOS_PRESUPUESTO, type EstadoPresupuesto, type IvaTipoPresupuesto } from "@/lib/presupuestos/types";
@@ -117,7 +117,7 @@ export async function PATCH(request: NextRequest, ctxParams: { params: Promise<{
 /**
  * PUT /api/presupuestos/[id] — edición completa (cliente, ítems, condiciones,
  * observaciones), recalculando totales y conservando el mismo numero_control.
- * Solo roles admin/administrador/super_admin. Bloquea si ya está convertido.
+ * Pueden editar: admin/administrador/super_admin y el área de Ventas. Bloquea si ya está convertido.
  * Registra quién editó (updated_by / updated_by_nombre). No toca ventas ni facturación.
  */
 export async function PUT(request: NextRequest, ctxParams: { params: Promise<{ id: string }> }) {
@@ -125,8 +125,11 @@ export async function PUT(request: NextRequest, ctxParams: { params: Promise<{ i
     const { id } = await ctxParams.params;
     const ctx = await getTenantSupabaseFromAuthWithRol(request);
     if (!ctx) return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
-    if (!esRolAdminEmpresaOGlobal(ctx.auth.rol)) {
-      return NextResponse.json(errorResponse("Solo un administrador puede editar presupuestos."), { status: 403 });
+    if (!puedeEditarPresupuesto(ctx.auth.rol, ctx.auth.area)) {
+      return NextResponse.json(
+        errorResponse("No tenés permiso para editar presupuestos."),
+        { status: 403 }
+      );
     }
 
     let body: Record<string, unknown>;

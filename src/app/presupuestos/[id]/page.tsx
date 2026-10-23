@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { FileText, ArrowLeft, Loader2, Download, FileCheck2, Pencil } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
+import { puedeEditarPresupuesto } from "@/lib/auth/rol-empresa";
 import { ESTADO_LABEL, type EstadoPresupuesto } from "@/lib/presupuestos/types";
 
 type Presu = {
@@ -83,14 +83,14 @@ export default function PresupuestoDetallePage() {
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [ok, setOk] = useState<string | null>(null);
-  // Solo admin/administrador/super_admin pueden editar (el server también lo valida).
+  // Pueden editar: admin/administrador/super_admin y el área de Ventas (el server también lo valida).
   const [puedeEditar, setPuedeEditar] = useState(false);
 
   useEffect(() => {
     let cancel = false;
     fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" })
       .then((r) => r.json())
-      .then((j) => { if (!cancel) setPuedeEditar(esRolAdminEmpresaOGlobal(j?.usuario?.rol)); })
+      .then((j) => { if (!cancel) setPuedeEditar(puedeEditarPresupuesto(j?.usuario?.rol, j?.usuario?.area)); })
       .catch(() => { if (!cancel) setPuedeEditar(false); });
     return () => { cancel = true; };
   }, []);

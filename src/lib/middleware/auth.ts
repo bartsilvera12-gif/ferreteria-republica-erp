@@ -14,6 +14,8 @@ export interface UsuarioConEmpresa {
 export interface UsuarioConEmpresaYRol extends UsuarioConEmpresa {
   rol?: string;
   nombre?: string;
+  /** Área funcional del usuario (ventas, soporte, …). Para permisos por área. */
+  area?: string;
 }
 
 function esRolAdmin(rol?: string): boolean {
@@ -33,6 +35,7 @@ export async function getAuthWithRol(request?: Request | null): Promise<UsuarioC
     empresa_id: r.ctx.empresa_id,
     rol: r.ctx.usuarioRol ?? undefined,
     nombre: r.ctx.usuarioNombre ?? undefined,
+    area: r.ctx.usuarioArea ?? undefined,
   };
 }
 

@@ -5,6 +5,7 @@ type UsuarioMeRow = {
   nombre: string | null;
   email: string | null;
   rol: string | null;
+  area: string | null;
 };
 
 function pickAuthMetadataName(authUser: { user_metadata?: Record<string, unknown> | null }): string | null {
@@ -35,7 +36,7 @@ export async function GET(request: Request) {
     if (catalogUsuario?.id) {
       const { data, error } = await supabaseSr
         .from("usuarios")
-        .select("nombre, email, rol")
+        .select("nombre, email, rol, area")
         .eq("id", catalogUsuario.id)
         .maybeSingle();
 
@@ -48,8 +49,9 @@ export async function GET(request: Request) {
     const nombre = (row?.nombre ?? pickAuthMetadataName(authUser) ?? "").trim() || null;
     const email = (row?.email ?? authUser.email ?? "").trim() || null;
     const rol = (row?.rol ?? catalogUsuario?.rol ?? "").trim() || null;
+    const area = (row?.area ?? "").trim() || null;
 
-    return NextResponse.json({ usuario: { nombre, rol, email } });
+    return NextResponse.json({ usuario: { nombre, rol, email, area } });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Error al obtener el usuario actual";
     return NextResponse.json({ error: message }, { status: 500 });
