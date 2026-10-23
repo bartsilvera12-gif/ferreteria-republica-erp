@@ -5,7 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { Loader2, ArrowLeft } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
-import { esRolAdminEmpresaOGlobal } from "@/lib/auth/rol-empresa";
+import { puedeEditarPresupuesto } from "@/lib/auth/rol-empresa";
 import PresupuestoForm, { type PresupuestoFormInitial } from "@/components/presupuestos/PresupuestoForm";
 import type { IvaTipoPresupuesto, CondicionPresupuesto } from "@/lib/presupuestos/types";
 
@@ -23,10 +23,10 @@ export default function EditarPresupuestoPage() {
     let cancel = false;
     (async () => {
       try {
-        // Permiso: solo admin/administrador/super_admin.
+        // Permiso: admin/administrador/super_admin y el área de Ventas.
         const meRes = await fetchWithSupabaseSession("/api/usuarios/me", { cache: "no-store" });
         const me = await meRes.json().catch(() => ({}));
-        if (!esRolAdminEmpresaOGlobal(me?.usuario?.rol)) {
+        if (!puedeEditarPresupuesto(me?.usuario?.rol, me?.usuario?.area)) {
           if (!cancel) setEstado("no_admin");
           return;
         }
@@ -94,7 +94,7 @@ export default function EditarPresupuestoPage() {
   }
 
   const mensaje =
-    estado === "no_admin" ? "Solo un administrador puede editar presupuestos."
+    estado === "no_admin" ? "No tenés permiso para editar presupuestos."
     : estado === "convertido" ? `El presupuesto ${numeroControl} ya fue convertido en pedido/venta; no se puede editar.`
     : estado === "no_encontrado" ? "El presupuesto no existe."
     : "No se pudo cargar el presupuesto.";
