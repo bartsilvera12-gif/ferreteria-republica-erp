@@ -73,12 +73,15 @@ export default function EditarOrdenCompraPage({ params }: { params: Promise<{ nu
     proveedor_nombre: "",
     nro_timbrado: "",
     numero_factura: "",
+    fecha_factura: "",
     moneda: "PYG" as Moneda,
     tipo_cambio: "",
     tipo_pago: "contado" as TipoPago,
     plazo_dias: "",
     observacion: "",
   });
+  /** Fecha de registro (emisión) de la OC: solo lectura. */
+  const [fechaRegistro, setFechaRegistro] = useState("");
   const [comprobanteFile, setComprobanteFile] = useState<File | null>(null);
   const [comprobanteError, setComprobanteError] = useState<string | null>(null);
   const [lineas, setLineas] = useState<Linea[]>([]);
@@ -108,11 +111,17 @@ export default function EditarOrdenCompraPage({ params }: { params: Promise<{ nu
           setCargando(false);
           return;
         }
+        {
+          const d = new Date(c.fecha);
+          const p2 = (n: number) => String(n).padStart(2, "0");
+          setFechaRegistro(Number.isNaN(d.getTime()) ? "" : `${p2(d.getDate())}/${p2(d.getMonth() + 1)}/${d.getFullYear()} ${p2(d.getHours())}:${p2(d.getMinutes())}`);
+        }
         setCab({
           proveedor_id: c.proveedor_id,
           proveedor_nombre: c.proveedor_nombre,
           nro_timbrado: c.nro_timbrado ?? "",
           numero_factura: c.numero_factura ?? "",
+          fecha_factura: c.fecha_factura ?? "",
           moneda: (c.moneda === "USD" ? "USD" : "PYG") as Moneda,
           tipo_cambio: c.moneda === "USD" ? String(c.tipo_cambio || "") : "",
           tipo_pago: (c.tipo_pago === "credito" ? "credito" : "contado") as TipoPago,
@@ -283,6 +292,7 @@ export default function EditarOrdenCompraPage({ params }: { params: Promise<{ nu
           observacion: cab.observacion.trim() || null,
           nro_timbrado: cab.nro_timbrado.trim() || null,
           numero_factura: cab.numero_factura.trim() || null,
+          fecha_factura: cab.fecha_factura || null,
           comprobante_storage_path: comprobante?.comprobante_storage_path ?? null,
           comprobante_nombre: comprobante?.comprobante_nombre ?? null,
           comprobante_mime_type: comprobante?.comprobante_mime_type ?? null,
@@ -346,6 +356,14 @@ export default function EditarOrdenCompraPage({ params }: { params: Promise<{ nu
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">N° de factura <span className="font-normal text-slate-400">(opcional)</span></label>
               <input value={cab.numero_factura} onChange={(e) => setCab((p) => ({ ...p, numero_factura: e.target.value }))} placeholder="Ej: 001-001-0000123" className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Fecha de la factura <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input type="date" value={cab.fecha_factura} onChange={(e) => setCab((p) => ({ ...p, fecha_factura: e.target.value }))} className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Fecha de registro</label>
+              <input value={fechaRegistro} disabled className={`${inputClass} bg-slate-50 text-slate-500`} />
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs font-semibold text-slate-600">Reemplazar comprobante / presupuesto <span className="font-normal text-slate-400">(opcional)</span></label>

@@ -33,11 +33,20 @@ const ESTADO_LBL: Record<EstadoOrdenCompra, string> = {
   cancelada: "Cancelada",
 };
 
+/** "YYYY-MM-DD" (columna date) -> dd/mm/yyyy, sin pasar por Date (evita el corrimiento por zona horaria). */
+function fmtDia(ymd: string | null | undefined) {
+  if (!ymd) return "—";
+  const [y, m, d] = ymd.slice(0, 10).split("-");
+  return y && m && d ? `${d}/${m}/${y}` : ymd;
+}
+
 interface Grupo {
   numero_oc: string;
   proveedor_nombre: string;
   estado: EstadoOrdenCompra;
+  /** Fecha de registro (emisión) de la OC. */
   fecha: string;
+  fecha_factura: string | null;
   items: number;
   total: number;
 }
@@ -95,6 +104,7 @@ export default function OrdenesCompraPage() {
           proveedor_nombre: o.proveedor_nombre,
           estado: o.estado,
           fecha: o.fecha,
+          fecha_factura: o.fecha_factura ?? null,
           items: 1,
           total: o.total,
         });
@@ -166,7 +176,7 @@ export default function OrdenesCompraPage() {
             <table className="w-full min-w-[760px] text-sm">
               <thead className="border-b-2 border-[#4FAEB2]/40 bg-[#E5F4F4]">
                 <tr>
-                  {["N° OC", "Fecha", "Proveedor", "Ítems", "Total", "Estado", ""].map((h, i) => (
+                  {["N° OC", "Fechas", "Proveedor", "Ítems", "Total", "Estado", ""].map((h, i) => (
                     <th key={h} className={`px-3 py-3 text-xs font-bold uppercase tracking-wide text-[#3F8E91] ${i === 3 || i === 4 ? "text-right" : i === 5 || i === 6 ? "text-center" : "text-left"}`}>{h}</th>
                   ))}
                 </tr>
@@ -175,7 +185,10 @@ export default function OrdenesCompraPage() {
                 {filtrados.map((g) => (
                   <tr key={g.numero_oc} className="transition-colors hover:bg-[#4FAEB2]/5">
                     <td className="px-3 py-2.5 font-mono text-xs font-semibold text-[#3F8E91]">{g.numero_oc}</td>
-                    <td className="px-3 py-2.5 text-xs tabular-nums text-slate-600">{fmtFecha(g.fecha)}</td>
+                    <td className="px-3 py-2.5 text-xs tabular-nums text-slate-600 whitespace-nowrap">
+                      <div title="Día de carga de la orden en el sistema"><span className="text-slate-400">Registro:</span> {fmtFecha(g.fecha)}</div>
+                      <div title="Fecha de la factura del proveedor"><span className="text-slate-400">Factura:</span> {fmtDia(g.fecha_factura)}</div>
+                    </td>
                     <td className="px-3 py-2.5 text-xs font-medium text-slate-800">{g.proveedor_nombre || "—"}</td>
                     <td className="px-3 py-2.5 text-right text-xs tabular-nums text-slate-600">{g.items}</td>
                     <td className="px-3 py-2.5 text-right text-xs tabular-nums font-bold text-slate-900">{fmtGs(g.total)}</td>

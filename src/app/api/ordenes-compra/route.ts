@@ -57,6 +57,8 @@ export async function POST(request: NextRequest) {
       observacion: req("observacion") ? String(body.observacion).trim().slice(0, 2000) : null,
       nro_timbrado: req("nro_timbrado") ? String(body.nro_timbrado).trim().toUpperCase() : null,
       numero_factura: req("numero_factura") ? String(body.numero_factura).trim() : null,
+      fecha_factura: req("fecha_factura") && /^\d{4}-\d{2}-\d{2}/.test(String(body.fecha_factura))
+        ? String(body.fecha_factura).trim().slice(0, 10) : null,
       comprobante_url: req("comprobante_url") ? String(body.comprobante_url) : null,
       comprobante_storage_path: req("comprobante_storage_path") ? String(body.comprobante_storage_path) : null,
       comprobante_nombre: req("comprobante_nombre") ? String(body.comprobante_nombre) : null,

@@ -10,7 +10,7 @@ interface OrdenApiRow {
   subtotal: string | number; monto_iva: string | number; total: string | number;
   precio_venta: string | number; margen_venta: string | number | null;
   tipo_pago: string; plazo_dias: number | null; estado: string; observacion: string | null;
-  nro_timbrado?: string | null; numero_factura?: string | null;
+  nro_timbrado?: string | null; numero_factura?: string | null; fecha_factura?: string | null;
   compra_numero_control: string | null; recibida_at: string | null;
   cancelada_at: string | null; cancelada_motivo: string | null; fecha: string;
 }
@@ -45,6 +45,7 @@ function mapRow(r: OrdenApiRow): OrdenCompra {
     observacion: r.observacion ?? null,
     nro_timbrado: r.nro_timbrado ?? null,
     numero_factura: r.numero_factura ?? null,
+    fecha_factura: r.fecha_factura ? String(r.fecha_factura).slice(0, 10) : null,
     compra_numero_control: r.compra_numero_control ?? null,
     recibida_at: r.recibida_at ?? null,
     cancelada_at: r.cancelada_at ?? null,
@@ -102,6 +103,8 @@ export interface OrdenHeaderPayload {
   observacion?: string | null;
   nro_timbrado?: string | null;
   numero_factura?: string | null;
+  /** YYYY-MM-DD. */
+  fecha_factura?: string | null;
   comprobante_storage_path?: string | null;
   comprobante_nombre?: string | null;
   comprobante_mime_type?: string | null;

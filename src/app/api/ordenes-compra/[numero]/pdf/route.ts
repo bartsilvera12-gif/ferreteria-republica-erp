@@ -78,7 +78,8 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   <div class="row">
     <div class="box"><h3>Orden</h3>
       <div><b>N°:</b> ${esc(cab.numero_oc)}</div>
-      <div><b>Fecha:</b> ${esc(fechaDia(cab.fecha))}</div>
+      <div><b>Fecha de registro:</b> ${esc(fechaDia(cab.fecha))}</div>
+      ${cab.fecha_factura ? `<div><b>Fecha de factura:</b> ${esc(String(cab.fecha_factura).slice(0, 10).split("-").reverse().join("/"))}</div>` : ""}
       <div><b>Condición:</b> ${esc(tipoPago)}</div>
       <div><b>Moneda:</b> ${moneda === "USD" ? "Dólares (USD)" : "Guaraníes (Gs.)"}</div>
     </div>

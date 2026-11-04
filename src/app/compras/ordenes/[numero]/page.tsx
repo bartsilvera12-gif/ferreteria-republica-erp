@@ -135,9 +135,12 @@ export default function OrdenCompraDetallePage() {
               {ESTADO_LBL[cab.estado]}
             </span>
           </div>
-          <p className="mt-1 text-sm text-slate-500">
-            {cab.proveedor_nombre || "—"} · Emitida el {fmtFecha(cab.fecha)}
-          </p>
+          <p className="mt-1 text-sm text-slate-500">{cab.proveedor_nombre || "—"}</p>
+          <div className="mt-1 flex flex-wrap gap-x-5 gap-y-1 text-sm text-slate-600">
+            <span><span className="text-slate-400">Fecha de registro:</span> {fmtFecha(cab.fecha)}</span>
+            <span><span className="text-slate-400">Fecha de factura:</span> {fmtDia(cab.fecha_factura)}</span>
+            {cab.numero_factura && <span><span className="text-slate-400">N° factura:</span> {cab.numero_factura}</span>}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <a

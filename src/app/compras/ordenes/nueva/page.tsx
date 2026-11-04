@@ -62,6 +62,13 @@ type Linea = {
 
 const inputClass = "w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/30 bg-white";
 
+/** La OC se registra al guardar: la fecha de registro es hoy (hora local). */
+function fechaRegistroHoy(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()}`;
+}
+
 export default function NuevaOrdenCompraPage() {
   const router = useRouter();
   const [cab, setCab] = useState({
@@ -69,6 +76,7 @@ export default function NuevaOrdenCompraPage() {
     proveedor_nombre: "",
     nro_timbrado: "",
     numero_factura: "",
+    fecha_factura: "",
     moneda: "PYG" as Moneda,
     tipo_cambio: "",
     tipo_pago: "contado" as TipoPago,
@@ -238,6 +246,7 @@ export default function NuevaOrdenCompraPage() {
           observacion: cab.observacion.trim() || null,
           nro_timbrado: cab.nro_timbrado.trim() || null,
           numero_factura: cab.numero_factura.trim() || null,
+          fecha_factura: cab.fecha_factura || null,
           comprobante_storage_path: comprobante?.comprobante_storage_path ?? null,
           comprobante_nombre: comprobante?.comprobante_nombre ?? null,
           comprobante_mime_type: comprobante?.comprobante_mime_type ?? null,
@@ -282,6 +291,14 @@ export default function NuevaOrdenCompraPage() {
             <div>
               <label className="mb-1 block text-xs font-semibold text-slate-600">N° de factura <span className="font-normal text-slate-400">(opcional)</span></label>
               <input value={cab.numero_factura} onChange={(e) => setCab((p) => ({ ...p, numero_factura: e.target.value }))} placeholder="Ej: 001-001-0000123" className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Fecha de la factura <span className="font-normal text-slate-400">(opcional)</span></label>
+              <input type="date" value={cab.fecha_factura} onChange={(e) => setCab((p) => ({ ...p, fecha_factura: e.target.value }))} className={inputClass} />
+            </div>
+            <div>
+              <label className="mb-1 block text-xs font-semibold text-slate-600">Fecha de registro</label>
+              <input value={fechaRegistroHoy()} disabled suppressHydrationWarning className={`${inputClass} bg-slate-50 text-slate-500`} />
             </div>
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs font-semibold text-slate-600">Comprobante / presupuesto <span className="font-normal text-slate-400">(opcional)</span></label>

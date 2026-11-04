@@ -49,6 +49,8 @@ export interface OrdenCompraRow {
   observacion: string | null;
   nro_timbrado: string | null;
   numero_factura: string | null;
+  /** YYYY-MM-DD: fecha de la factura del proveedor (si ya se conoce al emitir la OC). */
+  fecha_factura: string | null;
   comprobante_url: string | null;
   comprobante_storage_path: string | null;
   comprobante_nombre: string | null;
@@ -70,10 +72,41 @@ const COLS = `
   iva_tipo, subtotal, monto_iva, total, precio_venta, margen_venta,
   tipo_pago, plazo_dias, estado, observacion,
   nro_timbrado, numero_factura,
+  (to_jsonb(ordenes_compra.*) ->> 'fecha_factura') AS fecha_factura,
   comprobante_url, comprobante_storage_path, comprobante_nombre, comprobante_mime_type,
   compra_numero_control, recibida_at, cancelada_at, cancelada_motivo,
   fecha, created_at, updated_at, created_by, usuario_nombre
 `;
+// fecha_factura se lee vía to_jsonb para no romper la lectura si la migración
+// 20261104130000 (columna ordenes_compra.fecha_factura) todavía no se aplicó:
+// en ese caso viene null. Las queries que usan COLS no deben aliasar la tabla.
+
+/**
+ * Fija la fecha de factura de toda la OC. Solo se ejecuta cuando hay una fecha:
+ * sin la migración aplicada, cargar una OC sin fecha sigue funcionando.
+ */
+async function setFechaFacturaOc(
+  client: import("pg").PoolClient,
+  t: string,
+  empresaId: string,
+  numeroOc: string,
+  fecha: string | null,
+  rows: OrdenCompraRow[]
+): Promise<void> {
+  if (!fecha) return;
+  try {
+    await client.query(
+      `UPDATE ${t} SET fecha_factura = $3::date WHERE empresa_id = $1::uuid AND numero_oc = $2`,
+      [empresaId, numeroOc, fecha]
+    );
+  } catch (e) {
+    if ((e as { code?: string })?.code === "42703") {
+      throw new Error("Falta aplicar la migración de fecha de factura en órdenes de compra.");
+    }
+    throw e;
+  }
+  for (const r of rows) r.fecha_factura = fecha;
+}
 
 export interface OrdenCompraHeaderInput {
   proveedor_id: string;
@@ -85,6 +118,7 @@ export interface OrdenCompraHeaderInput {
   observacion: string | null;
   nro_timbrado: string | null;
   numero_factura: string | null;
+  fecha_factura: string | null;
   comprobante_url: string | null;
   comprobante_storage_path: string | null;
   comprobante_nombre: string | null;
@@ -220,6 +254,7 @@ export async function insertOrdenCompra(
       );
       inserted.push(rows[0]);
     }
+    await setFechaFacturaOc(client, t, empresaId, numero, header.fecha_factura, inserted);
     await client.query("COMMIT");
     return { numero_oc: numero, ordenes: inserted };
   } catch (err) {
@@ -330,6 +365,7 @@ export async function actualizarOrdenCompra(
       );
       inserted.push(rows[0]);
     }
+    await setFechaFacturaOc(client, t, empresaId, numeroOc, header.fecha_factura, inserted);
     // Auditoría (atómica: misma transacción). "despues" = líneas resultantes.
     await registrarCompraAuditoria(client, schema, {
       empresaId,

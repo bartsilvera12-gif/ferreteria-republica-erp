@@ -45,6 +45,8 @@ export interface OrdenCompra {
   observacion?: string | null;
   nro_timbrado?: string | null;
   numero_factura?: string | null;
+  /** YYYY-MM-DD: fecha de la factura del proveedor (opcional al emitir la OC). */
+  fecha_factura?: string | null;
 
   // Trazabilidad
   compra_numero_control?: string | null; // COMP-XXXXXX cuando se recibió
@@ -52,5 +54,5 @@ export interface OrdenCompra {
   cancelada_at?: string | null;
   cancelada_motivo?: string | null;
 
-  fecha: string;                 // ISO
+  fecha: string;                 // ISO — fecha de registro (emisión) de la OC
 }
