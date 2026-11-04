@@ -140,6 +140,8 @@ export interface ListComprasFilters {
   desde?: string | null;
   /** YYYY-MM-DD inclusive: se compara contra el dia completo. */
   hasta?: string | null;
+  /** Solo compras generadas desde esta orden de compra (N° de OC exacto). */
+  ordenCompra?: string | null;
   /** 1-based. */
   page?: number;
   /** Compras (grupos de numero_control) por pagina. `null` = sin paginar, para el export. */
@@ -216,12 +218,13 @@ export async function listCompras(
   const offset = pageSize === null ? 0 : (page - 1) * pageSize;
 
   /**
-   * Orden fijo: los dos argumentos de `translate` van siempre en $7/$8, y la
-   * paginacion queda al final en $9/$10 para que su ausencia no corra la
-   * numeracion del resto.
+   * Orden fijo: los dos argumentos de `translate` van siempre en $7/$8, el
+   * filtro por orden de compra en $9, y la paginacion queda al final en
+   * $10/$11 para que su ausencia no corra la numeracion del resto.
    */
   const params: unknown[] = [
     empresaId, tokens, tipoPago, desde, hasta, exacto, ACENTOS_DESDE, ACENTOS_HASTA,
+    filters.ordenCompra?.trim() || null,
   ];
   if (pageSize !== null) params.push(pageSize, offset);
 
@@ -242,6 +245,7 @@ export async function listCompras(
         AND ($3::text IS NULL OR c.tipo_pago = $3)
         AND ($4::date IS NULL OR c.fecha >= $4::date)
         AND ($5::date IS NULL OR c.fecha < ($5::date + INTERVAL '1 day'))
+        AND ($9::text IS NULL OR c.orden_compra_numero = $9)
       GROUP BY c.numero_control
     ),
     filtrado AS (
@@ -252,7 +256,7 @@ export async function listCompras(
       SELECT numero_control, fecha_max, COUNT(*) OVER() AS total_grupos
       FROM filtrado
       ORDER BY ($6::text IS NOT NULL AND numero_control = $6) DESC, fecha_max DESC, numero_control DESC
-      ${pageSize === null ? "" : "LIMIT $9 OFFSET $10"}
+      ${pageSize === null ? "" : "LIMIT $10 OFFSET $11"}
     )
     SELECT ${cols}, p.unidad_medida AS unidad_medida, pagina.total_grupos
       FROM ${t} c
@@ -639,6 +643,13 @@ export interface EditarCompraHeader {
   nro_timbrado: string | null;
   fecha_factura: string | null;
   observacion: string | null;
+  /**
+   * Condición de pago (opcional): si viene, reemplaza la de toda la compra.
+   * La deuda con el proveedor se deriva de tipo_pago='credito', así que pasar
+   * a contado una compra que ya tiene pagos registrados se rechaza.
+   */
+  tipo_pago?: "contado" | "credito" | null;
+  plazo_dias?: number | null;
   /** Proveedor (opcional): si viene, reemplaza el proveedor de toda la compra. */
   proveedor_id?: string | null;
   proveedor_nombre?: string | null;
@@ -878,6 +889,32 @@ export async function editarCompraConMovimiento(
         );
         agregadas++;
       }
+    }
+
+    // ── 3a) Condición de pago (contado / crédito + plazo) ──
+    if (header.tipo_pago === "contado" || header.tipo_pago === "credito") {
+      if (header.tipo_pago === "contado" && cab.tipo_pago === "credito") {
+        const tPag = quoteSchemaTable(schema, "pagos_proveedor");
+        const existe = await client.query<{ t: string | null }>(`SELECT to_regclass($1) AS t`, [tPag]);
+        if (existe.rows[0]?.t) {
+          const pagos = await client.query<{ n: string }>(
+            `SELECT count(*) AS n FROM ${tPag}
+              WHERE empresa_id = $1::uuid AND numero_control = $2 AND anulado_at IS NULL`,
+            [empresaId, numeroControl]
+          );
+          if (Number(pagos.rows[0]?.n ?? 0) > 0) {
+            throw new Error(
+              "La compra tiene pagos al proveedor registrados: no se puede pasar a contado. Anulá los pagos primero."
+            );
+          }
+        }
+      }
+      const plazo = header.tipo_pago === "credito" ? (header.plazo_dias ?? null) : null;
+      await client.query(
+        `UPDATE ${tC} SET tipo_pago = $1, plazo_dias = $2::integer, updated_at = now()
+          WHERE empresa_id = $3::uuid AND numero_control = $4`,
+        [header.tipo_pago, plazo, empresaId, numeroControl]
+      );
     }
 
     // ── 3) Datos de factura + proveedor en todas las filas que quedaron ──

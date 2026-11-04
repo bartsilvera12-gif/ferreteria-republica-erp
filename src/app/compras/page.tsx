@@ -22,6 +22,13 @@ function formatGs(valor: number) {
   return `Gs. ${Math.round(valor).toLocaleString("es-PY")}`;
 }
 
+/** "YYYY-MM-DD" (columna date) -> dd/mm/yyyy, sin pasar por Date (evita el corrimiento por zona horaria). */
+function formatFechaDia(ymd: string | null | undefined) {
+  if (!ymd) return "—";
+  const [y, m, d] = ymd.slice(0, 10).split("-");
+  return y && m && d ? `${d}/${m}/${y}` : ymd;
+}
+
 function formatFecha(iso: string) {
   try {
     const d = new Date(iso);
@@ -45,7 +52,10 @@ const tipoPagoBadge: Record<TipoPago, string> = {
 type GrupoCompra = {
   numero_control: string;
   proveedor_nombre: string;
+  /** Fecha de registro (carga en el sistema). */
   fecha: string;
+  /** Fecha impresa en la factura del proveedor (YYYY-MM-DD). */
+  fecha_factura: string | null;
   tipo_pago: TipoPago;
   plazo_dias?: number;
   items: Compra[];
@@ -64,6 +74,7 @@ function agrupar(rows: Compra[]): GrupoCompra[] {
         numero_control: c.numero_control,
         proveedor_nombre: c.proveedor_nombre,
         fecha: c.fecha,
+        fecha_factura: c.fecha_factura ?? null,
         tipo_pago: c.tipo_pago,
         plazo_dias: c.plazo_dias,
         items: [],
@@ -376,7 +387,7 @@ export default function ComprasPage() {
                 <th className="py-3 pr-4 font-medium text-right">Ítems</th>
                 <th className="py-3 pr-4 font-medium text-right">Total</th>
                 <th className="hidden py-3 pr-4 font-medium lg:table-cell">Pago</th>
-                <th className="py-3 pr-4 font-medium">Fecha</th>
+                <th className="py-3 pr-4 font-medium">Fechas</th>
                 <th className="py-3 font-medium text-right">Acciones</th>
               </tr>
             </thead>
@@ -436,7 +447,15 @@ export default function ComprasPage() {
                             {g.tipo_pago === "contado" ? "Contado" : g.tipo_pago === "credito" ? `Crédito ${g.plazo_dias ?? ""}d` : "—"}
                           </span>
                         </td>
-                        <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums">{formatFecha(g.fecha)}</td>
+                        <td className="py-4 pr-4 text-gray-500 text-xs tabular-nums whitespace-nowrap">
+                          <div title="Fecha de la factura del proveedor">
+                            <span className="text-gray-400">Factura:</span>{" "}
+                            <span className="font-medium text-gray-700">{formatFechaDia(g.fecha_factura)}</span>
+                          </div>
+                          <div title="Día de carga en el sistema">
+                            <span className="text-gray-400">Registro:</span> {formatFecha(g.fecha)}
+                          </div>
+                        </td>
                         <td className="py-4 text-right">
                           {/* Editar/Eliminar. En compras derivadas de una OC, ambos ajustan la orden. */}
                           <div className="inline-flex items-center gap-2">

@@ -6,6 +6,8 @@ import { useParams } from "next/navigation";
 import { AlertTriangle, Loader2, Download } from "lucide-react";
 import { getOrdenCompra, cancelarOrdenCompra } from "@/lib/ordenes-compra/storage";
 import type { OrdenCompra, EstadoOrdenCompra } from "@/lib/ordenes-compra/types";
+import { getCompras } from "@/lib/compras/storage";
+import type { Compra } from "@/lib/compras/types";
 
 function fmtGs(v: number) {
   return `Gs. ${Math.round(v).toLocaleString("es-PY")}`;
@@ -19,6 +21,24 @@ function fmtFecha(iso: string | null | undefined) {
     return iso;
   }
 }
+/** "YYYY-MM-DD" (columna date) -> dd/mm/yyyy, sin pasar por Date (evita el corrimiento por zona horaria). */
+function fmtDia(ymd: string | null | undefined) {
+  if (!ymd) return "—";
+  const [y, m, d] = ymd.slice(0, 10).split("-");
+  return y && m && d ? `${d}/${m}/${y}` : ymd;
+}
+
+/** Compra (recepción) generada desde la OC, agrupada por numero_control. */
+interface CompraDeOc {
+  numero_control: string;
+  fecha: string;
+  fecha_factura: string | null;
+  numero_factura: string | null;
+  tipo_pago: "contado" | "credito";
+  plazo_dias?: number;
+  total: number;
+}
+
 const IVA_LBL: Record<string, string> = { exenta: "Exenta", "5": "5%", "10": "10%" };
 const ESTADO_BADGE: Record<EstadoOrdenCompra, string> = {
   pendiente: "bg-[var(--badge-warning-bg)] text-[var(--badge-warning-text)]",
@@ -38,6 +58,7 @@ export default function OrdenCompraDetallePage() {
   const numeroOc = decodeURIComponent(String(params.numero));
 
   const [lineas, setLineas] = useState<OrdenCompra[]>([]);
+  const [compras, setCompras] = useState<CompraDeOc[]>([]);
   const [cargando, setCargando] = useState(true);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
@@ -47,8 +68,26 @@ export default function OrdenCompraDetallePage() {
 
   const cargar = useCallback(async () => {
     setCargando(true);
-    const l = await getOrdenCompra(numeroOc);
+    const [l, cs] = await Promise.all([
+      getOrdenCompra(numeroOc),
+      getCompras({ ordenCompra: numeroOc, pageSize: 200 }),
+    ]);
     setLineas(l);
+    const porNumero = new Map<string, CompraDeOc>();
+    for (const c of cs.compras as Compra[]) {
+      const g = porNumero.get(c.numero_control);
+      if (g) { g.total += Number(c.total) || 0; continue; }
+      porNumero.set(c.numero_control, {
+        numero_control: c.numero_control,
+        fecha: c.fecha,
+        fecha_factura: c.fecha_factura ?? null,
+        numero_factura: c.numero_factura ?? null,
+        tipo_pago: c.tipo_pago,
+        plazo_dias: c.plazo_dias,
+        total: Number(c.total) || 0,
+      });
+    }
+    setCompras([...porNumero.values()]);
     setCargando(false);
   }, [numeroOc]);
   useEffect(() => { cargar(); }, [cargar]);
@@ -97,7 +136,7 @@ export default function OrdenCompraDetallePage() {
             </span>
           </div>
           <p className="mt-1 text-sm text-slate-500">
-            {cab.proveedor_nombre || "—"} · {fmtFecha(cab.fecha)}
+            {cab.proveedor_nombre || "—"} · Emitida el {fmtFecha(cab.fecha)}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -182,6 +221,42 @@ export default function OrdenCompraDetallePage() {
           </tfoot>
         </table>
       </div>
+
+      {/* Compras registradas desde esta OC: fecha de la factura y de registro por separado. */}
+      {compras.length > 0 && (
+        <div className="overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-100 px-4 py-3">
+            <h2 className="text-sm font-bold text-slate-800">Compras registradas desde esta orden</h2>
+          </div>
+          <table className="w-full min-w-[720px] text-sm">
+            <thead className="border-b-2 border-[#4FAEB2]/40 bg-[#E5F4F4]">
+              <tr>
+                {["N° Control", "N° Factura", "Fecha factura", "Fecha registro", "Condición", "Total"].map((h, i) => (
+                  <th key={h} className={`px-4 py-3 text-xs font-bold uppercase tracking-wide text-[#3F8E91] ${i === 5 ? "text-right" : "text-left"}`}>{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {compras.map((c) => (
+                <tr key={c.numero_control}>
+                  <td className="px-4 py-3 font-mono text-xs">
+                    <Link href={`/compras/${encodeURIComponent(c.numero_control)}/editar`} className="font-semibold text-[#3F8E91] hover:underline">
+                      {c.numero_control}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">{c.numero_factura || "—"}</td>
+                  <td className="px-4 py-3 tabular-nums text-slate-700">{fmtDia(c.fecha_factura)}</td>
+                  <td className="px-4 py-3 tabular-nums text-slate-600">{fmtFecha(c.fecha)}</td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {c.tipo_pago === "credito" ? `Crédito${c.plazo_dias ? ` ${c.plazo_dias} días` : ""}` : "Contado"}
+                  </td>
+                  <td className="px-4 py-3 text-right tabular-nums font-semibold text-slate-900">{fmtGs(c.total)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Cancelar OC: un solo modal que confirma y pide el motivo. */}
       {cancelOpen && (

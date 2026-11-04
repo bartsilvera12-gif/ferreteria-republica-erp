@@ -80,6 +80,8 @@ export async function PATCH(
       nro_timbrado: req("nro_timbrado") ? String(body.nro_timbrado).trim().toUpperCase() : null,
       fecha_factura: req("fecha_factura") ? String(body.fecha_factura).trim().slice(0, 10) : null,
       observacion: req("observacion") ? String(body.observacion).trim().slice(0, 2000) : null,
+      tipo_pago: body.tipo_pago === "credito" || body.tipo_pago === "contado" ? body.tipo_pago : null,
+      plazo_dias: req("plazo_dias") ? Math.max(0, parseInt(String(body.plazo_dias), 10) || 0) || null : null,
       proveedor_id: req("proveedor_id") ? String(body.proveedor_id) : null,
       proveedor_nombre: req("proveedor_nombre") ? String(body.proveedor_nombre).trim() : null,
       comprobante_storage_path: req("comprobante_storage_path") ? String(body.comprobante_storage_path) : null,
@@ -104,7 +106,7 @@ export async function PATCH(
       return NextResponse.json(successResponse(out));
     } catch (e) {
       const msg = e instanceof Error ? e.message : "No se pudo editar la compra.";
-      const status = /no encontrada|orden de compra/i.test(msg) ? 400 : 500;
+      const status = /no encontrada|orden de compra|pagos al proveedor/i.test(msg) ? 400 : 500;
       console.error("[/api/compras/[numero] PATCH]", msg);
       return NextResponse.json(errorResponse(msg), { status });
     }

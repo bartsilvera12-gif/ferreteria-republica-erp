@@ -18,6 +18,7 @@ const PAGE_SIZE_DEFAULT = 25;
  * resueltos en la base.
  *
  * Query: `q`, `tipo_pago` (contado|credito), `desde`, `hasta` (YYYY-MM-DD),
+ * `orden_compra` (N° de OC exacto),
  * `page` (1-based), `page_size`. `total` cuenta compras, no filas.
  */
 export async function GET(request: NextRequest) {
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
       tipoPago: tipoPagoParam(sp),
       desde: fechaParam(sp, "desde"),
       hasta: fechaParam(sp, "hasta"),
+      ordenCompra: sp.get("orden_compra")?.trim() || null,
       page: Number.isNaN(page) ? 1 : page,
       pageSize: Number.isNaN(pageSize) ? PAGE_SIZE_DEFAULT : pageSize,
     });

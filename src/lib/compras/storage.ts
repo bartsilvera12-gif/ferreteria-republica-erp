@@ -63,6 +63,8 @@ export interface ComprasQuery {
   desde?: string;
   /** YYYY-MM-DD */
   hasta?: string;
+  /** Solo las compras generadas desde esta orden de compra. */
+  ordenCompra?: string;
   page?: number;
   pageSize?: number;
 }
@@ -83,6 +85,7 @@ export function comprasQueryString(query: ComprasQuery = {}): string {
   if (query.tipoPago) sp.set("tipo_pago", query.tipoPago);
   if (query.desde) sp.set("desde", query.desde);
   if (query.hasta) sp.set("hasta", query.hasta);
+  if (query.ordenCompra) sp.set("orden_compra", query.ordenCompra);
   return sp.toString();
 }
 
@@ -159,6 +162,8 @@ export interface CompraHeaderPayload {
   plazo_dias?: number;
   nro_timbrado: string;
   numero_factura?: string | null;
+  /** YYYY-MM-DD: fecha impresa en la factura del proveedor. */
+  fecha_factura?: string | null;
   orden_compra_numero?: string | null;
   comprobante_storage_path?: string | null;
   comprobante_nombre?: string | null;
@@ -282,6 +287,9 @@ export interface EditarCompraPayload {
   nro_timbrado: string | null;
   fecha_factura: string | null;
   observacion: string | null;
+  /** Condición de pago: reemplaza la de toda la compra. */
+  tipo_pago?: "contado" | "credito";
+  plazo_dias?: number | null;
   /** Proveedor (opcional): si viene, reemplaza el proveedor de la compra. */
   proveedor_id?: string | null;
   proveedor_nombre?: string | null;

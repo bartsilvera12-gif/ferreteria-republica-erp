@@ -48,6 +48,15 @@ interface LineaEdit {
 }
 
 
+/** Fecha/hora de registro (timestamptz) en hora local: dd/mm/yyyy hh:mm. */
+function fmtRegistro(iso: string): string {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `${p(d.getDate())}/${p(d.getMonth() + 1)}/${d.getFullYear()} ${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+
 export default function EditarCompraPage({ params }: { params: Promise<{ numero: string }> }) {
   const { numero } = use(params);
   const numeroControl = decodeURIComponent(numero);
@@ -63,6 +72,10 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
   const [numeroFactura, setNumeroFactura] = useState("");
   const [nroTimbrado, setNroTimbrado] = useState("");
   const [fechaFactura, setFechaFactura] = useState("");
+  /** Fecha de registro (carga en el sistema): solo lectura. */
+  const [fechaRegistro, setFechaRegistro] = useState("");
+  const [tipoPago, setTipoPago] = useState<"contado" | "credito">("contado");
+  const [plazoDias, setPlazoDias] = useState("");
   const [observacion, setObservacion] = useState("");
   const [lineas, setLineas] = useState<LineaEdit[]>([]);
   const [eliminadas, setEliminadas] = useState<string[]>([]);
@@ -90,6 +103,9 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
       setNumeroFactura(cab.numero_factura ?? "");
       setNroTimbrado(cab.nro_timbrado ?? "");
       setFechaFactura((cab.fecha_factura ?? "").slice(0, 10));
+      setFechaRegistro(cab.fecha ?? "");
+      setTipoPago(cab.tipo_pago === "credito" ? "credito" : "contado");
+      setPlazoDias(cab.plazo_dias != null ? String(cab.plazo_dias) : "");
       setObservacion(cab.observacion ?? "");
       setCompActual({ path: cab.comprobante_storage_path ?? null, nombre: cab.comprobante_nombre ?? null });
       setLineas(rows.map((r: Compra) => ({
@@ -191,6 +207,8 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
       nro_timbrado: nroTimbrado.trim() || null,
       fecha_factura: fechaFactura || null,
       observacion: observacion.trim() || null,
+      tipo_pago: tipoPago,
+      plazo_dias: tipoPago === "credito" && plazoDias ? parseInt(plazoDias, 10) || null : null,
       proveedor_id: proveedorId || null,
       proveedor_nombre: proveedorNombre || null,
       lineas: payloadLineas,
@@ -343,6 +361,23 @@ export default function EditarCompraPage({ params }: { params: Promise<{ numero:
                 <input type="date" value={fechaFactura} onChange={(e) => setFechaFactura(e.target.value)} className={inputFactura} />
               </label>
               <label className="text-sm">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Fecha de registro</span>
+                <input value={fmtRegistro(fechaRegistro)} disabled className={`${inputFactura} bg-slate-50 text-slate-500`} />
+              </label>
+              <label className="text-sm">
+                <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Condición</span>
+                <select value={tipoPago} onChange={(e) => setTipoPago(e.target.value as "contado" | "credito")} className={`${inputFactura} bg-white`}>
+                  <option value="contado">Contado</option>
+                  <option value="credito">Crédito</option>
+                </select>
+              </label>
+              {tipoPago === "credito" && (
+                <label className="text-sm">
+                  <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Plazo (días)</span>
+                  <input type="number" min={1} value={plazoDias} onChange={(e) => setPlazoDias(e.target.value)} placeholder="Ej: 30" className={inputFactura} />
+                </label>
+              )}
+              <label className="text-sm sm:col-span-2">
                 <span className="mb-1.5 block text-[11px] font-semibold uppercase tracking-wide text-slate-500">Observación</span>
                 <input value={observacion} onChange={(e) => setObservacion(e.target.value)} className={inputFactura} />
               </label>

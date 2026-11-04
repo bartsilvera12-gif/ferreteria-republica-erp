@@ -92,6 +92,16 @@ function SegmentedControl<T extends string>({
 
 // ── Componente principal ───────────────────────────────────────────────────────
 
+/** Fecha de hoy en hora local, YYYY-MM-DD (toISOString daría la fecha UTC). */
+function hoyLocal(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+function fmtFechaLocal(ymd: string): string {
+  const [y, m, d] = ymd.split("-");
+  return `${d}/${m}/${y}`;
+}
+
 export default function NuevaCompraPage() {
   const router = useRouter();
 
@@ -102,6 +112,8 @@ export default function NuevaCompraPage() {
     proveedor_id: "",
     nro_timbrado: "",
     numero_factura: "",
+    /** Fecha impresa en la factura del proveedor. La de registro la pone el sistema. */
+    fecha_factura: hoyLocal(),
     tipo_pago: "contado" as TipoPago,
     plazo_dias: "",
     moneda: "PYG" as Moneda,
@@ -258,6 +270,8 @@ export default function NuevaCompraPage() {
     if (!cab.proveedor_id) return setErrorSubmit("Seleccioná o agregá un proveedor.");
     if (!cab.nro_timbrado.trim()) return setErrorSubmit("Ingresá el N° de timbrado.");
     if (!cab.numero_factura.trim()) return setErrorSubmit("Ingresá el N° de factura.");
+    if (!cab.fecha_factura) return setErrorSubmit("Ingresá la fecha de la factura.");
+    if (cab.fecha_factura > hoyLocal()) return setErrorSubmit("La fecha de la factura no puede ser posterior a hoy.");
     if (lineas.length === 0) return setErrorSubmit("Agregá al menos un producto a la compra.");
     if (cab.moneda === "USD" && tipoCambioNum <= 0)
       return setErrorSubmit("Cargá el tipo de cambio (USD → Gs.).");
@@ -303,6 +317,7 @@ export default function NuevaCompraPage() {
           plazo_dias: cab.tipo_pago === "credito" && cab.plazo_dias ? parseInt(cab.plazo_dias) : undefined,
           nro_timbrado: cab.nro_timbrado,
           numero_factura: cab.numero_factura,
+          fecha_factura: cab.fecha_factura,
           comprobante_storage_path: comprobante?.comprobante_storage_path ?? null,
           comprobante_nombre: comprobante?.comprobante_nombre ?? null,
           comprobante_mime_type: comprobante?.comprobante_mime_type ?? null,
@@ -433,6 +448,18 @@ export default function NuevaCompraPage() {
                 <input type="text" name="numero_factura" value={cab.numero_factura}
                   onChange={(e) => setCab((p) => ({ ...p, numero_factura: e.target.value }))}
                   placeholder="Ej: 001-001-0000123" className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Fecha de la factura <span className="text-red-500">*</span></label>
+                <input type="date" name="fecha_factura" value={cab.fecha_factura} max={hoyLocal()}
+                  onChange={(e) => setCab((p) => ({ ...p, fecha_factura: e.target.value }))}
+                  className={inputClass} />
+              </div>
+              <div>
+                <label className={labelClass}>Fecha de registro</label>
+                <input type="text" value={fmtFechaLocal(hoyLocal())} disabled
+                  className={`${inputClass} bg-slate-50 text-slate-500`} />
+                <p className="mt-1 text-xs text-gray-400">Día de carga en el sistema (automática).</p>
               </div>
               <div className="sm:col-span-2">
                 <label className={labelClass}>Proveedor <span className="text-red-500">*</span></label>
