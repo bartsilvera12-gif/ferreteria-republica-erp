@@ -274,9 +274,12 @@ export default function EditarProductoPage() {
       setUnidadReceta(p.unidad_receta ?? "");
       setFactorCompraReceta(String(p.factor_compra_receta ?? 1));
       setTiempoPrepMinutos(String(p.tiempo_prep_minutos ?? 0));
-      // Inferir tipo gastro a partir de los flags
+      // Inferir tipo a partir de los flags. En la ferretería no existe "Menú"
+      // (el selector de tipo está oculto y el alta siempre es reventa): antes,
+      // un producto con "Controla stock" destildado se tomaba como Menú y la
+      // ficha ocultaba la unidad de medida, la categoría y el stock, así que
+      // no había forma de cambiar la unidad desde la edición.
       if (esIns) setTipoGastro("materia");
-      else if (esVend && !ctrlStock) setTipoGastro("menu");
       else setTipoGastro("reventa");
     }).finally(() => {
       if (!cancelled) setCargando(false);
