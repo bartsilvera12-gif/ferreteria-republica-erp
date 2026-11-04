@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getTenantSupabaseFromAuth } from "@/lib/supabase/tenant-api";
 import { fetchDataSchemaForEmpresaId } from "@/lib/supabase/empresa-data-schema";
 import { ajustarStockConMovimiento } from "@/lib/inventario/server/ajuste-stock-pg";
+import { cambiarUnidadConHistorial } from "@/lib/inventario/server/cambio-unidad-pg";
 import { deleteProductoPg, ProductoConHistorialError } from "@/lib/inventario/server/productos-pg";
 import { getChatPostgresPool, quoteSchemaTable } from "@/lib/supabase/chat-pg-pool";
 import { assertAllowedChatDataSchema } from "@/lib/supabase/chat-data-schema";
@@ -236,6 +237,28 @@ export async function PATCH(
         if (/no encontrado/i.test(msg)) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
         console.error("[/api/productos/[id] PATCH] ajuste stock", msg);
         return NextResponse.json(errorResponse("No se pudo ajustar el stock."), { status: 500 });
+      }
+    }
+
+    // Cambio de unidad de medida: se aplica en su propia transacción y queda
+    // registrado en producto_unidad_historial. No convierte el stock ni toca
+    // movimientos/ventas/compras existentes (son historial).
+    if (patch.unidad_medida !== undefined) {
+      const nuevaUnidad = String(patch.unidad_medida);
+      delete patch.unidad_medida;
+      try {
+        await cambiarUnidadConHistorial(
+          await fetchDataSchemaForEmpresaId(empresaId),
+          empresaId,
+          id,
+          nuevaUnidad,
+          { id: ctx.auth.usuarioCatalogId ?? null, nombre: ctx.auth.nombre ?? ctx.auth.user?.email ?? null }
+        );
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "No se pudo cambiar la unidad de medida.";
+        if (/no encontrado/i.test(msg)) return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+        console.error("[/api/productos/[id] PATCH] cambio unidad", msg);
+        return NextResponse.json(errorResponse("No se pudo cambiar la unidad de medida."), { status: 500 });
       }
     }
 

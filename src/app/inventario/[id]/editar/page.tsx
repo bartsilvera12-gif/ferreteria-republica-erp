@@ -70,6 +70,8 @@ export default function EditarProductoPage() {
   });
   /** Stock con el que se cargó la ficha, para saber si el usuario lo cambió. */
   const [stockOriginal, setStockOriginal] = useState<string>("");
+  /** Unidad con la que se cargó la ficha, para avisar si el usuario la cambia. */
+  const [unidadOriginal, setUnidadOriginal] = useState<string>("");
   const [codigoOriginal, setCodigoOriginal] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [generandoCodigo, setGenerandoCodigo] = useState(false);
@@ -233,6 +235,7 @@ export default function EditarProductoPage() {
         motivo_ajuste: "",
       });
       setStockOriginal(String(p.stock_actual));
+      setUnidadOriginal((p.unidad_medida ?? "").trim().toUpperCase());
       setCodigoOriginal(p.codigo_barras ?? null);
       // La imagen principal ahora la gestiona ProductGalleryManager (galería).
       setCategoriaId(p.categoria_principal_id ?? null);
@@ -396,7 +399,12 @@ export default function EditarProductoPage() {
         precio_distribuidor: form.precio_distribuidor.trim() !== "" ? parseFloat(form.precio_distribuidor) || null : null,
         // parseFloat, no parseInt: con parseInt un producto por kilo perdía los
         // decimales al guardar (19,89 kg se convertía en 19).
-        stock_actual: redondearCantidad(parseFloat(form.stock_actual.replace(",", ".")) || 0, form.unidad_medida),
+        // El stock se manda SOLO si el usuario lo tocó. Si no, cambiar la unidad
+        // (ej. METRO -> UNIDAD) lo redondeaba en silencio (2,5 -> 3) sin dejar
+        // movimiento: el stock nunca se convierte por cambiar la unidad.
+        ...(stockCambio
+          ? { stock_actual: redondearCantidad(parseFloat(form.stock_actual.replace(",", ".")) || 0, form.unidad_medida) }
+          : {}),
         stock_minimo: redondearCantidad(parseFloat(form.stock_minimo.replace(",", ".")) || 0, form.unidad_medida),
         // El backend registra el movimiento de ajuste con este motivo y el usuario.
         motivo_ajuste: stockCambio ? form.motivo_ajuste.trim() || null : null,
@@ -508,11 +516,18 @@ export default function EditarProductoPage() {
 
   // Reventa y Materia prima mantienen stock visible; el Menú no descuenta stock propio.
   const showStock = tipoGastro === "reventa" || tipoGastro === "materia";
-  /** ¿El usuario tocó el stock? Se compara numérico para que "19.90" == "19.9". */
-  const stockCambio =
-    stockOriginal !== "" &&
-    redondearCantidad(parseFloat(form.stock_actual.replace(",", ".")) || 0, form.unidad_medida) !==
-      redondearCantidad(parseFloat(stockOriginal) || 0, form.unidad_medida);
+  /**
+   * ¿El usuario tocó el stock? Se compara numérico para que "19.90" == "19.9",
+   * a 3 decimales fijos (no según la unidad): si no, al cambiar la unidad a una
+   * entera, 2,5 y 3 parecían "iguales" y el stock se redondeaba sin registro.
+   */
+  const r3 = (v: string) => Math.round(((parseFloat(v.replace(",", ".")) || 0) + Number.EPSILON) * 1000) / 1000;
+  const stockCambio = stockOriginal !== "" && r3(form.stock_actual) !== r3(stockOriginal);
+  const unidadNueva = (form.unidad_medida ?? "").trim().toUpperCase();
+  const unidadCambio = unidadOriginal !== "" && unidadNueva !== "" && unidadNueva !== unidadOriginal;
+  /** Stock con decimales en una unidad que solo admite enteros (ej. 2,5 → UNIDAD). */
+  const stockFraccionEnEntera =
+    unidadCambio && !permiteDecimales(unidadNueva) && r3(form.stock_actual) % 1 !== 0;
   const showPrecioVenta = tipoGastro !== "materia";
 
   return (
@@ -714,6 +729,23 @@ export default function EditarProductoPage() {
                   ));
                 })()}
               </select>
+              {unidadCambio && (
+                <div className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 space-y-1">
+                  <p>
+                    Cambiás la unidad de <strong>{unidadOriginal}</strong> a <strong>{unidadNueva}</strong>.
+                    El stock actual ({form.stock_actual || "0"}) <strong>no se convierte</strong>: queda el mismo número,
+                    ahora en {unidadNueva}. Ventas, compras y movimientos ya registrados no se modifican, y el cambio
+                    queda registrado a tu nombre.
+                  </p>
+                  {stockFraccionEnEntera && (
+                    <p>
+                      El stock tiene decimales y {unidadNueva} solo admite cantidades enteras. Si querés corregirlo,
+                      ajustá el stock abajo (se registra un movimiento de ajuste con el motivo que indiques).
+                    </p>
+                  )}
+                  <p>Si el producto tiene presentaciones (caja, paquete…), revisá que sus factores sigan expresados en {unidadNueva}.</p>
+                </div>
+              )}
             </div>
           </div>
 

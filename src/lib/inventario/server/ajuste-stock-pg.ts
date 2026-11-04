@@ -17,8 +17,13 @@ function num(v: unknown): number {
   const n = typeof v === "number" ? v : parseFloat(String(v ?? "0"));
   return Number.isFinite(n) ? n : 0;
 }
-function round2(n: number): number {
-  return Math.round((n + Number.EPSILON) * 100) / 100;
+/**
+ * 3 decimales: la misma precisión con la que se guarda el stock de productos
+ * por peso o medida (19,895 kg). Con 2 decimales, guardar la ficha de un
+ * producto así registraba un "ajuste" fantasma de 0,005.
+ */
+function round3(n: number): number {
+  return Math.round((n + Number.EPSILON) * 1000) / 1000;
 }
 
 export interface AjusteStockResult {
@@ -41,7 +46,7 @@ export async function ajustarStockConMovimiento(
   if (!pool) throw new Error("Pool de base de datos no disponible.");
   const tP = quoteSchemaTable(schema, "productos");
   const tMI = quoteSchemaTable(schema, "movimientos_inventario");
-  const nuevo = round2(nuevoStock);
+  const nuevo = round3(nuevoStock);
 
   const client = await pool.connect();
   try {
@@ -55,8 +60,8 @@ export async function ajustarStockConMovimiento(
     const p = pQ.rows[0] as Record<string, unknown> | undefined;
     if (!p) throw new Error("Producto no encontrado.");
 
-    const anterior = round2(num(p.stock_actual));
-    const delta = round2(nuevo - anterior);
+    const anterior = round3(num(p.stock_actual));
+    const delta = round3(nuevo - anterior);
 
     // Siempre fija el nuevo valor (aunque el delta sea 0, por si otro campo del
     // producto se guardó en la misma operación).
