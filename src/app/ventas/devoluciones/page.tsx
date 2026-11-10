@@ -1,7 +1,7 @@
 "use client";
 
 /** Historial de devoluciones de ventas. Sin el feature flag, la pantalla avisa y no lista nada. */
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, RotateCcw, Loader2, Printer, Ban } from "lucide-react";
 import { fetchWithSupabaseSession } from "@/lib/api/fetch-with-supabase-session";
@@ -25,6 +25,28 @@ export default function DevolucionesPage() {
   const [error, setError] = useState<string | null>(null);
   const [detalle, setDetalle] = useState<Devolucion | null>(null);
   const [anulando, setAnulando] = useState(false);
+  const [busqueda, setBusqueda] = useState("");
+  const [desde, setDesde] = useState("");
+  const [hasta, setHasta] = useState("");
+
+  const filtradas = useMemo(() => {
+    const t = busqueda.trim().toLowerCase();
+    return rows.filter((d) => {
+      const dia = (d.created_at ?? "").slice(0, 10);
+      if (desde && dia < desde) return false;
+      if (hasta && dia > hasta) return false;
+      if (!t) return true;
+      const texto = [
+        d.numero_devolucion, d.venta_numero_control, d.cliente_nombre,
+        ...(d.items ?? []).map((i) => `${i.producto_nombre} ${i.sku ?? ""}`),
+      ].join(" ").toLowerCase();
+      return texto.includes(t);
+    });
+  }, [rows, busqueda, desde, hasta]);
+  const totalFiltrado = useMemo(
+    () => filtradas.filter((d) => d.estado !== "anulada").reduce((a, d) => a + d.total_devuelto, 0),
+    [filtradas]
+  );
 
   const cargar = useCallback(async () => {
     setCargando(true);
@@ -94,11 +116,25 @@ export default function DevolucionesPage() {
 
       {error && <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</div>}
 
+      <div className="flex flex-wrap items-end gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
+        <input value={busqueda} onChange={(e) => setBusqueda(e.target.value)} placeholder="Buscar por venta, cliente o producto"
+          className="min-w-[240px] flex-1 rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-[#4FAEB2]/40" />
+        <label className="text-xs text-slate-500">Desde
+          <input type="date" value={desde} onChange={(e) => setDesde(e.target.value)} className="ml-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+        </label>
+        <label className="text-xs text-slate-500">Hasta
+          <input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} className="ml-1 rounded-lg border border-slate-200 px-2 py-1.5 text-sm" />
+        </label>
+        <div className="text-right text-xs text-slate-500">
+          {filtradas.length} devolución(es) · Total devuelto <span className="font-bold text-slate-800">{gs(totalFiltrado)}</span>
+        </div>
+      </div>
+
       <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {cargando ? (
           <p className="flex items-center gap-2 p-8 text-sm text-slate-500"><Loader2 className="h-4 w-4 animate-spin" /> Cargando…</p>
-        ) : rows.length === 0 ? (
-          <p className="p-8 text-center text-sm text-slate-400">Todavía no hay devoluciones registradas.</p>
+        ) : filtradas.length === 0 ? (
+          <p className="p-8 text-center text-sm text-slate-400">{rows.length === 0 ? "Todavía no hay devoluciones registradas." : "No hay devoluciones con esos filtros."}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full min-w-[900px] text-sm">
@@ -106,6 +142,7 @@ export default function DevolucionesPage() {
                 <tr>
                   <th className="px-4 py-3 text-left font-bold">N°</th>
                   <th className="px-4 py-3 text-left font-bold">Venta</th>
+                  <th className="px-4 py-3 text-left font-bold">Productos devueltos</th>
                   <th className="px-4 py-3 text-left font-bold">Fecha</th>
                   <th className="px-4 py-3 text-center font-bold">Tipo</th>
                   <th className="px-4 py-3 text-center font-bold">Resolución</th>
@@ -116,12 +153,17 @@ export default function DevolucionesPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {rows.map((d) => (
+                {filtradas.map((d) => (
                   <tr key={d.id} className="hover:bg-slate-50/60">
                     <td className="px-4 py-3 font-mono text-xs font-semibold text-slate-800">{d.numero_devolucion}</td>
                     <td className="px-4 py-3 text-xs text-slate-600">
                       {d.venta_numero_control ?? "—"}
                       {d.cliente_nombre && <span className="block text-slate-400">{d.cliente_nombre}</span>}
+                    </td>
+                    <td className="px-4 py-3 text-xs text-slate-700">
+                      {(d.items ?? []).map((it) => (
+                        <span key={it.id} className="block">{it.cantidad_devuelta}× {it.producto_nombre} · {gs(it.total_devuelto)}</span>
+                      ))}
                     </td>
                     <td className="px-4 py-3 text-xs tabular-nums text-slate-600">{fechaHora(d.created_at)}</td>
                     <td className="px-4 py-3 text-center text-xs">

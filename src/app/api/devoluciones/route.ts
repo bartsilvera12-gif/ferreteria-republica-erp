@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json(errorResponse(API_ERRORS.UNAUTHORIZED), { status: 401 });
     }
     const schema = await fetchDataSchemaForEmpresaId(auth.empresa_id);
-    const devoluciones = await listarDevoluciones(schema, auth.empresa_id, {});
+    const devoluciones = await listarDevoluciones(schema, auth.empresa_id, { limit: 500 });
     return NextResponse.json(successResponse({ devoluciones }));
   } catch (err) {
     const msg = err instanceof Error ? err.message : "No se pudo cargar el historial.";

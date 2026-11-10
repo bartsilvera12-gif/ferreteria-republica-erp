@@ -360,7 +360,17 @@ export async function crearDevolucion(
     //   saldo_favor -> NO mueve caja: el monto queda como crédito del cliente.
     //   cambio      -> histórico (ya no se ofrece): diferencia entre lo entregado
     //                  y lo devuelto.
-    const resolucion: ResolucionDevolucion = input.resolucion;
+    // Venta a crédito (tiene cuenta por cobrar): el cliente no pagó en caja, así que
+    // no se le devuelve efectivo; el importe queda como saldo a favor (nota de crédito)
+    // para descontarlo al cobrar sus facturas pendientes.
+    const cxcQ = await client.query(
+      `SELECT 1 FROM ${quoteSchemaTable(schema, "cuentas_por_cobrar")}
+        WHERE venta_id = $1::uuid AND empresa_id = $2::uuid AND estado <> 'anulado' LIMIT 1`,
+      [input.venta_id, empresaId]
+    );
+    const esVentaCredito = cxcQ.rows.length > 0;
+    const resolucion: ResolucionDevolucion =
+      esVentaCredito && input.resolucion === "reembolso" ? "saldo_favor" : input.resolucion;
     const esSaldo = resolucion === "saldo_favor";
     const diferencia = esSaldo
       ? 0
@@ -885,5 +895,40 @@ export async function listarDevoluciones(
       LIMIT ${limit}`,
     [empresaId]
   );
-  return q.rows.map((r) => mapDev(r, str(r.cliente_nombre)));
+  const devs = q.rows.map((r) => mapDev(r, str(r.cliente_nombre)));
+  // Productos devueltos de cada devolución (para el reporte: producto, cantidad, importe).
+  if (devs.length > 0) {
+    const tDI = quoteSchemaTable(schema, "devoluciones_venta_items");
+    const itQ = await pool().query(
+      `SELECT id::text, devolucion_id::text AS devolucion_id, venta_item_id::text AS venta_item_id,
+              producto_id::text AS producto_id, producto_nombre, sku, cantidad_vendida, cantidad_devuelta,
+              precio_unitario, tipo_iva, monto_iva, total_devuelto, condicion, reintegra_stock
+         FROM ${tDI}
+        WHERE empresa_id = $1::uuid AND devolucion_id = ANY($2::uuid[])
+        ORDER BY created_at ASC`,
+      [empresaId, devs.map((d) => d.id)]
+    );
+    const porDev = new Map<string, DevolucionItemRow[]>();
+    for (const x of itQ.rows) {
+      const arr = porDev.get(String(x.devolucion_id)) ?? [];
+      arr.push({
+        id: String(x.id),
+        venta_item_id: String(x.venta_item_id),
+        producto_id: String(x.producto_id),
+        producto_nombre: String(x.producto_nombre ?? ""),
+        sku: str(x.sku),
+        cantidad_vendida: num(x.cantidad_vendida),
+        cantidad_devuelta: num(x.cantidad_devuelta),
+        precio_unitario: num(x.precio_unitario),
+        tipo_iva: String(x.tipo_iva ?? ""),
+        monto_iva: num(x.monto_iva),
+        total_devuelto: num(x.total_devuelto),
+        condicion: x.condicion === "danado" ? "danado" : "buen_estado",
+        reintegra_stock: x.reintegra_stock === true,
+      });
+      porDev.set(String(x.devolucion_id), arr);
+    }
+    for (const d of devs) d.items = porDev.get(d.id) ?? [];
+  }
+  return devs;
 }

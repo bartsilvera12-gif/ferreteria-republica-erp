@@ -8,6 +8,7 @@ import { generarYAbrirRecibo } from "@/lib/recibos/client";
 /** Cuenta por cobrar mínima para registrar un pago. */
 export type CxcRef = {
   id: string;
+  cliente_id?: string | null;
   numero_venta: string | null;
   saldo: number;
   moneda?: string;
@@ -16,9 +17,10 @@ export type CxcRef = {
 
 type Entidad = { id: string; codigo: string | null; nombre: string; tipo: string | null };
 
-const METODOS = ["efectivo", "transferencia", "tarjeta", "otro"] as const;
+const METODOS = ["efectivo", "transferencia", "tarjeta", "otro", "saldo_favor"] as const;
 const METODO_LABEL: Record<string, string> = {
   efectivo: "Efectivo", transferencia: "Transferencia", tarjeta: "Tarjeta", otro: "Otro",
+  saldo_favor: "Saldo a favor del cliente",
 };
 
 function fmtGs(n: number, moneda = "PYG") {
@@ -46,6 +48,7 @@ export function RegistrarCobroModalCxc({
   const [titular, setTitular] = useState("");
   const [entidadId, setEntidadId] = useState("");
   const [entidades, setEntidades] = useState<Entidad[]>([]);
+  const [saldoFavor, setSaldoFavor] = useState(0);
   const [guardando, setGuardando] = useState(false);
   const [error, setError] = useState<string | null>(null);
   // Tras un cobro exitoso, se ofrece generar el recibo (paso opcional).
@@ -63,6 +66,17 @@ export function RegistrarCobroModalCxc({
     }
   }, [open, cuenta]);
 
+  // Saldo a favor del cliente (notas de crédito por devoluciones, anticipos).
+  const clienteId = cuenta?.cliente_id ?? null;
+  useEffect(() => {
+    setSaldoFavor(0);
+    if (!open || !clienteId) return;
+    fetchWithSupabaseSession(`/api/clientes/${clienteId}/saldo-favor`, { cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (j?.success !== false) setSaldoFavor(Number(j?.data?.saldo) || 0); })
+      .catch(() => {});
+  }, [open, clienteId]);
+
   // Entidades bancarias (mismo origen que Caja) para Transferencia/Tarjeta.
   useEffect(() => {
     if (!open) return;
@@ -74,6 +88,8 @@ export function RegistrarCobroModalCxc({
 
   if (!open || !cuenta) return null;
 
+  const usaSaldo = metodo === "saldo_favor";
+  const metodosVisibles = METODOS.filter((m) => m !== "saldo_favor" || saldoFavor > 0);
   const pideBanco = metodo === "transferencia" || metodo === "tarjeta";
   // Para transferencia: banco/billetera. Para tarjeta: procesadora/tarjeta/banco.
   const entidadesFiltradas = entidades.filter((e) => {
@@ -89,9 +105,24 @@ export function RegistrarCobroModalCxc({
     if (m > cuenta.saldo + 0.001) { setError("El monto supera el saldo pendiente."); return; }
     if (pideBanco && !entidadId) { setError("Seleccioná la entidad bancaria."); return; }
     if (pideBanco && !referencia.trim()) { setError("Ingresá la referencia / nº de operación."); return; }
+    if (usaSaldo && m > saldoFavor + 0.001) { setError("El monto supera el saldo a favor del cliente."); return; }
     setGuardando(true);
     setError(null);
     try {
+      if (usaSaldo) {
+        const rs = await fetchWithSupabaseSession(`/api/clientes/${cuenta.cliente_id}/saldo-favor/pagar-cuota`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ cuenta_por_cobrar_id: cuenta.id, monto: m }),
+        });
+        const bs = await rs.json();
+        if (!rs.ok || bs?.success === false) { setError(bs?.error ?? "No se pudo pagar con saldo a favor."); return; }
+        await onExito();
+        const cid = bs?.data?.cobroId ? String(bs.data.cobroId) : null;
+        if (cid) setCobroOk({ cobroId: cid, monto: m });
+        else onClose();
+        return;
+      }
       const entidadNombre = entidades.find((e) => e.id === entidadId)?.nombre ?? null;
       const res = await fetchWithSupabaseSession("/api/cobros", {
         method: "POST",
@@ -163,12 +194,15 @@ export function RegistrarCobroModalCxc({
                 <label className="block text-xs font-medium text-gray-600 mb-1">Monto a cobrar</label>
                 <input type="number" min="0" step="1" value={monto} onChange={(e) => setMonto(e.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" />
                 <button type="button" onClick={() => setMonto(String(cuenta.saldo))} className="mt-1 text-xs text-[#4FAEB2] hover:underline">Cobrar saldo total</button>
+                {saldoFavor > 0 && (
+                  <p className="mt-1 text-[11px] font-medium text-emerald-700">Saldo a favor del cliente: {fmtGs(saldoFavor, cuenta.moneda)}</p>
+                )}
                 <p className="mt-1 text-[11px] text-slate-500">Si cobrás menos que el saldo, la cuenta sigue pendiente con la diferencia.</p>
               </div>
               <div>
                 <label className="block text-xs font-medium text-gray-600 mb-1">Método de pago</label>
                 <select value={metodo} onChange={(e) => setMetodo(e.target.value as (typeof METODOS)[number])} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm bg-white">
-                  {METODOS.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
+                  {metodosVisibles.map((m) => <option key={m} value={m}>{METODO_LABEL[m]}</option>)}
                 </select>
               </div>
               {pideBanco && (

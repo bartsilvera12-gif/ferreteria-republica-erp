@@ -249,7 +249,7 @@ export default function EstadoCuentaPage() {
 
       <RegistrarCobroModalCxc
         open={!!cobrando}
-        cuenta={cobrando ? { id: cobrando.id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, cliente_nombre: cliente?.nombre ?? null } : null}
+        cuenta={cobrando ? { id: cobrando.id, cliente_id: id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, cliente_nombre: cliente?.nombre ?? null } : null}
         onClose={() => setCobrando(null)}
         onExito={async () => { setToast("Cobro registrado"); setTimeout(() => setToast(null), 2800); await cargar(); }}
       />

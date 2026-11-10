@@ -335,7 +335,7 @@ export default function PagosPage() {
       {/* Modal registrar pago (componente compartido con campos de Transferencia/Tarjeta) */}
       <RegistrarCobroModalCxc
         open={!!cobrando}
-        cuenta={cobrando ? { id: cobrando.id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, moneda: cobrando.moneda, cliente_nombre: cobrando.cliente_nombre } : null}
+        cuenta={cobrando ? { id: cobrando.id, cliente_id: cobrando.cliente_id, numero_venta: cobrando.numero_venta, saldo: cobrando.saldo, moneda: cobrando.moneda, cliente_nombre: cobrando.cliente_nombre } : null}
         onClose={() => setCobrando(null)}
         onExito={async () => { setToast("Pago registrado"); setTimeout(() => setToast(null), 2800); await cargar(); }}
       />
