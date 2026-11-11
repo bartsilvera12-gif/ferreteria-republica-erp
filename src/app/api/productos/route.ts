@@ -111,6 +111,11 @@ export async function GET(request: NextRequest) {
     } else if (categoria) {
       query = query.eq("categoria_principal_id", categoria);
     }
+    // Filtro por marca (se combina con categoría y búsqueda). Coincidencia exacta sin distinguir mayúsculas.
+    const marcaFiltro = searchParams.get("marca")?.trim();
+    if (marcaFiltro) {
+      query = query.ilike("marca", marcaFiltro.replace(/[\\%_]/g, (c) => `\\${c}`));
+    }
 
     query = query.order("nombre");
     if (limit > 0) {

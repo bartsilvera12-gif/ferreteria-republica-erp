@@ -54,6 +54,7 @@ interface ProductoRow {
   descripcion?: string | null;
   descripcion_html?: string | null;
   modo_receta?: string | null;
+  marca?: string | null;
 }
 
 interface MovimientoRow {
@@ -118,6 +119,7 @@ function rowToProducto(row: ProductoRow): Producto {
     descripcion: row.descripcion ?? null,
     descripcion_html: row.descripcion_html ?? null,
     modo_receta: row.modo_receta ?? "preparado_al_vender",
+    marca: row.marca ?? null,
   };
 }
 
@@ -225,6 +227,8 @@ export interface ProductosPaginadosOpts {
   q?: string;
   /** uuid de categoria | "__sin__" para los que no tienen categoria asignada | "" para todas */
   categoria?: string;
+  /** Nombre de marca exacto ("" = todas). Se combina con categoría y búsqueda. */
+  marca?: string;
   /** Incluir productos inactivos (para poder reactivarlos). */
   incluirInactivos?: boolean;
 }
@@ -248,6 +252,7 @@ export async function getProductosPaginated(
   params.set("offset", String(offset));
   if (opts.q && opts.q.trim()) params.set("q", opts.q.trim());
   if (opts.categoria) params.set("categoria", opts.categoria);
+  if (opts.marca) params.set("marca", opts.marca);
   if (opts.incluirInactivos) params.set("incluir_inactivos", "1");
 
   // Fallback offline: si el listado paginado no responde (sin conexión), usar el
@@ -256,6 +261,15 @@ export async function getProductosPaginated(
     const todos = await getProductosLocalFull();
     if (todos.length === 0) return { productos: [], total: 0 };
     let filtrados = todos;
+    if (opts.marca) {
+      const mq = opts.marca.trim().toLowerCase();
+      filtrados = filtrados.filter((p) => (p.marca ?? "").trim().toLowerCase() === mq);
+    }
+    if (opts.categoria) {
+      filtrados = filtrados.filter((p) =>
+        opts.categoria === "__sin__" ? !p.categoria_principal_id : p.categoria_principal_id === opts.categoria
+      );
+    }
     if (opts.q && opts.q.trim()) {
       const q = opts.q.trim();
       filtrados = filtrados.filter((p) => productoMatchesQuery(q, p.nombre, p.sku));
@@ -428,6 +442,7 @@ export async function updateProducto(
   if (datos.descripcion !== undefined) body.descripcion = datos.descripcion;
   if (datos.descripcion_html !== undefined) body.descripcion_html = datos.descripcion_html;
   if (datos.modo_receta !== undefined) body.modo_receta = datos.modo_receta;
+  if (datos.marca !== undefined) body.marca = datos.marca ?? null;
 
   const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
     method: "PATCH",

@@ -109,9 +109,13 @@ export default function DesdeOrdenRecepcionPage() {
       setTipoPago(oc.tipo_pago === "credito" ? "credito" : "contado");
       setPlazoDias(oc.plazo_dias != null ? String(oc.plazo_dias) : "");
       // Datos de la factura ya cargados en la OC (fecha, N°, timbrado): se arrastran.
-      if (oc.fecha_factura) setFechaFactura((prev) => prev || String(oc.fecha_factura).slice(0, 10));
-      if (oc.numero_factura) setNumeroFactura((prev) => prev || String(oc.numero_factura));
-      if (oc.nro_timbrado) setNroTimbrado((prev) => prev || String(oc.nro_timbrado));
+      // Solo en la primera recepción: si ya hubo una recepción parcial, la
+      // factura siguiente es otra del proveedor y se carga en blanco.
+      if (oc.estado === "pendiente") {
+        if (oc.fecha_factura) setFechaFactura((prev) => prev || String(oc.fecha_factura).slice(0, 10));
+        if (oc.numero_factura) setNumeroFactura((prev) => prev || String(oc.numero_factura));
+        if (oc.nro_timbrado) setNroTimbrado((prev) => prev || String(oc.nro_timbrado));
+      }
       // RUC del proveedor (best-effort: si falla, se muestra solo el nombre).
       if (oc.proveedor_id) {
         try {

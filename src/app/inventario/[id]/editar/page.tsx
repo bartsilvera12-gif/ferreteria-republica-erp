@@ -8,6 +8,7 @@ import PresentacionesEditor from "@/components/inventario/PresentacionesEditor";
 import { getProducto, productoExiste, updateProducto } from "@/lib/inventario/storage";
 import ProyeccionProductoCard from "@/components/inventario/ProyeccionProductoCard";
 import type { MetodoValuacion } from "@/lib/inventario/types";
+import MarcaSelect from "@/components/inventario/MarcaSelect";
 import RichTextEditor from "@/components/inventario/RichTextEditor";
 import ProductGalleryManager from "@/components/inventario/ProductGalleryManager";
 import { plainTextToSafeHtml } from "@/lib/sanitize/rich-text";
@@ -652,13 +653,7 @@ export default function EditarProductoPage() {
 
           <div>
             <label className={labelClass}>Marca</label>
-            <input
-              type="text"
-              value={marca}
-              onChange={(e) => setMarca(e.target.value)}
-              placeholder="Ej: Tramontina, Stanley…"
-              className={inputClass}
-            />
+            <MarcaSelect value={marca} onChange={setMarca} />
           </div>
 
           <div>

@@ -75,6 +75,7 @@ export function buildCreateProductoBody(datos: CrearProductoInput): Record<strin
     // `descripcion` (texto plano legacy) se envía siempre; el backend la usa en
     // la regla B, o la ignora/deriva bajo la regla A si hay descripcion_html.
     descripcion: datos.descripcion ?? null,
+    marca: datos.marca ?? null,
   };
   // descripcion_html: SOLO si el caller lo proporcionó (undefined = no enviado).
   if (datos.descripcion_html !== undefined) {

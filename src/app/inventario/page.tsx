@@ -99,6 +99,8 @@ export default function InventarioPage() {
   const [search, setSearch] = useState("");
   const [searchDraft, setSearchDraft] = useState("");
   const [categoriaId, setCategoriaId] = useState("");
+  const [marcaFiltro, setMarcaFiltro] = useState("");
+  const [marcas, setMarcas] = useState<string[]>([]);
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState<number>(25);
 
@@ -207,11 +209,26 @@ export default function InventarioPage() {
     };
   }, []);
 
+  // Cargar marcas registradas (para el filtro)
+  useEffect(() => {
+    let cancel = false;
+    fetch("/api/productos/marcas", { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => {
+        if (cancel || !j?.success) return;
+        setMarcas((j.data?.marcas ?? []) as string[]);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancel = true;
+    };
+  }, [refreshKey]);
+
   // Cargar productos paginados cuando cambia algun parametro
   useEffect(() => {
     let cancel = false;
     setLoading(true);
-    getProductosPaginated({ page, pageSize, q: search, categoria: categoriaId, incluirInactivos: verInactivos })
+    getProductosPaginated({ page, pageSize, q: search, categoria: categoriaId, marca: marcaFiltro, incluirInactivos: verInactivos })
       .then(({ productos, total }) => {
         if (cancel) return;
         setProductos(productos);
@@ -223,7 +240,7 @@ export default function InventarioPage() {
     return () => {
       cancel = true;
     };
-  }, [page, pageSize, search, categoriaId, verInactivos, refreshKey]);
+  }, [page, pageSize, search, categoriaId, marcaFiltro, verInactivos, refreshKey]);
 
   // Paginacion derivada
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -237,7 +254,7 @@ export default function InventarioPage() {
     [categorias]
   );
 
-  const hasFilters = !!search || !!categoriaId || !!filtroRango;
+  const hasFilters = !!search || !!categoriaId || !!marcaFiltro || !!filtroRango;
 
   // Filtro por rango A/B/C sobre la página cargada (el análisis completo está en
   // el reporte /reportes/rotacion-abc). Rango del producto vía abcMap.
@@ -252,6 +269,7 @@ export default function InventarioPage() {
     setSearchDraft("");
     setSearch("");
     setCategoriaId("");
+    setMarcaFiltro("");
     setPage(1);
   }
 
@@ -367,6 +385,18 @@ export default function InventarioPage() {
                 ))}
               </select>
 
+              <select
+                value={marcaFiltro}
+                onChange={(e) => { setMarcaFiltro(e.target.value); setPage(1); }}
+                className="h-10 w-full rounded-lg border-2 border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition-all focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 lg:w-[170px]"
+                aria-label="Filtrar por marca"
+              >
+                <option value="">Todas las marcas</option>
+                {marcas.map((m) => (
+                  <option key={m} value={m}>{m}</option>
+                ))}
+              </select>
+
               <label className="flex h-10 items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-3 text-sm text-slate-600" title="Mostrar también los productos inactivos (para reactivarlos)">
                 <input
                   type="checkbox"
@@ -416,6 +446,11 @@ export default function InventarioPage() {
                   {categoriaId === "__sin__"
                     ? "Sin categoría"
                     : categoriaById.get(categoriaId) ?? "Categoría"}
+                </span>
+              )}
+              {marcaFiltro && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-[#4FAEB2]/10 px-2 py-0.5 font-medium text-[#4FAEB2]">
+                  Marca: {marcaFiltro}
                 </span>
               )}
               <button

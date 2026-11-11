@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import MontoInput from "@/components/ui/MontoInput";
 import SelectFromList from "@/components/inventario/SelectFromList";
+import MarcaSelect from "@/components/inventario/MarcaSelect";
 import RichTextEditor from "@/components/inventario/RichTextEditor";
 import NuevoProductoImagenes from "@/components/inventario/NuevoProductoImagenes";
 import { productoExiste, saveProducto } from "@/lib/inventario/storage";
@@ -611,13 +612,9 @@ export default function NuevoProductoPage() {
           {/* Marca */}
           <div>
             <label className={labelClass}>Marca</label>
-            <input
-              type="text"
-              name="marca"
+            <MarcaSelect
               value={form.marca}
-              onChange={handleChange}
-              placeholder="Ej: Tramontina, Stanley…"
-              className={inputClass}
+              onChange={(m) => setForm((f) => ({ ...f, marca: m }))}
             />
           </div>
 
