@@ -9,6 +9,7 @@ import type { Producto, MetodoValuacion } from "@/lib/inventario/types";
 import OfflineDetalleModal from "@/components/OfflineDetalleModal";
 import ExportExcelButton from "@/components/ui/ExportExcelButton";
 import ImportExcelButton from "@/components/ui/ImportExcelButton";
+import FiltroBuscable from "@/components/inventario/FiltroBuscable";
 import EdgeScrollArea from "@/components/ui/EdgeScrollArea";
 import { useIsAdmin } from "@/lib/auth/use-is-admin";
 import { formatStock } from "@/lib/productos/unidades";
@@ -372,30 +373,30 @@ export default function InventarioPage() {
 
             {/* Selects agrupados, alineados a la derecha en desktop */}
             <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:flex lg:items-center lg:gap-2">
-              <select
+              <FiltroBuscable
                 value={categoriaId}
-                onChange={(e) => { setCategoriaId(e.target.value); setPage(1); }}
-                className="h-10 w-full rounded-lg border-2 border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition-all focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 lg:w-[190px]"
-                aria-label="Filtrar por categoría"
-              >
-                <option value="">Todas las categorías</option>
-                <option value="__sin__">— Sin categoría —</option>
-                {categorias.map((c) => (
-                  <option key={c.id} value={c.id}>{c.nombre}</option>
-                ))}
-              </select>
+                onChange={(v) => { setCategoriaId(v); setPage(1); }}
+                className="w-full lg:w-[190px]"
+                ariaLabel="Filtrar por categoría"
+                placeholderBusqueda="Buscar categoría..."
+                opciones={[
+                  { value: "", label: "Todas las categorías" },
+                  { value: "__sin__", label: "— Sin categoría —" },
+                  ...categorias.map((c) => ({ value: c.id, label: c.nombre })),
+                ]}
+              />
 
-              <select
+              <FiltroBuscable
                 value={marcaFiltro}
-                onChange={(e) => { setMarcaFiltro(e.target.value); setPage(1); }}
-                className="h-10 w-full rounded-lg border-2 border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none transition-all focus:border-[#4FAEB2] focus:ring-2 focus:ring-[#4FAEB2]/20 lg:w-[170px]"
-                aria-label="Filtrar por marca"
-              >
-                <option value="">Todas las marcas</option>
-                {marcas.map((m) => (
-                  <option key={m} value={m}>{m}</option>
-                ))}
-              </select>
+                onChange={(v) => { setMarcaFiltro(v); setPage(1); }}
+                className="w-full lg:w-[170px]"
+                ariaLabel="Filtrar por marca"
+                placeholderBusqueda="Buscar marca..."
+                opciones={[
+                  { value: "", label: "Todas las marcas" },
+                  ...marcas.map((m) => ({ value: m, label: m })),
+                ]}
+              />
 
               <label className="flex h-10 items-center gap-2 rounded-lg border-2 border-slate-200 bg-white px-3 text-sm text-slate-600" title="Mostrar también los productos inactivos (para reactivarlos)">
                 <input
