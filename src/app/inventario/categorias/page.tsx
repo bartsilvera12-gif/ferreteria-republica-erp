@@ -23,6 +23,8 @@ export default function CategoriasProductosPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  const [busqueda, setBusqueda] = useState("");
+
   // Form alta
   const [nombre, setNombre] = useState("");
   const [codigo, setCodigo] = useState("");
@@ -213,7 +215,12 @@ export default function CategoriasProductosPage() {
   }
 
   // Imagen mostrada en el modal: pending preview > url actual > nada
-  const modalCurrentImage = eImagenPendingPreview ?? eImagenUrl ?? null;
+  const norm = (s: string) =>
+    s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const q = norm(busqueda.trim());
+  const filtered = q ? items.filter((c) => norm(c.nombre).includes(q)) : items;
+
+  const modalCurrentImage =eImagenPendingPreview ?? eImagenUrl ?? null;
 
   return (
     <div className="space-y-8">
@@ -323,6 +330,17 @@ export default function CategoriasProductosPage() {
         {error && <p className="mt-2 text-xs text-red-700">{error}</p>}
       </div>
 
+      {/* Buscador */}
+      <div className="max-w-md">
+        <input
+          type="search"
+          value={busqueda}
+          onChange={(e) => setBusqueda(e.target.value)}
+          placeholder="Buscar categoría por nombre..."
+          className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm bg-white"
+        />
+      </div>
+
       {/* Lista */}
       <div className="bg-white border border-slate-200 rounded-xl shadow-sm overflow-hidden">
         {loading ? (
@@ -330,6 +348,10 @@ export default function CategoriasProductosPage() {
         ) : items.length === 0 ? (
           <p className="p-6 text-sm text-gray-400">
             Todavía no cargaste categorías.
+          </p>
+        ) : filtered.length === 0 ? (
+          <p className="p-6 text-sm text-gray-400">
+            No hay categorías que coincidan con la búsqueda.
           </p>
         ) : (
           <table className="w-full text-sm">
@@ -344,7 +366,7 @@ export default function CategoriasProductosPage() {
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100">
-              {items.map((c) => {
+              {filtered.map((c) => {
                 const parent = items.find((i) => i.id === c.parent_id);
                 return (
                   <tr
