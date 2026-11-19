@@ -118,6 +118,7 @@ export default function InventarioPage() {
 
   // Desactivar / reactivar (reversible, in-line). id del producto en curso.
   const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [desactivando, setDesactivando] = useState<Producto | null>(null);
   const [offlineProducto, setOfflineProducto] = useState<Producto | null>(null);
 
   /**
@@ -535,7 +536,7 @@ export default function InventarioPage() {
                           </Link>
                           <button
                             type="button"
-                            onClick={() => toggleActivo(p)}
+                            onClick={() => (p.activo === false ? toggleActivo(p) : setDesactivando(p))}
                             disabled={togglingId === p.id}
                             title={p.activo === false ? "Reactivar producto" : "Desactivar producto (reversible)"}
                             aria-label={`${p.activo === false ? "Reactivar" : "Desactivar"} ${p.nombre}`}
@@ -736,6 +737,44 @@ export default function InventarioPage() {
             { label: "Estado", value: offlineProducto.activo === false ? "Inactivo" : "Activo" },
           ]}
         />
+      )}
+
+      {/* Modal de confirmacion de desactivar */}
+      {desactivando && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 px-4 backdrop-blur-sm"
+          onClick={() => setDesactivando(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-2xl bg-white p-5 shadow-2xl ring-1 ring-slate-900/5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-bold text-slate-800">¿Inactivar este producto?</h3>
+            <p className="mt-2 text-sm text-slate-600">
+              <strong>{desactivando.nombre}</strong> dejará de aparecer en ventas y buscadores. Conserva su stock, precios e historial y podés reactivarlo cuando quieras con «Ver inactivos».
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setDesactivando(null)}
+                className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-600 hover:bg-slate-50"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  const p = desactivando;
+                  setDesactivando(null);
+                  void toggleActivo(p);
+                }}
+                className="rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600"
+              >
+                Inactivar producto
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Modal de confirmacion de eliminar */}
