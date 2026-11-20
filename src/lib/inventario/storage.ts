@@ -443,6 +443,7 @@ export async function updateProducto(
   if (datos.descripcion_html !== undefined) body.descripcion_html = datos.descripcion_html;
   if (datos.modo_receta !== undefined) body.modo_receta = datos.modo_receta;
   if (datos.marca !== undefined) body.marca = datos.marca ?? null;
+  if (typeof datos.activo === "boolean") body.activo = datos.activo;
 
   const res = await fetch(`/api/productos/${encodeURIComponent(id)}`, {
     method: "PATCH",
