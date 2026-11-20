@@ -541,6 +541,22 @@ export default function EditarProductoPage() {
         <p className="text-gray-600">Modifica los datos del producto</p>
       </div>
 
+      {!activo && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          <span>
+            <strong>Producto inactivo (solo lectura).</strong> No aparece en pedidos ni se puede editar. Reactivalo para volver a usarlo.
+          </span>
+          <button
+            type="button"
+            onClick={reactivar}
+            disabled={reactivando}
+            className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
+          >
+            {reactivando ? "Reactivando…" : "Reactivar producto"}
+          </button>
+        </div>
+      )}
+
       {id && <ProyeccionProductoCard productoId={id} />}
 
       {/* Selector de tipo de producto OCULTO en ferreteria (solo reventa).
@@ -593,21 +609,6 @@ export default function EditarProductoPage() {
 
       <div className="bg-white rounded-xl shadow p-6">
         <form className="space-y-6" onSubmit={handleSubmit} noValidate>
-          {!activo && (
-            <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-              <span>
-                <strong>Producto inactivo (solo lectura).</strong> No aparece en pedidos ni se puede editar. Reactivalo para volver a usarlo.
-              </span>
-              <button
-                type="button"
-                onClick={reactivar}
-                disabled={reactivando}
-                className="shrink-0 rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700 disabled:opacity-50"
-              >
-                {reactivando ? "Reactivando…" : "Reactivar producto"}
-              </button>
-            </div>
-          )}
           {/* Inactivo = solo lectura: `disabled` bloquea los inputs nativos y
               `pointer-events-none` bloquea los componentes no-nativos que el
               fieldset no cubre (rich text, galería, presentaciones), que además
