@@ -101,6 +101,7 @@ function rowToProducto(row: ProductoRow): Producto {
     es_vendible: row.es_vendible ?? true,
     es_insumo: row.es_insumo ?? false,
     controla_stock: row.controla_stock ?? true,
+    activo: row.activo !== false,
     destacado: row.destacado ?? false,
     visible_web: row.visible_web ?? true,
     oferta_semana_destacada: row.oferta_semana_destacada ?? false,
