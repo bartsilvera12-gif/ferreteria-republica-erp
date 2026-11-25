@@ -7,7 +7,7 @@
  */
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, Search, Check, Plus } from "lucide-react";
+import { ChevronDown, Search, Check, Plus, Pencil, Trash2, X } from "lucide-react";
 
 interface Props {
   value: string;
@@ -19,6 +19,10 @@ export default function MarcaSelect({ value, onChange, className = "" }: Props) 
   const [marcas, setMarcas] = useState<string[]>([]);
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
+  const [editando, setEditando] = useState<string | null>(null);
+  const [nuevoNombre, setNuevoNombre] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState("");
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
@@ -62,6 +66,59 @@ export default function MarcaSelect({ value, onChange, className = "" }: Props) 
   const q = query.trim();
   const filtradas = q ? todas.filter((m) => m.toLowerCase().includes(q.toLowerCase())) : todas;
   const existeExacta = !!q && todas.some((m) => m.toLowerCase() === q.toLowerCase());
+
+  async function guardarEdicion(actual: string) {
+    const nuevo = nuevoNombre.trim();
+    if (!nuevo) { setMsg("El nombre no puede quedar vacío."); return; }
+    if (nuevo === actual) { setEditando(null); return; }
+    setBusy(true);
+    setMsg("");
+    try {
+      const r = await fetch("/api/productos/marcas", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ actual, nuevo }),
+      });
+      const j = await r.json();
+      if (!j?.success) { setMsg(j?.error ?? "No se pudo editar la marca."); return; }
+      setMarcas((prev) => {
+        const sin = prev.filter((x) => x.toLowerCase() !== actual.toLowerCase() && x.toLowerCase() !== nuevo.toLowerCase());
+        return [...sin, nuevo].sort((a, b) => a.localeCompare(b, "es"));
+      });
+      if (value.trim().toLowerCase() === actual.toLowerCase()) onChange(nuevo);
+      setEditando(null);
+    } catch {
+      setMsg("No se pudo editar la marca.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function eliminar(m: string) {
+    setMsg("");
+    try {
+      const call = (confirmar: boolean) =>
+        fetch("/api/productos/marcas", {
+          method: "DELETE",
+          credentials: "include",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ marca: m, confirmar }),
+        }).then((r) => r.json());
+      let j = await call(false);
+      if (!j?.success) { setMsg(j?.error ?? "No se pudo eliminar la marca."); return; }
+      if (j.data?.requiereConfirmacion) {
+        const n = j.data.productos as number;
+        if (!window.confirm(`La marca «${m}» está asociada a ${n} producto(s). Si la eliminás, esos productos quedan sin marca (no se borran). ¿Continuar?`)) return;
+        j = await call(true);
+        if (!j?.success) { setMsg(j?.error ?? "No se pudo eliminar la marca."); return; }
+      }
+      setMarcas((prev) => prev.filter((x) => x.toLowerCase() !== m.toLowerCase()));
+      if (value.trim().toLowerCase() === m.toLowerCase()) onChange("");
+    } catch {
+      setMsg("No se pudo eliminar la marca.");
+    }
+  }
 
   function pick(m: string) {
     onChange(m);
@@ -130,18 +187,80 @@ export default function MarcaSelect({ value, onChange, className = "" }: Props) 
                 Crear marca «{q}»
               </button>
             )}
+            {msg && <p className="px-2.5 py-1 text-xs text-red-600">{msg}</p>}
             {filtradas.map((m) => {
               const sel = m.toLowerCase() === value.trim().toLowerCase();
+              if (editando === m) {
+                return (
+                  <div key={m} className="flex items-center gap-1 px-1.5 py-1">
+                    <input
+                      type="text"
+                      value={nuevoNombre}
+                      autoFocus
+                      onChange={(e) => setNuevoNombre(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") { e.preventDefault(); void guardarEdicion(m); }
+                        else if (e.key === "Escape") { e.preventDefault(); setEditando(null); }
+                      }}
+                      aria-label="Nombre de la marca"
+                      className="min-w-0 flex-1 rounded-md border border-slate-200 px-2 py-1 text-sm outline-none focus:border-[#4FAEB2]"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setNuevoNombre((v) => v.toUpperCase())}
+                      title="Pasar a MAYÚSCULAS"
+                      className="rounded-md px-1.5 py-1 text-xs font-semibold text-slate-600 hover:bg-slate-100"
+                    >
+                      AA
+                    </button>
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() => void guardarEdicion(m)}
+                      className="rounded-md bg-[#4FAEB2] px-2 py-1 text-xs font-medium text-white hover:bg-[#3F8E91] disabled:opacity-50"
+                    >
+                      Guardar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setEditando(null)}
+                      className="rounded-md px-1.5 py-1 text-slate-500 hover:bg-slate-100"
+                      aria-label="Cancelar edición"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                );
+              }
               return (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => pick(m)}
-                  className="flex w-full items-center justify-between gap-2 rounded-md px-2.5 py-1.5 text-left text-sm text-slate-700 hover:bg-slate-50"
-                >
-                  <span className={`min-w-0 truncate ${sel ? "font-semibold" : ""}`}>{m}</span>
-                  {sel && <Check className="h-3.5 w-3.5 shrink-0 text-[#4FAEB2]" />}
-                </button>
+                <div key={m} className="group flex items-center rounded-md hover:bg-slate-50">
+                  <button
+                    type="button"
+                    onClick={() => pick(m)}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-2 px-2.5 py-1.5 text-left text-sm text-slate-700"
+                  >
+                    <span className={`min-w-0 truncate ${sel ? "font-semibold" : ""}`}>{m}</span>
+                    {sel && <Check className="h-3.5 w-3.5 shrink-0 text-[#4FAEB2]" />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setMsg(""); setEditando(m); setNuevoNombre(m); }}
+                    title="Editar marca"
+                    aria-label={`Editar marca ${m}`}
+                    className="rounded-md p-1.5 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <Pencil className="h-3.5 w-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void eliminar(m)}
+                    title="Eliminar marca"
+                    aria-label={`Eliminar marca ${m}`}
+                    className="mr-1 rounded-md p-1.5 text-slate-400 hover:bg-red-50 hover:text-red-600"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
               );
             })}
             {filtradas.length === 0 && !q && (
