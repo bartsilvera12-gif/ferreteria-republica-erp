@@ -336,9 +336,9 @@ export async function getReporteCajas(
     if (det && det.length > 0) {
       for (const d of det) {
         if (d.metodo_pago === "tarjeta") tar += d.monto;
-        else if (d.metodo_pago === "transferencia") tra += d.monto;
+        else if (d.metodo_pago === "transferencia" || d.metodo_pago === "qr") tra += d.monto;
         else if (d.metodo_pago === "efectivo") efe += d.monto;
-        // saldo_favor / qr / billetera / otro: no suman al efectivo del cajón.
+        // saldo_favor / billetera / otro: no suman al efectivo del cajón.
       }
     } else if (v.metodo_pago === "tarjeta") tar += t;
     else if (v.metodo_pago === "transferencia") tra += t;
@@ -528,7 +528,7 @@ export async function getDetalleCaja(
     if (det && det.length > 0) {
       for (const d of det) {
         if (d.metodo_pago === "tarjeta") tar += d.monto;
-        else if (d.metodo_pago === "transferencia") tra += d.monto;
+        else if (d.metodo_pago === "transferencia" || d.metodo_pago === "qr") tra += d.monto;
         else if (d.metodo_pago === "efectivo") efe += d.monto;
         // saldo_favor y otros medios no suman al efectivo del cajón.
       }

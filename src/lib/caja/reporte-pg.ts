@@ -157,7 +157,7 @@ export async function getReporteCajasPg(
         SELECT COUNT(*) > 0 AS tiene,
           COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'efectivo'), 0) AS efe,
           COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'tarjeta'), 0) AS tar,
-          COALESCE(SUM(monto) FILTER (WHERE metodo_pago = 'transferencia'), 0) AS tra
+          COALESCE(SUM(monto) FILTER (WHERE metodo_pago IN ('transferencia','qr')), 0) AS tra
         FROM ${tPd} pd WHERE pd.venta_id = v.id AND pd.empresa_id = v.empresa_id
       ) pd ON true
       WHERE v.empresa_id = $1::uuid AND v.caja_id = ANY($2::uuid[])
@@ -264,15 +264,15 @@ export async function getDetalleCajaPg(
   // Ventas del turno + medio efectivo del detalle (para el arqueo).
   const vQ = await p.query(
     `SELECT v.id::text AS id, v.numero_control, v.fecha, v.metodo_pago, v.tipo_venta, v.total, v.estado,
-        COALESCE(pd.efe, CASE WHEN COALESCE(v.metodo_pago,'efectivo') NOT IN ('tarjeta','transferencia') THEN v.total ELSE 0 END) AS efectivo_arqueo,
-        COALESCE(pd.tar, CASE WHEN v.metodo_pago='tarjeta' THEN v.total ELSE 0 END) AS tarjeta_arqueo,
-        COALESCE(pd.tra, CASE WHEN v.metodo_pago='transferencia' THEN v.total ELSE 0 END) AS transferencia_arqueo
+        CASE WHEN pd.tiene THEN COALESCE(pd.efe, 0) WHEN COALESCE(v.metodo_pago,'efectivo') NOT IN ('tarjeta','transferencia','qr') THEN v.total ELSE 0 END AS efectivo_arqueo,
+        CASE WHEN pd.tiene THEN COALESCE(pd.tar, 0) WHEN v.metodo_pago='tarjeta' THEN v.total ELSE 0 END AS tarjeta_arqueo,
+        CASE WHEN pd.tiene THEN COALESCE(pd.tra, 0) WHEN v.metodo_pago IN ('transferencia','qr') THEN v.total ELSE 0 END AS transferencia_arqueo
       FROM ${tV} v
       LEFT JOIN LATERAL (
         SELECT COUNT(*) > 0 AS tiene,
           SUM(monto) FILTER (WHERE metodo_pago='efectivo') AS efe,
           SUM(monto) FILTER (WHERE metodo_pago='tarjeta') AS tar,
-          SUM(monto) FILTER (WHERE metodo_pago='transferencia') AS tra
+          SUM(monto) FILTER (WHERE metodo_pago IN ('transferencia','qr')) AS tra
         FROM ${tPd} pd WHERE pd.venta_id = v.id AND pd.empresa_id = v.empresa_id
       ) pd ON pd.tiene
       WHERE v.empresa_id = $1::uuid AND v.caja_id = $2::uuid
