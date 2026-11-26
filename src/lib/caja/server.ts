@@ -891,11 +891,12 @@ async function computeResumen(
   // Ventas asociadas (excluye anuladas si la columna estado existe).
   const vQ = await sb
     .from("ventas")
-    .select("total, metodo_pago, tipo_venta, estado")
+    .select("id, total, metodo_pago, tipo_venta, estado")
     .eq("empresa_id", empresaId)
     .eq("caja_id", caja.id);
   if (vQ.error) throw new Error(vQ.error.message);
   const ventas = (vQ.data ?? []) as unknown as Array<{
+    id: string;
     total: number | string;
     metodo_pago: string | null;
     tipo_venta: string | null;
@@ -908,6 +909,7 @@ async function computeResumen(
   let totalTransferencia = 0;
   let totalCredito = 0;
   let count = 0;
+  const detResumen = await fetchDetallePorVenta(sb, empresaId, ventas.map((v) => v.id));
   for (const v of ventas) {
     if (v.estado === "anulada") continue;
     count++;
@@ -916,7 +918,17 @@ async function computeResumen(
     // Ventas a CRÉDITO: no ingresa dinero al cajón ahora (la cobranza va por el
     // módulo de créditos). Cuenta como venta pero NO como efectivo esperado. (#1)
     if (v.tipo_venta === "CREDITO") { totalCredito += t; continue; }
-    if (v.metodo_pago === "tarjeta") totalTarjeta += t;
+    // Cobro mixto: se reparte por el detalle real de pagos; sin detalle, cae al
+    // método de la venta.
+    const det = detResumen.get(v.id);
+    if (det && det.length > 0) {
+      for (const d of det) {
+        if (d.metodo_pago === "tarjeta") totalTarjeta += d.monto;
+        else if (d.metodo_pago === "transferencia" || d.metodo_pago === "qr") totalTransferencia += d.monto;
+        else if (d.metodo_pago === "efectivo") totalEfectivo += d.monto;
+        // saldo_favor / otros: no entran al cajón.
+      }
+    } else if (v.metodo_pago === "tarjeta") totalTarjeta += t;
     else if (v.metodo_pago === "transferencia") totalTransferencia += t;
     else totalEfectivo += t; // efectivo o sin especificar
   }
