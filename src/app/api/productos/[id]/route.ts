@@ -321,6 +321,50 @@ export async function PATCH(
       }
     }
 
+    // Cambio de "Controla stock": se aplica y se registra en la bitácora
+    // (producto_controla_stock_historial) en una sola transacción. No bloquea el cambio.
+    if (patch.controla_stock !== undefined) {
+      const nuevoCS = patch.controla_stock === true;
+      delete patch.controla_stock;
+      const pool = getChatPostgresPool();
+      if (!pool) throw new Error("Pool de base de datos no disponible.");
+      const schema = assertAllowedChatDataSchema(await fetchDataSchemaForEmpresaId(empresaId));
+      const tP = quoteSchemaTable(schema, "productos");
+      const tH = quoteSchemaTable(schema, "producto_controla_stock_historial");
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN");
+        const cur = await client.query(
+          `SELECT controla_stock, nombre FROM ${tP} WHERE id = $1::uuid AND empresa_id = $2::uuid FOR UPDATE`,
+          [id, empresaId]
+        );
+        if (!cur.rows[0]) {
+          await client.query("ROLLBACK");
+          return NextResponse.json(errorResponse(API_ERRORS.NOT_FOUND), { status: 404 });
+        }
+        const antCS: boolean | null = cur.rows[0].controla_stock ?? null;
+        if (antCS !== nuevoCS) {
+          await client.query(
+            `UPDATE ${tP} SET controla_stock = $3::boolean, updated_at = now() WHERE id = $1::uuid AND empresa_id = $2::uuid`,
+            [id, empresaId, nuevoCS]
+          );
+          await client.query(
+            `INSERT INTO ${tH} (empresa_id, producto_id, producto_nombre, valor_anterior, valor_nuevo, usuario_id, usuario_nombre)
+             VALUES ($1::uuid,$2::uuid,$3,$4,$5,$6,$7)`,
+            [empresaId, id, String(cur.rows[0].nombre ?? ""), antCS, nuevoCS,
+             ctx.auth.usuarioCatalogId ?? null, ctx.auth.nombre ?? ctx.auth.user?.email ?? null]
+          );
+        }
+        await client.query("COMMIT");
+      } catch (e) {
+        await client.query("ROLLBACK").catch(() => {});
+        console.error("[/api/productos/[id] PATCH] controla_stock (tx)", e instanceof Error ? e.message : e);
+        return NextResponse.json(errorResponse("No se pudo guardar el cambio de Controla stock."), { status: 500 });
+      } finally {
+        client.release();
+      }
+    }
+
     // Resto de campos (sin costo/precio, ya aplicados en la tx de arriba). Si
     // SOLO se ajustó el stock o el precio, no queda patch: releemos.
     let updRow: Record<string, unknown>;

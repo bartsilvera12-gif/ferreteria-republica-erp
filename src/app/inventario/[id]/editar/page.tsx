@@ -100,6 +100,9 @@ export default function EditarProductoPage() {
 
   // Configuración gastronómica
   const [controlaStock, setControlaStock] = useState(true);
+  const [historialCS, setHistorialCS] = useState<
+    Array<{ id: string; fecha: string; valor_anterior: boolean | null; valor_nuevo: boolean; usuario_nombre: string | null }>
+  >([]);
   // Producto destacado: aparece en seccion "Productos destacados" del sitio publico.
   const [destacado, setDestacado] = useState(false);
   // Visible en la web: si está apagado, NO aparece en el catálogo público.
@@ -286,6 +289,17 @@ export default function EditarProductoPage() {
       if (!cancelled) setCargando(false);
     });
     return () => { cancelled = true; };
+  }, [id]);
+
+  // Bitácora de cambios de "Controla stock"
+  useEffect(() => {
+    if (!id) return;
+    let cancel = false;
+    fetch(`/api/productos/${id}/controla-stock-historial`, { credentials: "include", cache: "no-store" })
+      .then((r) => r.json())
+      .then((j) => { if (!cancel) setHistorialCS(j?.data?.historial ?? []); })
+      .catch(() => { /* informativo */ });
+    return () => { cancel = true; };
   }, [id]);
 
   // ¿El producto tiene receta asociada? (para advertir al cambiar el tipo)
@@ -901,6 +915,21 @@ export default function EditarProductoPage() {
                   </span>
                 </span>
               </label>
+              <div className="mt-3">
+                <p className="text-xs font-semibold text-gray-500 mb-1">Historial de “Controla stock”</p>
+                {historialCS.length === 0 ? (
+                  <p className="text-xs text-gray-400">Sin cambios registrados.</p>
+                ) : (
+                  <ul className="text-xs text-gray-600 space-y-0.5">
+                    {historialCS.map((h) => (
+                      <li key={h.id}>
+                        {h.valor_anterior == null ? "—" : h.valor_anterior ? "Sí" : "No"} → {h.valor_nuevo ? "Sí" : "No"} ·{" "}
+                        {h.usuario_nombre ?? "Usuario desconocido"} · {new Date(h.fecha).toLocaleString("es-PY")}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </div>
             </div>
 
             {/* Visible en la web — controla si aparece en el catálogo público */}
